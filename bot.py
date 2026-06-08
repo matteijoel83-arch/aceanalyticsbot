@@ -1,6 +1,8 @@
 import os
 import sys
 import requests
+import json
+import subprocess
 from datetime import datetime
 from google import genai
 from google.genai import types
@@ -11,6 +13,7 @@ from google.genai import types
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
+STATS_FILE = "stats.json"
 
 if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
     print("❌ Erreur : Clés secrètes manquantes.")
@@ -18,9 +21,40 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+# =====================================================================
+# 📊 MODULE DE SUIVI
+# =====================================================================
+def charger_stats():
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {"victoires": 0, "defaites": 0}
+    return {"victoires": 0, "defaites": 0}
+
+def calculer_winrate(stats):
+    total = stats["victoires"] + stats["defaites"]
+    return (stats["victoires"] / total * 100) if total > 0 else 0.0
+
+def enregistrer_resultat(victoire: bool):
+    stats = charger_stats()
+    if victoire: stats["victoires"] += 1
+    else: stats["defaites"] += 1
+    with open(STATS_FILE, "w") as f:
+        json.dump(stats, f)
+    subprocess.run(["git", "config", "--global", "user.name", "bot-stats"])
+    subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
+    subprocess.run(["git", "add", STATS_FILE])
+    subprocess.run(["git", "commit", "-m", "Maj stats"])
+    subprocess.run(["git", "push"])
+
 def envoyer_sur_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "HTML"}
+    stats = charger_stats()
+    wr = calculer_winrate(stats)
+    signature = f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n📈 <b>Win Rate : {wr:.1f}%</b>"
+    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message + signature, "parse_mode": "HTML"}
     try:
         requests.post(url, json=payload)
     except Exception as e:
