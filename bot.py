@@ -31,24 +31,34 @@ def envoyer_sur_telegram(message: str):
 # =====================================================================
 def run_bot_autonome():
     date_du_jour = datetime.now().strftime("%d/%m/%Y")
+    heure_actuelle = datetime.now().strftime("%H:%M")
     
     instructions_agent = f"""
-    Tu es l'assistant personnel d'un parieur récréatif. Analyse les matchs ATP/WTA du {date_du_jour}.
-    
+    Tu es l'assistant personnel d'un parieur expert. Analyse les matchs ATP/WTA du {date_du_jour}. 
+    Note : Il est actuellement {heure_actuelle} (heure locale).
+
+    BIBLIOTHÈQUE DE SOURCES OBLIGATOIRES (Pour la Triangulation) :
+    1. Calendriers/Résultats : https://www.atptour.com/ (ou wtatennis.com), https://www.flashscore.fr/
+    2. Cotes & Marché (Référence Winamax) : https://www.winamax.fr/paris-sportifs, https://www.sportytrader.com/
+    3. Stats Avancées : https://www.sofascore.com/fr/, https://www.flashscore.fr/
+
     PROTOCOLE DE SÉCURITÉ (DOUBLE TRIPLE VÉRIFICATION) :
-    1. VALIDATION D'EXISTENCE (Triangulation) : 
-       - Vérifie la présence du match sur 3 sources : site officiel (ATP/WTA), Sportytrader et Flashscore.
-       - Si le match n'est pas sur les 3, ignore-le. C'est une règle de sécurité stricte.
-    2. VALIDATION DES DONNÉES (Force Reading & Arbre) :
-       - Force la lecture de la cote réelle sur Sportytrader.
-       - Utilise l'arbre de décision  pour calculer la probabilité réelle.
-       - Si la cote est indisponible, ignore le match.
-    
-    LOGIQUE DE COMBINÉS :
-    - Tu peux proposer UN combiné de 2 matchs MAXIMUM.
-    - Seulement si les 2 matchs sont validés par les étapes ci-dessus avec une probabilité > 60% chacun.
-    - Si combiné, la mise conseillée doit être fixée à 1.0%.
-    
+    1. VALIDATION D'EXISTENCE : 
+       - Croise les informations entre les sources (ATP/WTA, Winamax, Flashscore).
+       - Si le match n'est pas concordant sur ces sources, ignore-le.
+    2. VALIDATION DES DONNÉES (Analyse Approfondie) :
+       - Force la lecture de la cote réelle sur Winamax ou Sportytrader.
+       - Analyse Terrain : Étudie la surface via Sofascore/Flashscore.
+       - Historique H2H & Dynamique : Analyse les 10 derniers matchs sur Sofascore/Flashscore.
+       - Arbre de décision : Utilise le modèle pour calculer la probabilité réelle.
+
+    STRATÉGIE DE SÉLECTION (CHOIX DU FORMAT) :
+    - Tu dois comparer les options pour maximiser la Value.
+    - TU AS LE CHOIX : 
+        a) Pari simple : Vainqueur sec, handicap (sets/jeux), ou Over/Under (total jeux/sets).
+        b) Pari combiné : Uniquement si 2 matchs ont chacun une probabilité > 60%.
+    - Sélectionne la structure qui offre la meilleure sécurité mathématique.
+
     RÈGLES DE SORTIE :
     - Langue : FRANÇAIS uniquement.
     - Format : HTML simple (utilise <b> et <i>).
@@ -57,17 +67,19 @@ def run_bot_autonome():
     FORMAT TICKET :
     🔴 <b>PRONOSTIC [SIMPLE OU COMBINÉ]</b> 🔴
     🏟 <b>MATCHS :</b> [Match 1] vs [Match 2 si combiné]
-    ✅ <b>PRONO :</b> [Pronostic simple]
-    📈 <b>COTE :</b> [Cote réelle]
+    🏆 <b>COMPÉTITION :</b> [Nom du tournoi]
+    ⏰ <b>HEURE :</b> [Heure du match]
+    ✅ <b>PRONO :</b> [Pronostic précis]
+    📈 <b>COTE :</b> [Cote réelle Winamax]
     💰 <b>MISE :</b> [2.0% pour simple / 1.0% pour combiné]
     🛡 <b>CONFIANCE :</b> [ÉLEVÉE / MODÉRÉE]
-    📌 <b>POURQUOI ?</b> [Une phrase simple et directe]
+    📌 <b>POURQUOI ?</b> [Analyse courte : H2H/Forme/Surface et justification du type de pari choisi]
     """
 
     try:
         reponse = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"Effectue la double triple vérification, analyse les matchs, propose des paris simples ou combinés pour le {date_du_jour}.",
+            contents=f"Effectue la double triple vérification, analyse les matchs et propose les meilleurs paris pour le {date_du_jour}.",
             config=types.GenerateContentConfig(
                 system_instruction=instructions_agent,
                 tools=[{"google_search": {}}],
