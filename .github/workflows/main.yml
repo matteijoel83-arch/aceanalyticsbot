@@ -1,29 +1,31 @@
-name: Run Tennis Bot Autonome
+name: Bot Pronostics Tennis
 
 on:
   schedule:
-    # Se déclenche tous les jours à 7h00 UTC (9h00 en France)
-    - cron: '0 7 * * *'
-  workflow_dispatch: # Te permet de lancer le bot manuellement quand tu veux
+    # 06:00 UTC = 08:00 heure française
+    - cron: '0 6 * * *'
+    # 12:00 UTC = 14:00 heure française
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Récupérer le code du dépôt
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Installer Python
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.9'
 
-      - name: Installer les dépendances
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests google-genai
 
-      - name: Exécuter le Bot
+      - name: Run Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
