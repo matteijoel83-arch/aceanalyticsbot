@@ -2,9 +2,9 @@ name: Run Tennis Bot Autonome
 
 on:
   schedule:
-    # Se déclenche tous les jours à 7h00 UTC (9h00 du matin en France en été)
+    # Se déclenche tous les jours à 7h00 UTC (9h00 en France)
     - cron: '0 7 * * *'
-  workflow_dispatch: # Te permet de lancer le bot manuellement d'un simple clic pour tester !
+  workflow_dispatch: # Te permet de lancer le bot manuellement quand tu veux
 
 jobs:
   run-bot:
@@ -25,5 +25,7 @@ jobs:
 
       - name: Exécuter le Bot
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python bot.py
