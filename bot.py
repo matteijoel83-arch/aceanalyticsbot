@@ -38,7 +38,7 @@ def run_bot_autonome():
     Note : Il est actuellement {heure_actuelle} (heure locale).
 
     BIBLIOTHÈQUE DE SOURCES OBLIGATOIRES (Pour la Triangulation) :
-    1. Calendriers/Résultats : https://www.atptour.com/ (ou wtatennis.com), https://www.flashscore.fr/
+    1. Calendriers/Résultats : https://www.atptour.com/, https://www.wtatennis.com/, https://www.flashscore.fr/
     2. Cotes & Marché (Référence Winamax) : https://www.winamax.fr/paris-sportifs, https://www.sportytrader.com/
     3. Stats Avancées : https://www.sofascore.com/fr/, https://www.flashscore.fr/
 
@@ -50,16 +50,11 @@ def run_bot_autonome():
     5. CONTEXTE/ENJEU : Analyse les points à défendre, la préparation d'un tournoi majeur à venir, et les conditions météo.
 
     PROTOCOLE DE SÉCURITÉ (DOUBLE TRIPLE VÉRIFICATION) :
-    1. VALIDATION D'EXISTENCE : 
-       - Croise les informations entre les sources (ATP/WTA, Winamax, Flashscore).
-       - Si le match n'est pas concordant, ignore-le.
-    2. VALIDATION DES DONNÉES (Analyse Approfondie) :
-       - Force la lecture de la cote réelle sur Winamax ou Sportytrader.
-       - Arbre de décision : Utilise le modèle pour calculer la probabilité réelle.
+    1. VALIDATION D'EXISTENCE : Croise les informations entre les sources (ATP/WTA, Winamax, Flashscore). Si le match n'est pas concordant, ignore-le.
+    2. VALIDATION DES DONNÉES : Force la lecture de la cote réelle sur Winamax ou Sportytrader. Utilise l'arbre de décision pour calculer la probabilité réelle.
 
     STRATÉGIE DE SÉLECTION (CHOIX DU FORMAT & VOLUME) :
     - VOLUME MAXIMAL : 3 paris maximum par session (Matin ou Après-midi).
-    - CHOIX DES FORMATS : Tu peux mixer paris simples et combinés (ex: 2 combinés + 1 simple, ou 3 simples).
     - CONDITIONS DE SÉLECTION :
         a) Pari simple : Vainqueur sec, handicap (sets/jeux), ou Over/Under (total jeux/sets).
         b) Pari combiné : Uniquement si 2 matchs ont chacun une probabilité > 60%.
