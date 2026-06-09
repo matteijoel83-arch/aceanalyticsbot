@@ -63,7 +63,22 @@ def envoyer_sur_telegram(message: str):
 # =====================================================================
 # 🧠 CŒUR DU BOT : STRATÉGIE ET ANALYSE
 # =====================================================================
+
+def verifier_heure_exacte():
+    """Vérifie l'accès à time.is pour renforcer la sécurité temporelle."""
+    try:
+        response = requests.get("https://time.is/fr/", timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"⚠️ Erreur vérification temporelle : {e}")
+        return False
+
 def run_bot_autonome():
+    # Vérification renforcée avant de lancer l'analyse
+    if not verifier_heure_exacte():
+        print("❌ Échec de la vérification temporelle. Arrêt de sécurité.")
+        return
+
     date_du_jour = datetime.now().strftime("%d/%m/%Y")
     heure_actuelle = datetime.now().strftime("%H:%M")
     
