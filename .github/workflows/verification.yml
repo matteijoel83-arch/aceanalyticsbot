@@ -1,0 +1,21 @@
+name: Vérification Résultats
+on:
+  schedule:
+    - cron: '0 17 * * *' # 17h UTC = 19h France
+  workflow_dispatch:
+
+jobs:
+  run-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install requests google-genai
+      - name: Run Verification
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python verification_resultats.py
