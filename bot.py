@@ -68,6 +68,11 @@ def obtenir_heure_france_exacte():
     """Récupère l'heure en France (UTC+2) de manière conforme."""
     return datetime.now(timezone.utc) + timedelta(hours=2)
 
+def sauvegarder_pari_pour_suivi(pari_info):
+    """Ajout : Enregistre le pari en cours pour permettre la vérification ultérieure."""
+    with open("pari_en_cours.json", "w") as f:
+        json.dump(pari_info, f)
+
 def run_bot_autonome():
     maintenant = obtenir_heure_france_exacte()
     date_du_jour = maintenant.strftime("%d/%m/%Y")
@@ -135,6 +140,7 @@ def run_bot_autonome():
         
         texte = reponse.text.strip()
         if "PAS_DE_VALUE" not in texte and len(texte) > 20:
+            sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
             envoyer_sur_telegram(texte)
             print("✅ Analyse finale envoyée.")
         else:
