@@ -17,14 +17,7 @@ def enregistrer_resultat(victoire: bool):
 # Logique de sauvegarde des stats (à compléter selon tes besoins)
 print(f"✅ Résultat enregistré : {'Victoire' if victoire else 'Défaite'}")
 
-import os
-import sys
-import requests
-import json
-import subprocess
-from datetime import datetime, timedelta, timezone
-from google import genai
-from google.genai import types
+
 
 =====================================================================
 ⚙️ CONFIGURATION & SÉCURITÉ
