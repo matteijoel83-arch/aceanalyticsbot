@@ -1,14 +1,15 @@
 import json
 import os
+import sys
 from google import genai
 from google.genai import types
 from bot import enregistrer_resultat
 
-# Initialisation du client
 api_key = os.environ.get("GEMINI_API_KEY")
+
 if not api_key:
     print("❌ Erreur : Clé API manquante.")
-    exit(1)
+    sys.exit(1)
 
 client = genai.Client(api_key=api_key)
 
@@ -21,8 +22,7 @@ def verifier_et_mettre_a_jour():
         data = json.load(f)
     
     pari_texte = data["pari"]
-    print(f"🔍 Vérification : {pari_texte}")
-
+    
     try:
         verif = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -31,8 +31,6 @@ def verifier_et_mettre_a_jour():
         )
         
         resultat = verif.text.strip()
-        print(f"📊 Résultat : {resultat}")
-
         if "GAGNÉ" in resultat:
             enregistrer_resultat(True)
         else:
