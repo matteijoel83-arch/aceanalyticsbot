@@ -3,7 +3,7 @@ import sys
 import requests
 import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from google import genai
 from google.genai import types
 
@@ -64,27 +64,23 @@ def envoyer_sur_telegram(message: str):
 # 🧠 CŒUR DU BOT : STRATÉGIE ET ANALYSE
 # =====================================================================
 
-def verifier_heure_exacte():
-    """Vérifie l'accès à time.is pour renforcer la sécurité temporelle."""
-    try:
-        response = requests.get("https://time.is/fr/", timeout=10)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"⚠️ Erreur vérification temporelle : {e}")
-        return False
+def obtenir_heure_france_exacte():
+    """Récupère l'heure en France (UTC+2)."""
+    return datetime.utcnow() + timedelta(hours=2)
 
 def run_bot_autonome():
-    # Vérification renforcée avant de lancer l'analyse
-    if not verifier_heure_exacte():
-        print("❌ Échec de la vérification temporelle. Arrêt de sécurité.")
-        return
-
-    date_du_jour = datetime.now().strftime("%d/%m/%Y")
-    heure_actuelle = datetime.now().strftime("%H:%M")
+    maintenant = obtenir_heure_france_exacte()
+    date_du_jour = maintenant.strftime("%d/%m/%Y")
+    heure_actuelle = maintenant.strftime("%H:%M")
     
     instructions_agent = f"""
     Tu es l'assistant personnel d'un parieur expert en tennis. Analyse les matchs ATP/WTA du {date_du_jour}. 
-    Note : Il est actuellement {heure_actuelle} (heure locale).
+    Note : Il est actuellement {heure_actuelle} (heure locale France).
+    
+    RÈGLE DE CORRÉLATION TEMPORELLE :
+    - Compare l'heure de début de chaque match avec {heure_actuelle}.
+    - SI LE MATCH A DÉJÀ COMMENCÉ OU EST TERMINÉ, EXCLUS-LE DE TES ANALYSES.
+    - Ne propose QUE des matchs dont le début est futur par rapport à {heure_actuelle}.
 
     BIBLIOTHÈQUE DE SOURCES OBLIGATOIRES (Pour la Triangulation) :
     1. Calendriers/Résultats : https://www.atptour.com/, https://www.wtatennis.com/, https://www.flashscore.fr/
@@ -118,7 +114,7 @@ def run_bot_autonome():
     🔴 <b>PRONOSTIC [SIMPLE OU COMBINÉ]</b> 🔴
     🏟 <b>MATCHS :</b> [Match 1] vs [Match 2 si combiné]
     🏆 <b>COMPÉTITION :</b> [Nom du tournoi]
-    ⏰ <b>HEURE :</b> [Heure du match]
+    ⏰ <b>HEURE :</b> [Heure du match] (Vérifié futur par rapport à {heure_actuelle})
     ✅ <b>PRONO :</b> [Pronostic précis]
     📈 <b>COTE :</b> [Cote réelle Winamax]
     💰 <b>MISE :</b> [2.0% pour simple / 1.0% pour combiné]
@@ -129,7 +125,7 @@ def run_bot_autonome():
     try:
         reponse = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"Effectue la double triple vérification, analyse les matchs et propose les meilleurs paris pour le {date_du_jour}.",
+            contents=f"Effectue la double triple vérification, analyse les matchs à venir après {heure_actuelle} et propose les meilleurs paris pour le {date_du_jour}.",
             config=types.GenerateContentConfig(
                 system_instruction=instructions_agent,
                 tools=[{"google_search": {}}],
