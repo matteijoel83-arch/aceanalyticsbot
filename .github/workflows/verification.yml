@@ -17,6 +17,6 @@ jobs:
         run: pip install requests google-genai
       - name: Run Verification
         env:
-          # C'est ici que la magie opère : GitHub injecte le secret
+          
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python verification_resultats.py
