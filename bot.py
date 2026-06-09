@@ -3,7 +3,7 @@ import sys
 import requests
 import json
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google import genai
 from google.genai import types
 
@@ -65,8 +65,8 @@ def envoyer_sur_telegram(message: str):
 # =====================================================================
 
 def obtenir_heure_france_exacte():
-    """Récupère l'heure en France (UTC+2)."""
-    return datetime.utcnow() + timedelta(hours=2)
+    """Récupère l'heure en France (UTC+2) de manière conforme."""
+    return datetime.now(timezone.utc) + timedelta(hours=2)
 
 def run_bot_autonome():
     maintenant = obtenir_heure_france_exacte()
