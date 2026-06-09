@@ -1,8 +1,12 @@
 name: Vérification Résultats
 on:
   schedule:
-    - cron: '0 17 * * *'
+    - cron: '45 5 * * *'  # Ajusté pour passer avant le bot de 06:00
+    - cron: '45 11 * * *' # Ajusté pour passer avant le bot de 12:00
   workflow_dispatch:
+
+permissions:
+  contents: write  # OBLIGATOIRE pour permettre le git push
 
 jobs:
   verification:
@@ -18,4 +22,6 @@ jobs:
       - name: Run Verification
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python verification_resultats.py
