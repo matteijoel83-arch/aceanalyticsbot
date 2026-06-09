@@ -4,8 +4,12 @@ from google import genai
 from google.genai import types
 from bot import enregistrer_resultat
 
-# Utilisation de la variable d'environnement (GitHub la remplira automatiquement)
+# Initialisation du client
 api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    print("❌ Erreur : Clé API manquante.")
+    exit(1)
+
 client = genai.Client(api_key=api_key)
 
 def verifier_et_mettre_a_jour():
@@ -17,19 +21,17 @@ def verifier_et_mettre_a_jour():
         data = json.load(f)
     
     pari_texte = data["pari"]
-    print(f"🔍 Vérification du pari : {pari_texte}")
+    print(f"🔍 Vérification : {pari_texte}")
 
     try:
         verif = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"Analyse ce pronostic : '{pari_texte}'. Identifie les joueurs et va chercher sur Google le vainqueur du match. Réponds uniquement par : GAGNÉ ou PERDU.",
-            config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}],
-            ),
+            contents=f"Analyse ce pronostic : '{pari_texte}'. Identifie le vainqueur sur Google. Réponds uniquement : GAGNÉ ou PERDU.",
+            config=types.GenerateContentConfig(tools=[{"google_search": {}}]),
         )
         
         resultat = verif.text.strip()
-        print(f"📊 Résultat détecté : {resultat}")
+        print(f"📊 Résultat : {resultat}")
 
         if "GAGNÉ" in resultat:
             enregistrer_resultat(True)
