@@ -11,7 +11,6 @@ from google.genai import types
 # =====================================================================
 # ⚙️ CONFIGURATION, SÉCURITÉ & LOGS
 # =====================================================================
-# Configuration du logging : écrit dans "bot.log" et affiche dans la console
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -33,7 +32,7 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # =====================================================================
-# 📊 MODULE DE SUIVI
+# 📊 MODULE DE SUIVI & SYNCHRONISATION GIT
 # =====================================================================
 def charger_stats():
     if os.path.exists(STATS_FILE):
@@ -50,6 +49,7 @@ def calculer_winrate(stats):
     return (stats["victoires"] / total * 100) if total > 0 else 0.0
 
 def enregistrer_resultat(victoire: bool):
+    """Met à jour les statistiques et synchronise la suppression du pari sur GitHub"""
     stats = charger_stats()
     if victoire: 
         stats["victoires"] += 1
@@ -62,12 +62,19 @@ def enregistrer_resultat(victoire: bool):
     try:
         subprocess.run(["git", "config", "--global", "user.name", "bot-stats"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+        
+        # On stage la mise à jour des statistiques
         subprocess.run(["git", "add", STATS_FILE], check=True)
-        subprocess.run(["git", "commit", "-m", "Maj stats"], check=True)
+        
+        # On indique à Git que le fichier pari_en_cours.json a été supprimé localement
+        if not os.path.exists("pari_en_cours.json"):
+            subprocess.run(["git", "rm", "pari_en_cours.json"], check=False)
+            
+        subprocess.run(["git", "commit", "-m", "🔄 Maj stats et nettoyage du pari terminé"], check=True)
         subprocess.run(["git", "push"], check=True)
-        logging.info("Statistiques synchronisées avec succès sur Git.")
+        logging.info("Statistiques et nettoyage validés avec succès sur GitHub.")
     except subprocess.CalledProcessError as e:
-        logging.error(f"Erreur lors de la synchronisation Git : {e}")
+        logging.error(f"Erreur lors de la synchronisation Git (Résultats) : {e}")
 
 def est_deja_envoye(nouveau_pari: str):
     if not os.path.exists("historique.json"):
@@ -111,17 +118,15 @@ def envoyer_sur_telegram(message: str):
     }
     
     try:
-        # Timeout de 10 secondes pour éviter que le script ne reste bloqué
         response = requests.post(url, json=payload, timeout=10)
-        # Lève une exception si le statut HTTP est une erreur (ex: 400, 404, 500)
         response.raise_for_status()
         logging.info("Message envoyé avec succès sur Telegram.")
     except requests.exceptions.HTTPError as http_err:
-        logging.error(f"Erreur HTTP Telegram : {http_err} - Réponse du serveur : {response.text}")
+        logging.error(f"Erreur HTTP Telegram : {http_err} - Réponse : {response.text}")
     except requests.exceptions.Timeout:
-        logging.error("Erreur : La requête vers Telegram a expiré (Timeout).")
+        logging.error("Erreur : La requête vers Telegram a expiré.")
     except Exception as e:
-        logging.error(f"Erreur inattendue lors de l'envoi Telegram : {e}")
+        logging.error(f"Erreur inattendue Telegram : {e}")
 
 # =====================================================================
 # 🧠 CŒUR DU BOT : ANALYSE EXPERTE
@@ -192,6 +197,18 @@ def run_bot_autonome():
                 sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
                 sauvegarder_dans_historique(texte)
                 envoyer_sur_telegram(texte)
+                
+                # --- SAUVEGARDE ET PUSH DU NOUVEAU PARI SUR GITHUB ---
+                try:
+                    subprocess.run(["git", "config", "--global", "user.name", "bot-pari"], check=True)
+                    subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+                    subprocess.run(["git", "add", "pari_en_cours.json", "historique.json"], check=True)
+                    subprocess.run(["git", "commit", "-m", "📌 Sauvegarde du nouveau pari en cours et historique"], check=True)
+                    subprocess.run(["git", "push"], check=True)
+                    logging.info("Nouveau pari sauvegardé avec succès sur GitHub.")
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"Erreur lors du push du nouveau pari : {e}")
+                
             else:
                 logging.warning("Doublon détecté, pari déjà proposé ce jour.")
         else:
