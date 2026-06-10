@@ -3,20 +3,31 @@ import sys
 import requests
 import json
 import subprocess
+import logging
 from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
 
 # =====================================================================
-# ⚙️ CONFIGURATION & SÉCURITÉ
+# ⚙️ CONFIGURATION, SÉCURITÉ & LOGS
 # =====================================================================
+# Configuration du logging : écrit dans "bot.log" et affiche dans la console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
+)
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 STATS_FILE = "stats.json"
 
 if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
-    print("❌ Erreur : Clés secrètes manquantes.")
+    logging.critical("Erreur : Clés secrètes manquantes.")
     sys.exit(1)
 
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -29,7 +40,8 @@ def charger_stats():
         try:
             with open(STATS_FILE, "r") as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            logging.warning(f"Impossible de lire les stats, réinitialisation : {e}")
             return {"victoires": 0, "defaites": 0}
     return {"victoires": 0, "defaites": 0}
 
@@ -39,15 +51,23 @@ def calculer_winrate(stats):
 
 def enregistrer_resultat(victoire: bool):
     stats = charger_stats()
-    if victoire: stats["victoires"] += 1
-    else: stats["defaites"] += 1
+    if victoire: 
+        stats["victoires"] += 1
+    else: 
+        stats["defaites"] += 1
+        
     with open(STATS_FILE, "w") as f:
         json.dump(stats, f)
-    subprocess.run(["git", "config", "--global", "user.name", "bot-stats"])
-    subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
-    subprocess.run(["git", "add", STATS_FILE])
-    subprocess.run(["git", "commit", "-m", "Maj stats"])
-    subprocess.run(["git", "push"])
+        
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "bot-stats"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+        subprocess.run(["git", "add", STATS_FILE], check=True)
+        subprocess.run(["git", "commit", "-m", "Maj stats"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        logging.info("Statistiques synchronisées avec succès sur Git.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Erreur lors de la synchronisation Git : {e}")
 
 def est_deja_envoye(nouveau_pari: str):
     if not os.path.exists("historique.json"):
@@ -58,7 +78,8 @@ def est_deja_envoye(nouveau_pari: str):
             for ancien_pari in historique:
                 if ancien_pari in nouveau_pari or nouveau_pari in ancien_pari:
                     return True
-    except:
+    except Exception as e:
+        logging.error(f"Erreur lors de la lecture de l'historique : {e}")
         return False
     return False
 
@@ -83,11 +104,24 @@ def envoyer_sur_telegram(message: str):
     message_propre = message.replace("2024", annee_actuelle)
     
     signature = f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n📈 <b>Win Rate : {wr:.1f}%</b>"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message_propre + signature, "parse_mode": "HTML"}
+    payload = {
+        "chat_id": TELEGRAM_CHANNEL_ID, 
+        "text": message_propre + signature, 
+        "parse_mode": "HTML"
+    }
+    
     try:
-        requests.post(url, json=payload)
+        # Timeout de 10 secondes pour éviter que le script ne reste bloqué
+        response = requests.post(url, json=payload, timeout=10)
+        # Lève une exception si le statut HTTP est une erreur (ex: 400, 404, 500)
+        response.raise_for_status()
+        logging.info("Message envoyé avec succès sur Telegram.")
+    except requests.exceptions.HTTPError as http_err:
+        logging.error(f"Erreur HTTP Telegram : {http_err} - Réponse du serveur : {response.text}")
+    except requests.exceptions.Timeout:
+        logging.error("Erreur : La requête vers Telegram a expiré (Timeout).")
     except Exception as e:
-        print(f"❌ Erreur Telegram : {e}")
+        logging.error(f"Erreur inattendue lors de l'envoi Telegram : {e}")
 
 # =====================================================================
 # 🧠 CŒUR DU BOT : ANALYSE EXPERTE
@@ -141,6 +175,7 @@ def run_bot_autonome():
     """
 
     try:
+        logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=f"Effectue la double triple vérification et propose les meilleurs paris pour le {date_du_jour}.",
@@ -158,11 +193,11 @@ def run_bot_autonome():
                 sauvegarder_dans_historique(texte)
                 envoyer_sur_telegram(texte)
             else:
-                print("⚠️ Doublon détecté, pari déjà proposé ce jour.")
+                logging.warning("Doublon détecté, pari déjà proposé ce jour.")
         else:
-            print("📅 Aucune opportunité trouvée.")
+            logging.info("Aucune opportunité de value-bet trouvée aujourd'hui.")
     except Exception as e:
-        print(f"❌ Erreur : {e}")
+        logging.error(f"Erreur lors de l'exécution globale du bot : {e}")
 
 if __name__ == "__main__":
     run_bot_autonome()
