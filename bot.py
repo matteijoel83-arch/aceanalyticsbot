@@ -37,16 +37,51 @@ def calculer_winrate(stats):
     total = stats["victoires"] + stats["defaites"]
     return (stats["victoires"] / total * 100) if total > 0 else 0.0
 
+def enregistrer_resultat(victoire: bool):
+    stats = charger_stats()
+    if victoire: stats["victoires"] += 1
+    else: stats["defaites"] += 1
+    with open(STATS_FILE, "w") as f:
+        json.dump(stats, f)
+    subprocess.run(["git", "config", "--global", "user.name", "bot-stats"])
+    subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
+    subprocess.run(["git", "add", STATS_FILE])
+    subprocess.run(["git", "commit", "-m", "Maj stats"])
+    subprocess.run(["git", "push"])
+
+def est_deja_envoye(nouveau_pari: str):
+    if not os.path.exists("historique.json"):
+        return False
+    try:
+        with open("historique.json", "r") as f:
+            historique = json.load(f)
+            for ancien_pari in historique:
+                if ancien_pari in nouveau_pari or nouveau_pari in ancien_pari:
+                    return True
+    except:
+        return False
+    return False
+
+def sauvegarder_dans_historique(pari: str):
+    historique = []
+    if os.path.exists("historique.json"):
+        try:
+            with open("historique.json", "r") as f:
+                historique = json.load(f)
+        except:
+            historique = []
+    historique.append(pari)
+    with open("historique.json", "w") as f:
+        json.dump(historique[-10:], f)
+
 def envoyer_sur_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     stats = charger_stats()
     wr = calculer_winrate(stats)
-
-    # --- LOGIQUE DE CORRECTION TEMPORELLE ---
+    
     annee_actuelle = datetime.now().strftime("%Y")
     message_propre = message.replace("2024", annee_actuelle)
-    # ----------------------------------------
-
+    
     signature = f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n📈 <b>Win Rate : {wr:.1f}%</b>"
     payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message_propre + signature, "parse_mode": "HTML"}
     try:
@@ -118,8 +153,12 @@ def run_bot_autonome():
         
         texte = reponse.text.strip()
         if "PAS_DE_VALUE" not in texte and len(texte) > 20:
-            sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
-            envoyer_sur_telegram(texte)
+            if not est_deja_envoye(texte):
+                sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
+                sauvegarder_dans_historique(texte)
+                envoyer_sur_telegram(texte)
+            else:
+                print("⚠️ Doublon détecté, pari déjà proposé ce jour.")
         else:
             print("📅 Aucune opportunité trouvée.")
     except Exception as e:
