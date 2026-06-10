@@ -192,7 +192,7 @@ def run_bot_autonome():
         )
         
         texte = reponse.text.strip()
-        if "PAS_DE_VALUE" not in text and len(texte) > 20:
+        if "PAS_DE_VALUE" not in texte and len(texte) > 20:
             if not est_deja_envoye(texte):
                 sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
                 sauvegarder_dans_historique(texte)
