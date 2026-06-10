@@ -5,15 +5,15 @@ import logging
 from google import genai
 from google.genai import types
 
-# Protection d'import et alignement du chemin
+# Protection d'importation
 sys.path.append(os.getcwd())
 try:
     from bot import enregistrer_resultat
 except ImportError:
-    logging.critical("❌ Impossible d'importer 'enregistrer_resultat' depuis bot.py. Vérifiez l'emplacement du fichier.")
+    logging.critical("Impossible d'importer 'enregistrer_resultat' depuis bot.py.")
     sys.exit(1)
 
-# Configuration du logging (partagée avec bot.log)
+# Configuration du logging (aligné sur bot.log)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -24,7 +24,6 @@ logging.basicConfig(
 )
 
 api_key = os.environ.get("GEMINI_API_KEY")
-
 if not api_key:
     logging.critical("Erreur : Clé API GEMINI_API_KEY manquante.")
     sys.exit(1)
@@ -52,47 +51,45 @@ def verifier_et_mettre_a_jour():
         return
 
     if not pari_texte:
-        logging.warning("Le fichier pari_en_cours.json existe mais ne contient aucun texte de pari.")
+        logging.warning("Le fichier existe mais est vide. Nettoyage.")
         os.remove(FICHIER_PARI)
         return
 
-    # 2. Appel à l'IA avec configuration stricte
+    # 2. Appel déterministe à l'IA pour classification
     try:
-        logging.info(f"Recherche du résultat pour le pari : {pari_texte[:50]}...")
+        logging.info(f"Recherche du résultat internet pour : {pari_texte[:60]}...")
         
         system_prompt = (
-            "Tu es un agent de vérification de scores sportifs. Tu dois chercher sur le web "
-            "le résultat final du match mentionné. Tu as une obligation stricte : "
+            "Tu es un agent automatique de vérification de scores de tennis. Tu dois chercher sur le web "
+            "le résultat final du match. Tu as une obligation stricte : "
             "Répondre UNIQUEMENT par le mot 'GAGNÉ' ou 'PERDU' selon l'issue du pronostic fourni."
         )
 
         verif = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"Analyse ce pronostic et donne le résultat : '{pari_texte}'",
+            contents=f"Analyse ce pronostic et donne l'issue (GAGNÉ/PERDU) : '{pari_texte}'",
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 tools=[{"google_search": {}}],
-                temperature=0.0,  # Supprime toute créativité de l'IA
+                temperature=0.0, # Neutralise la créativité de l'IA
             ),
         )
         
         resultat = verif.text.strip().upper()
-        logging.info(f"Résultat retourné par l'IA : {resultat}")
+        logging.info(f"Verdict rendu par l'IA : {resultat}")
         
-        # 3. Traitement du résultat et mise à jour des stats via bot.py
+        # 3. Traitement binaire et suppression locale avant synchronisation globale
         if "GAGNÉ" in resultat:
-            logging.info("🏆 Pari GAGNÉ. Enregistrement des statistiques...")
-            enregistrer_resultat(True)
+            logging.info("🏆 Pronostic validé ! Suppression locale et mise à jour des stats...")
+            os.remove(FICHIER_PARI)
+            enregistrer_resultat(True) # Le push Git global a lieu ici
         elif "PERDU" in resultat:
-            logging.info("❌ Pari PERDU. Enregistrement des statistiques...")
-            enregistrer_resultat(False)
+            logging.info("❌ Pronostic perdu. Suppression locale et mise à jour des stats...")
+            os.remove(FICHIER_PARI)
+            enregistrer_resultat(False) # Le push Git global a lieu ici
         else:
-            logging.warning("⚠️ Impossible de déterminer le résultat avec certitude. Le fichier est conservé pour le prochain run.")
+            logging.warning("⚠️ Résultat incertain ou match non terminé. Le fichier est conservé pour le prochain cycle.")
             return
-
-        # 4. Nettoyage après succès du processus complet
-        os.remove(FICHIER_PARI)
-        logging.info("✅ Fichier 'pari_en_cours.json' nettoyé avec succès.")
 
     except Exception as e:
         logging.error(f"Erreur critique lors du processus de vérification : {e}")
