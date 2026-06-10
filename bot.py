@@ -37,32 +37,25 @@ def calculer_winrate(stats):
     total = stats["victoires"] + stats["defaites"]
     return (stats["victoires"] / total * 100) if total > 0 else 0.0
 
-def enregistrer_resultat(victoire: bool):
-    stats = charger_stats()
-    if victoire: stats["victoires"] += 1
-    else: stats["defaites"] += 1
-    with open(STATS_FILE, "w") as f:
-        json.dump(stats, f)
-    # Sauvegarde automatique sur le dépôt
-    subprocess.run(["git", "config", "--global", "user.name", "bot-stats"])
-    subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
-    subprocess.run(["git", "add", STATS_FILE])
-    subprocess.run(["git", "commit", "-m", "Maj stats"])
-    subprocess.run(["git", "push"])
-
 def envoyer_sur_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     stats = charger_stats()
     wr = calculer_winrate(stats)
+
+    # --- LOGIQUE DE CORRECTION TEMPORELLE ---
+    annee_actuelle = datetime.now().strftime("%Y")
+    message_propre = message.replace("2024", annee_actuelle)
+    # ----------------------------------------
+
     signature = f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n📈 <b>Win Rate : {wr:.1f}%</b>"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message + signature, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message_propre + signature, "parse_mode": "HTML"}
     try:
         requests.post(url, json=payload)
     except Exception as e:
         print(f"❌ Erreur Telegram : {e}")
 
 # =====================================================================
-# 🧠 CŒUR DU BOT : ANALYSE EXPERTE (LOGIQUE ORIGINALE MAINTENUE)
+# 🧠 CŒUR DU BOT : ANALYSE EXPERTE
 # =====================================================================
 def obtenir_heure_france_exacte():
     return datetime.now(timezone.utc) + timedelta(hours=2)
