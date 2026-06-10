@@ -4,6 +4,7 @@ import requests
 import json
 import subprocess
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
@@ -111,11 +112,25 @@ def envoyer_sur_telegram(message: str):
     message_propre = message.replace("2024", annee_actuelle)
     
     signature = f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n📈 <b>Win Rate : {wr:.1f}%</b>"
+    texte_complet = message_propre + signature
+    
     payload = {
         "chat_id": TELEGRAM_CHANNEL_ID, 
-        "text": message_propre + signature, 
+        "text": texte_complet, 
         "parse_mode": "HTML"
     }
+    
+    # Sécurité absolue : Si le message dépasse la limite stricte de Telegram (4096)
+    if len(texte_complet) > 4000:
+        logging.warning("Message trop long détecté. Nettoyage et troncature de sécurité...")
+        # On supprime le HTML pour éviter des balises coupées qui feraient planter l'envoi
+        texte_sans_html = re.sub('<[^<]+?>', '', message_propre)
+        texte_complet = texte_sans_html[:3500] + "\n\n... [Analyse tronquée car trop longue] ..." + signature
+        payload = {
+            "chat_id": TELEGRAM_CHANNEL_ID, 
+            "text": texte_complet
+            # On retire volontairement parse_mode car le HTML a été nettoyé
+        }
     
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -147,6 +162,10 @@ def run_bot_autonome():
     Tu es l'assistant personnel d'un parieur expert en tennis. Analyse les matchs ATP/WTA du {date_du_jour}. 
     Note : Il est actuellement {heure_actuelle} (heure locale France).
     
+    RÈGLE DE CONCISION ABSOLUE (CRUCIAL) :
+    - Ton analyse de la section "POURQUOI ?" doit être ultra-courte, percutante et faire maximum 100 à 150 mots.
+    - Va droit au but. Pas de phrases de transition inutiles. Le ticket entier DOIT être concis pour ne pas saturer l'affichage.
+    
     RÈGLE DE CORRÉLATION TEMPORELLE :
     - Compare l'heure de début de chaque match avec {heure_actuelle}.
     - SI LE MATCH A DÉJÀ COMMENCÉ OU EST TERMINÉ, EXCLUS-LE DE TES ANALYSES.
@@ -176,7 +195,7 @@ def run_bot_autonome():
     📈 <b>COTE :</b> [Cote réelle Winamax]
     💰 <b>MISE :</b> [2% simple / 1% combiné]
     🛡 <b>CONFIANCE :</b> [ÉLEVÉE / MODÉRÉE]
-    📌 <b>POURQUOI ?</b> [Analyse courte intégrant le H2H/Forme/Surface et la justification]
+    📌 <b>POURQUOI ?</b> [Analyse très courte et synthétique]
     """
 
     try:
