@@ -1,47 +1,45 @@
-name: Bot Pronostics Tennis
+name: Bot Pronostics & Vérifications Tennis
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 heure française (en heure d'été)
+    # On déclenche le workflow global directement aux heures clés
+    # 06:00 UTC = 08:00 Heure Française
     - cron: '0 6 * * *'
-    # 12:00 UTC = 14:00 heure française
+    # 12:00 UTC = 14:00 Heure Française
     - cron: '0 12 * * *'
-  workflow_dispatch: # Permet de lancer le bot manuellement depuis l'interface GitHub
+  workflow_dispatch: # Permet de le lancer manuellement si besoin
 
-# CRUCIAL : Donne l'autorisation au bot de faire des "git push" pour les statistiques
 permissions:
-  contents: write
+  contents: write # Indispensable pour le git push des stats
 
 jobs:
-  run-bot:
+  automation-tennis:
     runs-on: ubuntu-latest
     
-    # Centralisation des variables d'environnement pour tous les scripts
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout du dépôt
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Configuration de Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip' # Optimisation : met en cache les dépendances pour aller plus vite
+          cache: 'pip' # Optimisation : met en cache les dépendances pour économiser du temps
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests google-genai
+      - name: Installation des dépendances
+        run: pip install requests google-genai
 
-      - name: 1. Vérification du pari précédent
-        # On exécute le script de l'Oracle en premier pour valider les stats
-        # Remplace 'verifier.py' par le nom réel de ton second fichier script
-        run: python verifier.py
+      - name: Étape 1 : Vérification du résultat précédent
+        # Ce script s'exécute EN PREMIER. S'il met à jour les stats et fait un push,
+        # le dépôt local du workflow se mettra à jour.
+        run: python verification_resultats.py
 
-      - name: 2. Génération du nouveau pronostic
-        # Ensuite, on cherche une nouvelle opportunité
+      - name: Étape 2 : Génération du nouveau pronostic
+        # Ce script s'exécute IMMÉDIATEMENT APRÈS le succès de l'étape 1.
+        # Plus aucun risque de chevauchement ou de conflit Git !
         run: python bot.py
