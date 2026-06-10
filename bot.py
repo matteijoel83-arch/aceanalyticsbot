@@ -66,7 +66,7 @@ def enregistrer_resultat(victoire: bool):
         # On stage la mise à jour des statistiques
         subprocess.run(["git", "add", STATS_FILE], check=True)
         
-        # On indique à Git que le fichier pari_en_cours.json a été supprimé localement
+        # On indique à Git si le fichier pari_en_cours.json a été supprimé localement
         if not os.path.exists("pari_en_cours.json"):
             subprocess.run(["git", "rm", "pari_en_cours.json"], check=False)
             
@@ -192,7 +192,7 @@ def run_bot_autonome():
         )
         
         texte = reponse.text.strip()
-        if "PAS_DE_VALUE" not in texte and len(texte) > 20:
+        if "PAS_DE_VALUE" not in text and len(texte) > 20:
             if not est_deja_envoye(texte):
                 sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
                 sauvegarder_dans_historique(texte)
