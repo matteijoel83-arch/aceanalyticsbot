@@ -2,15 +2,14 @@ name: Bot Pronostics & Vérifications Tennis
 
 on:
   schedule:
-    # On déclenche le workflow global directement aux heures clés
     # 06:00 UTC = 08:00 Heure Française
     - cron: '0 6 * * *'
     # 12:00 UTC = 14:00 Heure Française
     - cron: '0 12 * * *'
-  workflow_dispatch: # Permet de le lancer manuellement si besoin
+  workflow_dispatch:
 
 permissions:
-  contents: write # Indispensable pour le git push des stats
+  contents: write
 
 jobs:
   automation-tennis:
@@ -22,24 +21,20 @@ jobs:
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
 
     steps:
-      - name: Checkout du dépôt
+      - name: "Checkout du dépôt"
         uses: actions/checkout@v4
 
-      - name: Configuration de Python
+      - name: "Configuration de Python"
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip' # Optimisation : met en cache les dépendances pour économiser du temps
+          cache: 'pip'
 
-      - name: Installation des dépendances
+      - name: "Installation des dépendances"
         run: pip install requests google-genai
 
-      - name: Étape 1 : Vérification du résultat précédent
-        # Ce script s'exécute EN PREMIER. S'il met à jour les stats et fait un push,
-        # le dépôt local du workflow se mettra à jour.
+      - name: "Étape 1 : Vérification du résultat précédent"
         run: python verification_resultats.py
 
-      - name: Étape 2 : Génération du nouveau pronostic
-        # Ce script s'exécute IMMÉDIATEMENT APRÈS le succès de l'étape 1.
-        # Plus aucun risque de chevauchement ou de conflit Git !
+      - name: "Étape 2 : Génération du nouveau pronostic"
         run: python bot.py
