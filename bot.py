@@ -222,6 +222,15 @@ def run_bot_autonome():
     📌 <b>POURQUOI ?</b> [Analyse très courte et synthétique]
     """
 
+    # AJOUT SÉCURITÉ ANTI-HALLUCINATION (CONSIGNE AGENT)
+    instructions_agent += """
+    RÈGLE ABSOLUE ANTI-HALLUCINATION :
+    - SI ET SEULEMENT SI la recherche Google Search ne renvoie aucun match réel pour le tennis aujourd'hui, ou si aucun match ne commence après l'heure actuelle, tu ne dois ABSOLUMENT RIEN INVENTER.
+    - Ne te base pas sur tes connaissances passées pour imaginer des rencontres fictives ou passées (comme Draper vs Berrettini).
+    - Si la liste réelle est vide, réponds UNIQUEMENT et STRICTEMENT par le mot : AUCUN_MATCH
+    - Ne mets aucun format HTML, aucune analyse, aucun autre mot. Juste : AUCUN_MATCH
+    """
+
     try:
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
@@ -235,6 +244,12 @@ def run_bot_autonome():
         )
         
         texte = reponse.text.strip()
+        
+        # AJOUT INTERCEPTION DU SIGNAL AUCUN MATCH (VÉRIFICATION RÉPONSE)
+        if "AUCUN_MATCH" in texte:
+            logging.info("Session annulée proprement : Aucun match réel disponible à cette heure-ci (Détection AUCUN_MATCH).")
+            return
+
         if "PAS_DE_VALUE" not in texte and len(texte) > 20:
             # Découpage du texte en fonction du délimiteur ===
             tickets = [t.strip() for t in texte.split("===") if len(t.strip()) > 20]
