@@ -231,6 +231,18 @@ def run_bot_autonome():
     - Ne mets aucun format HTML, aucune analyse, aucun autre mot. Juste : AUCUN_MATCH
     """
 
+    # AJOUT PROTOCOLE MATHÉMATIQUE VALUE-BET
+    instructions_agent += """
+    PROTOCOLE DE CALCUL DE LA VALUE (OBLIGATOIRE) :
+    Pour chaque match validé par tes 5 points d'analyse, tu dois obligatoirement réaliser ce calcul avant de générer le ticket :
+    1. Évalue la probabilité de réussite en pourcentage (ex: 65%) basée strictement sur tes conclusions de l'analyse.
+    2. Convertis cette probabilité en cote juste avec la formule : Cote Juste = 1 / (Pourcentage / 100). (ex: 1 / 0.65 = 1.53).
+    3. Compare ta Cote Juste avec la cote réelle disponible sur Winamax :
+       - SI Cote Winamax > Cote Juste : C'est une Value. Le ticket est validé.
+       - SI Cote Winamax <= Cote Juste : Ce n'est PAS une Value. Tu dois abandonner ce match, même si le joueur est le grand favori.
+    - Si aucun match de la session ne contient de Value mathématique, réponds STRICTEMENT : AUCUN_MATCH
+    """
+
     try:
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
