@@ -150,8 +150,22 @@ def obtenir_heure_france_exacte():
     return datetime.now(timezone.utc) + timedelta(hours=2)
 
 def sauvegarder_pari_pour_suivi(pari_info):
+    """Ajoute le nouveau pari à la liste sans écraser les matchs en cours"""
+    paris_en_attente = []
+    if os.path.exists("pari_en_cours.json"):
+        try:
+            with open("pari_en_cours.json", "r") as f:
+                contenu = json.load(f)
+                if isinstance(contenu, list):
+                    paris_en_attente = contenu
+                else:
+                    paris_en_attente = [contenu] if contenu else []
+        except Exception:
+            paris_en_attente = []
+            
+    paris_en_attente.append(pari_info)
     with open("pari_en_cours.json", "w") as f:
-        json.dump(pari_info, f)
+        json.dump(paris_en_attente, f)
 
 def run_bot_autonome():
     maintenant = obtenir_heure_france_exacte()
