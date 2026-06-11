@@ -201,7 +201,7 @@ def run_bot_autonome():
     try:
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.5-pro',
             contents=f"Effectue la double triple vérification et propose les meilleurs paris pour le {date_du_jour}.",
             config=types.GenerateContentConfig(
                 system_instruction=instructions_agent,
