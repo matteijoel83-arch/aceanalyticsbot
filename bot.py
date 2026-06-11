@@ -144,7 +144,7 @@ def envoyer_sur_telegram(message: str):
         logging.error(f"Erreur inattendue Telegram : {e}")
 
 # =====================================================================
-# 🧠 CŒUR DU BOT : ANALYSE EXPERTE
+# 🧠 CŒUR DU BOT : ANALYSE EXPERTE & SESSIONS
 # =====================================================================
 def obtenir_heure_france_exacte():
     return datetime.now(timezone.utc) + timedelta(hours=2)
@@ -176,8 +176,18 @@ def run_bot_autonome():
     Tu es l'assistant personnel d'un parieur expert en tennis. Analyse les matchs ATP/WTA du {date_du_jour}. 
     Note : Il est actuellement {heure_actuelle} (heure locale France).
     
+    RÈGLE DES SESSIONS ET FLEXIBILITÉ (CRUCIAL) :
+    - Détermine ta session selon l'heure actuelle :
+      * Si l'heure est AVANT 14:00 : Tu analyses la SESSION MATIN (matchs de la mi-journée et du début d'après-midi).
+      * Si l'heure est APRÈS 14:00 : Tu analyses la SESSION APRÈS-MIDI (matchs de fin d'après-midi, soirée et nuit).
+    - Tu as carte blanche pour proposer entre 0 et 3 TICKETS MAXIMUM par session.
+    - Tu choisis librement le format selon les opportunités réelles (Value-bets) : uniquement des simples, uniquement des combinés, ou un mélange des deux (ex: 2 simples et 1 combiné, 2 combinés, etc.). S'il n'y a pas d'opportunité, ne propose rien.
+    
+    RÈGLE DE SÉPARATION MULTI-TICKETS :
+    - SI TU PROPOSES PLUSIEURS TICKETS DISTINCTS, tu dois ABSOLUMENT insérer le délimiteur exact === sur une ligne isolée entre chaque ticket. Ne mets aucun autre texte sur cette ligne de séparation.
+    
     RÈGLE DE CONCISION ABSOLUE (CRUCIAL) :
-    - Ton analyse de la section "POURQUOI ?" doit être ultra-courte, percutante et faire maximum 100 à 150 mots.
+    - Ton analyse de la section "POURQUOI ?" doit être ultra-courte, percutante et faire maximum 100 à 150 mots par ticket.
     - Va droit au but. Pas de phrases de transition inutiles. Le ticket entier DOIT être concis pour ne pas saturer l'affichage.
     
     RÈGLE DE CORRÉLATION TEMPORELLE :
@@ -200,7 +210,7 @@ def run_bot_autonome():
     - Croise les sources (ATP, Winamax, Flashscore).
     - Force la lecture de la cote réelle.
     
-    FORMAT TICKET :
+    FORMAT DE CHAQUE TICKET :
     🔴 <b>PRONOSTIC [SIMPLE OU COMBINÉ]</b> 🔴
     🏟 <b>MATCHS :</b> [Match 1] vs [Match 2]
     🏆 <b>COMPÉTITION :</b> [Tournoi]
@@ -216,7 +226,7 @@ def run_bot_autonome():
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
             model='gemini-2.5-pro',
-            contents=f"Effectue la double triple vérification et propose les meilleurs paris pour le {date_du_jour}.",
+            contents=f"Effectue la double triple vérification et propose les meilleurs paris (max 3) pour la session du {date_du_jour}.",
             config=types.GenerateContentConfig(
                 system_instruction=instructions_agent,
                 tools=[{"google_search": {}}],
@@ -226,26 +236,32 @@ def run_bot_autonome():
         
         texte = reponse.text.strip()
         if "PAS_DE_VALUE" not in texte and len(texte) > 20:
-            if not est_deja_envoye(texte):
-                sauvegarder_pari_pour_suivi({"pari": texte, "date": date_du_jour})
-                sauvegarder_dans_historique(texte)
-                envoyer_sur_telegram(texte)
-                
-                # --- SAUVEGARDE ET PUSH DU NOUVEAU PARI SUR GITHUB ---
+            # Découpage du texte en fonction du délimiteur ===
+            tickets = [t.strip() for t in texte.split("===") if len(t.strip()) > 20]
+            
+            pari_envoye = False
+            for ticket in tickets:
+                if not est_deja_envoye(ticket):
+                    sauvegarder_pari_pour_suivi({"pari": ticket, "date": date_du_jour})
+                    sauvegarder_dans_historique(ticket)
+                    envoyer_sur_telegram(ticket)
+                    pari_envoye = True
+                else:
+                    logging.warning("Doublon détecté pour un des tickets, sauté.")
+            
+            # --- SAUVEGARDE ET PUSH SUR GITHUB SI AU MOINS UN PARI A ÉTÉ ENVOYÉ ---
+            if pari_envoye:
                 try:
                     subprocess.run(["git", "config", "--global", "user.name", "bot-pari"], check=True)
                     subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
                     subprocess.run(["git", "add", "pari_en_cours.json", "historique.json"], check=True)
-                    subprocess.run(["git", "commit", "-m", "📌 Sauvegarde du nouveau pari en cours et historique"], check=True)
+                    subprocess.run(["git", "commit", "-m", "📌 Sauvegarde des nouveaux paris de la session et historique"], check=True)
                     subprocess.run(["git", "push"], check=True)
-                    logging.info("Nouveau pari sauvegardé avec succès sur GitHub.")
+                    logging.info("Nouveaux paris sauvegardés avec succès sur GitHub.")
                 except subprocess.CalledProcessError as e:
-                    logging.error(f"Erreur lors du push du nouveau pari : {e}")
-                
-            else:
-                logging.warning("Doublon détecté, pari déjà proposé ce jour.")
+                    logging.error(f"Erreur lors du push des nouveaux paris : {e}")
         else:
-            logging.info("Aucune opportunité de value-bet trouvée aujourd'hui.")
+            logging.info("Aucune opportunité de value-bet trouvée pour cette session.")
     except Exception as e:
         logging.error(f"Erreur lors de l'exécution globale du bot : {e}")
 
