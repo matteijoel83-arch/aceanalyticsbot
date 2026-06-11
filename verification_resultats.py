@@ -1,98 +1,128 @@
-import json
 import os
 import sys
+import json
+import subprocess
 import logging
 from google import genai
 from google.genai import types
 
-# Protection d'importation
-sys.path.append(os.getcwd())
-try:
-    from bot import enregistrer_resultat
-except ImportError:
-    logging.critical("Impossible d'importer 'enregistrer_resultat' depuis bot.py.")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    logging.critical("Clé GEMINI_API_KEY manquante.")
     sys.exit(1)
 
-# Configuration du logging (aligné sur bot.log)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("bot.log"),
-        logging.StreamHandler()
-    ]
-)
+client = genai.Client(api_key=GEMINI_API_KEY)
+STATS_FILE = "stats.json"
+PARI_FILE = "pari_en_cours.json"
 
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    logging.critical("Erreur : Clé API GEMINI_API_KEY manquante.")
-    sys.exit(1)
+def charger_json(fichier, defaut):
+    if os.path.exists(fichier):
+        try:
+            with open(fichier, "r") as f:
+                return json.load(f)
+        except:
+            return defaut
+    return defaut
 
-client = genai.Client(api_key=api_key)
+def sauvegarder_json(fichier, donnees):
+    with open(fichier, "w") as f:
+        json.dump(donnees, f)
 
-def verifier_et_mettre_a_jour():
-    FICHIER_PARI = "pari_en_cours.json"
+def verifier_un_pari(pari_texte):
+    prompt = f"""
+    Tu es un expert en vérification de scores de tennis. Analyse le ticket de pari suivant et détermine si le pronostic est GAGNÉ, PERDU, ou si le match est EN_COURS (ou pas encore terminé / reporté).
+    
+    Ticket :
+    {pari_texte}
+    
+    Utilise l'outil de recherche Google pour trouver le résultat réel exact du ou des matchs mentionnés.
+    
+    RÉPONSE STRICTE ATTENDUE (RETOURNE UNIQUEMENT L'UN DE CES TROIS MOTS) :
+    - GAGNÉ (si le pronostic s'est avéré exact)
+    - PERDU (si le pronostic est faux)
+    - EN_COURS (si le match n'a pas encore eu lieu, est en train d'être joué, ou si le résultat n'est pas encore officiel)
+    """
+    try:
+        reponse = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[{"google_search": {}}],
+                temperature=0.0,
+            )
+        )
+        resultat = reponse.text.strip().upper()
+        if "GAGNÉ" in resultat or "GAGNE" in resultat:
+            return "GAGNÉ"
+        elif "PERDU" in resultat:
+            return "PERDU"
+        else:
+            return "EN_COURS"
+    except Exception as e:
+        logging.error(f"Erreur lors de la vérification Gemini : {e}")
+        return "EN_COURS"
 
-    if not os.path.exists(FICHIER_PARI):
+def main():
+    stats = charger_json(STATS_FILE, {"victoires": 0, "defaites": 0})
+    paris_en_cours = charger_json(PARI_FILE, [])
+    
+    # Compatibilité : si l'ancien fichier contenait un dictionnaire unique, on le passe en liste
+    if isinstance(paris_en_cours, dict):
+        paris_en_cours = [paris_en_cours] if paris_en_cours else []
+
+    if not paris_en_cours:
         logging.info("Aucun pari en cours à vérifier.")
         return
 
-    # 1. Lecture sécurisée du fichier JSON
-    try:
-        with open(FICHIER_PARI, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        pari_texte = data.get("pari", "")
-    except json.JSONDecodeError:
-        logging.error(f"Le fichier {FICHIER_PARI} est corrompu. Suppression pour éviter un blocage.")
-        os.remove(FICHIER_PARI)
-        return
-    except Exception as e:
-        logging.error(f"Erreur lors de la lecture du fichier : {e}")
-        return
+    nouveaux_paris_en_cours = []
+    maj_stats = False
 
-    if not pari_texte:
-        logging.warning("Le fichier existe mais est vide. Nettoyage.")
-        os.remove(FICHIER_PARI)
-        return
-
-    # 2. Appel déterministe à l'IA pour classification
-    try:
-        logging.info(f"Recherche du résultat internet pour : {pari_texte[:60]}...")
+    for pari_info in paris_en_cours:
+        pari_texte = pari_info.get("pari", "")
+        date_pari = pari_info.get("date", "")
+        logging.info(f"Vérification du pari du {date_pari}...")
         
-        system_prompt = (
-            "Tu es un agent automatique de vérification de scores de tennis. Tu dois chercher sur le web "
-            "le résultat final du match. Tu as une obligation stricte : "
-            "Répondre UNIQUEMENT par le mot 'GAGNÉ' ou 'PERDU' selon l'issue du pronostic fourni."
-        )
-
-        verif = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=f"Analyse ce pronostic et donne l'issue (GAGNÉ/PERDU) : '{pari_texte}'",
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                tools=[{"google_search": {}}],
-                temperature=0.0, # Neutralise la créativité de l'IA
-            ),
-        )
+        statut = verifier_un_pari(pari_texte)
+        logging.info(f"Résultat constaté : {statut}")
         
-        resultat = verif.text.strip().upper()
-        logging.info(f"Verdict rendu par l'IA : {resultat}")
-        
-        # 3. Traitement binaire et suppression locale avant synchronisation globale
-        if "GAGNÉ" in resultat:
-            logging.info("🏆 Pronostic validé ! Suppression locale et mise à jour des stats...")
-            os.remove(FICHIER_PARI)
-            enregistrer_resultat(True) # Le push Git global a lieu ici
-        elif "PERDU" in resultat:
-            logging.info("❌ Pronostic perdu. Suppression locale et mise à jour des stats...")
-            os.remove(FICHIER_PARI)
-            enregistrer_resultat(False) # Le push Git global a lieu ici
+        if statut == "GAGNÉ":
+            stats["victoires"] += 1
+            maj_stats = True
+        elif statut == "PERDU":
+            stats["defaites"] += 1
+            maj_stats = True
         else:
-            logging.warning("⚠️ Résultat incertain ou match non terminé. Le fichier est conservé pour le prochain cycle.")
-            return
+            # Match en cours ou inconnu : on le conserve pour le prochain cycle
+            nouveaux_paris_en_cours.append(pari_info)
 
-    except Exception as e:
-        logging.error(f"Erreur critique lors du processus de vérification : {e}")
+    # Sauvegarde des états locaux
+    sauvegarder_json(STATS_FILE, stats)
+    
+    if nouveaux_paris_en_cours:
+        sauvegarder_json(PARI_FILE, nouveaux_paris_en_cours)
+    else:
+        if os.path.exists(PARI_FILE):
+            os.remove(PARI_FILE)
+
+    # Push des modifications sur GitHub si nécessaire
+    if maj_stats or len(nouveaux_paris_en_cours) != len(paris_en_cours):
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "bot-verification"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+            subprocess.run(["git", "add", STATS_FILE], check=True)
+            
+            if os.path.exists(PARI_FILE):
+                subprocess.run(["git", "add", PARI_FILE], check=True)
+            else:
+                subprocess.run(["git", "rm", PARI_FILE], check=False)
+                
+            subprocess.run(["git", "commit", "-m", "🔄 MAJ des résultats (conservation des matchs en cours)"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            logging.info("Synchronisation GitHub effectuée avec succès.")
+        except Exception as e:
+            logging.error(f"Erreur lors de la synchronisation Git : {e}")
 
 if __name__ == "__main__":
-    verifier_et_mettre_a_jour()
+    main()
