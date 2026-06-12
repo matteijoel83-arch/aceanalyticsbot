@@ -243,6 +243,14 @@ def run_bot_autonome():
     - Si aucun match de la session ne contient de Value mathématique, réponds STRICTEMENT : AUCUN_MATCH
     """
 
+    # AJOUT DIRECTIVE TYPES DE PARIS (CONFIANCE MODÉRÉE / ÉLEVÉE)
+    instructions_agent += """
+    ORIENTATION DES MARCHÉS SELON LE RISQUE :
+    - Lorsque ton niveau de confiance se situe dans la tranche MODÉRÉE ou ÉLEVÉE, privilégie les paris alternatifs basés sur le scénario et le contenu du match plutôt que sur la victoire sèche (Moneyline).
+    - Oriente tes propositions en priorité vers des marchés du style : "Plus de 2.5 sets", "Moins de 2.5 sets", ou sur le nombre de jeux total (Over/Under jeux), ainsi que les handicaps, si l'analyse montre un match particulièrement serré ou au contraire totalement déséquilibré.
+    - Ces types de paris doivent évidemment être validés par ton PROTOCOLE DE CALCUL DE LA VALUE avant d'être proposés.
+    """
+
     try:
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
