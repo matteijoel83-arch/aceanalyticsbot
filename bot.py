@@ -120,16 +120,13 @@ def envoyer_sur_telegram(message: str):
         "parse_mode": "HTML"
     }
     
-    # Sécurité absolue : Si le message dépasse la limite stricte de Telegram (4096)
     if len(texte_complet) > 4000:
         logging.warning("Message trop long détecté. Nettoyage et troncature de sécurité...")
-        # On supprime le HTML pour éviter des balises coupées qui feraient planter l'envoi
         texte_sans_html = re.sub('<[^<]+?>', '', message_propre)
         texte_complet = texte_sans_html[:3500] + "\n\n... [Analyse tronquée car trop longue] ..." + signature
         payload = {
             "chat_id": TELEGRAM_CHANNEL_ID, 
             "text": texte_complet
-            # On retire volontairement parse_mode car le HTML a été nettoyé
         }
     
     try:
@@ -251,6 +248,13 @@ def run_bot_autonome():
     - Ces types de paris doivent évidemment être validés par ton PROTOCOLE DE CALCUL DE LA VALUE avant d'être proposés.
     """
 
+    # AJOUT FILTRE REPRISE DE BLESSURE / ABSENCE PROLONGÉE
+    instructions_agent += """
+    FILTRE REPRISE DE BLESSURE / MANQUE DE RYTHME (VIGILANCE PRO) :
+    - Lors de tes recherches, vérifie systématiquement si un joueur ou une joueuse effectue son match de reprise après une absence pour blessure ou une pause de plus de 2 mois (en dehors de l'intersaison habituelle).
+    - Si c'est le cas, ÉLIMINE purement et simplement ce match de tes sélections (n'analyse aucun pari sur ou contre ce joueur). Le manque de repères physiques ou le risque d'abandon introduit une variance impossible à modéliser mathématiquement. Dans le doute, on passe notre chemin.
+    """
+
     try:
         logging.info("Lancement de l'analyse Gemini...")
         reponse = client.models.generate_content(
@@ -265,13 +269,11 @@ def run_bot_autonome():
         
         texte = reponse.text.strip()
         
-        # AJOUT INTERCEPTION DU SIGNAL AUCUN MATCH (VÉRIFICATION RÉPONSE)
         if "AUCUN_MATCH" in texte:
             logging.info("Session annulée proprement : Aucun match réel disponible à cette heure-ci (Détection AUCUN_MATCH).")
             return
 
         if "PAS_DE_VALUE" not in texte and len(texte) > 20:
-            # Découpage du texte en fonction du délimiteur ===
             tickets = [t.strip() for t in texte.split("===") if len(t.strip()) > 20]
             
             pari_envoye = False
@@ -284,7 +286,6 @@ def run_bot_autonome():
                 else:
                     logging.warning("Doublon détecté pour un des tickets, sauté.")
             
-            # --- SAUVEGARDE ET PUSH SUR GITHUB SI AU MOINS UN PARI A ÉTÉ ENVOYÉ ---
             if pari_envoye:
                 try:
                     subprocess.run(["git", "config", "--global", "user.name", "bot-pari"], check=True)
