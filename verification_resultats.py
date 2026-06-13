@@ -58,7 +58,8 @@ def interroger_ia_statut(pari_texte):
             contents=f"Vérifie le résultat réel pour ce ticket :\n\n{pari_texte}",
             config=types.GenerateContentConfig(
                 system_instruction=instructions,
-                tools=[{"google_search": {}}],
+                # MAJ : Utilisation de la syntaxe native officielle pour le grounding Google Search
+                tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.1,
             ),
         )
@@ -123,6 +124,10 @@ def main():
         try:
             subprocess.run(["git", "config", "--global", "user.name", "bot-verification"], check=True)
             subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+            
+            # MAJ SÉCURITÉ CRITIQUE : Pull avec rebase prioritaire avant d'ajouter les modifications
+            # Évite les rejets de push si bot.py a poussé un nouveau match entre-temps
+            subprocess.run(["git", "pull", "--rebase", "-Xours"], check=False)
             
             subprocess.run(["git", "add", STATS_FILE], check=True)
             
