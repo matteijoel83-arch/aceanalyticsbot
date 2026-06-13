@@ -6,6 +6,7 @@ import subprocess
 import logging
 import re
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from google import genai
 from google.genai import types
 
@@ -33,7 +34,7 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # =====================================================================
-# 📊 MODULE DE SUIVI & SYNCHRONISATION GIT
+# 📊 MODULE DE SUIVI & SYNCHRONISATION GIT (AMÉLIORÉ)
 # =====================================================================
 def charger_stats():
     if os.path.exists(STATS_FILE):
@@ -49,8 +50,11 @@ def calculer_winrate(stats):
     total = stats["victoires"] + stats["defaites"]
     return (stats["victoires"] / total * 100) if total > 0 else 0.0
 
-def enregistrer_resultat(victoire: bool):
-    """Met à jour les statistiques et synchronise la suppression du pari sur GitHub"""
+def enregistrer_resultat(victoire: bool, pari_termine: str = None):
+    """
+    Met à jour les statistiques et retire proprement le pari terminé de la liste 
+    sans écraser ou supprimer les autres matchs en cours.
+    """
     stats = charger_stats()
     if victoire: 
         stats["victoires"] += 1
@@ -60,20 +64,44 @@ def enregistrer_resultat(victoire: bool):
     with open(STATS_FILE, "w") as f:
         json.dump(stats, f)
         
+    # MAJ SÉCURITÉ : Nettoyage chirurgical du ticket validé dans pari_en_cours.json
+    if pari_termine and os.path.exists("pari_en_cours.json"):
+        try:
+            with open("pari_en_cours.json", "r") as f:
+                paris_actuels = json.load(f)
+            
+            if isinstance(paris_actuels, list):
+                # On ne garde que les paris dont le contenu texte est différent du pari terminé
+                paris_restants = [p for p in paris_actuels if p.get("pari") != pari_termine]
+            else:
+                paris_restants = []
+                
+            if paris_restants:
+                with open("pari_en_cours.json", "w") as f:
+                    json.dump(paris_restants, f)
+            else:
+                # S'il ne reste plus aucun match en attente, on supprime proprement le fichier
+                os.remove("pari_en_cours.json")
+        except Exception as e:
+            logging.error(f"Erreur lors du nettoyage de pari_en_cours.json : {e}")
+        
     try:
         subprocess.run(["git", "config", "--global", "user.name", "bot-stats"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
         
-        # On stage la mise à jour des statistiques
+        # MAJ SÉCURITÉ ANTI-FREEZE : Le drapeau -Xours résout automatiquement les conflits en faveur du bot
+        subprocess.run(["git", "pull", "--rebase", "-Xours"], check=False)
+        
         subprocess.run(["git", "add", STATS_FILE], check=True)
         
-        # On indique à Git si le fichier pari_en_cours.json a été supprimé localement
         if not os.path.exists("pari_en_cours.json"):
             subprocess.run(["git", "rm", "pari_en_cours.json"], check=False)
+        else:
+            subprocess.run(["git", "add", "pari_en_cours.json"], check=True)
             
-        subprocess.run(["git", "commit", "-m", "🔄 Maj stats et nettoyage du pari terminé"], check=True)
+        subprocess.run(["git", "commit", "-m", "🔄 Maj stats et nettoyage partiel des paris"], check=True)
         subprocess.run(["git", "push"], check=True)
-        logging.info("Statistiques et nettoyage validés avec succès sur GitHub.")
+        logging.info("Statistiques et synchronisation validées sur GitHub.")
     except subprocess.CalledProcessError as e:
         logging.error(f"Erreur lors de la synchronisation Git (Résultats) : {e}")
 
@@ -144,7 +172,7 @@ def envoyer_sur_telegram(message: str):
 # 🧠 CŒUR DU BOT : ANALYSE EXPERTE & SESSIONS
 # =====================================================================
 def obtenir_heure_france_exacte():
-    return datetime.now(timezone.utc) + timedelta(hours=2)
+    return datetime.now(ZoneInfo("Europe/Paris"))
 
 def sauvegarder_pari_pour_suivi(pari_info):
     """Ajoute le nouveau pari à la liste sans écraser les matchs en cours"""
@@ -196,12 +224,12 @@ def run_bot_autonome():
     2. Cotes : https://www.winamax.fr/paris-sportifs, https://www.sportytrader.com/
     3. Stats : https://www.sofascore.com/fr/, https://www.flashscore.fr/
 
-    PROTOCOLE D'ANALYSE EXPERT (Les 5 Points Cruciaux) :
-    1. SURFACE (Performance spécifique Terre/Dur/Gazon).
-    2. H2H (Style de jeu, blocages tactiques).
-    3. FORME PHYSIQUE (10 derniers matchs, fatigue).
-    4. STATS SERVICE/RETOUR (% balles sauvées).
-    5. CONTEXTE/ENJEU (Préparation tournoi majeur, points à défendre).
+    PROTOCOLE D'ANALYSE HYBRIDE EXPERT (Synthèse Globale) :
+    1. SURFACE & CONDITIONS AVANCÉES : Combine le bilan historique du joueur sur la surface brute (Terre/Dur/Gazon) avec la vitesse spécifique du tournoi actuel (Court Pace Index - CPI), l'impact Indoor/Outdoor et l'altitude (ex: Madrid).
+    2. FORME BRUTE & CHARGE PHYSIQUE RÉCENTE : Évalue la dynamique sur les 10 derniers matchs (fatigue globale) et croise-la avec la taxe physique immédiate (nombre d'heures sur le court depuis 72h, longs trajets récents, décalages horaires ou contrecoup d'un titre remporté le dimanche précédent).
+    3. CONTEXTE, ENJEU & PSYCHOLOGIE : Identifie la motivation réelle : préparation cachée d'un tournoi majeur, points massifs à défendre au classement. Applique une vigilance absolue (risque élevé de gestion d'effort) si un Grand Chelem débute la semaine suivante.
+    4. STATS AVANCÉES (Service/Retour & Holds) : Ne regarde pas que les victoires sèches. Analyse le % de balles de break sauvées/converties et le % de Hold (jeux de service gagnés). Si les deux joueurs affichent un Hold % > 83% et un solide historique de Tie-breaks, privilégie les marchés alternatifs (Over jeux / Handicaps).
+    5. H2H, BLOCAGES TACTIQUES & GAUCHERS : Étudie l'historique direct (H2H) sous l'angle stylistique (ex: un rameur/contre-attaquant face à un serveur puissant). Vérifie systématiquement si l'un des joueurs est gaucher et cherche le bilan spécifique de son adversaire face aux gauchers (Left-handed bias).
 
     PROTOCOLE DE SÉCURITÉ (DOUBLE TRIPLE VÉRIFICATION) :
     - Croise les sources (ATP, Winamax, Flashscore).
@@ -214,7 +242,7 @@ def run_bot_autonome():
     ⏰ <b>HEURE :</b> [Heure]
     ✅ <b>PRONO :</b> [Pronostic précis]
     📈 <b>COTE :</b> [Cote réelle Winamax]
-    💰 <b>MISE :</b> [2% simple / 1% combiné]
+    💰 <b>MISE :</b> [Indique la valeur en % calculée selon les règles de bankroll]
     🛡 <b>CONFIANCE :</b> [ÉLEVÉE / MODÉRÉE]
     📌 <b>POURQUOI ?</b> [Analyse très courte et synthétique]
     """
@@ -240,12 +268,27 @@ def run_bot_autonome():
     - Si aucun match de la session ne contient de Value mathématique, réponds STRICTEMENT : AUCUN_MATCH
     """
 
-    # AJOUT DIRECTIVE TYPES DE PARIS (CONFIANCE MODÉRÉE / ÉLEVÉE)
+    # MAJ : ORIENTATION DES MARCHÉS SELON LE RISQUE & LE SCÉNARIO
     instructions_agent += """
-    ORIENTATION DES MARCHÉS SELON LE RISQUE :
-    - Lorsque ton niveau de confiance se situe dans la tranche MODÉRÉE ou ÉLEVÉE, privilégie les paris alternatifs basés sur le scénario et le contenu du match plutôt que sur la victoire sèche (Moneyline).
-    - Oriente tes propositions en priorité vers des marchés du style : "Plus de 2.5 sets", "Moins de 2.5 sets", ou sur le nombre de jeux total (Over/Under jeux), ainsi que les handicaps, si l'analyse montre un match particulièrement serré ou au contraire totalement déséquilibré.
-    - Ces types de paris doivent évidemment être validés par ton PROTOCOLE DE CALCUL DE LA VALUE avant d'être proposés.
+    ORIENTATION DES MARCHÉS SELON LE RISQUE & LE SCÉNARIO (CRUCIAL) :
+    - SI CONFIANCE ÉLEVÉE : Priorise la victoire sèche (Moneyline) si la value est nette. Si la cote du favori est trop basse, oriente-toi vers le "Handicap de Jeux du Favori" (ex: -3.5 jeux) ou la "Victoire 2-0" pour doper la cote.
+    - SI CONFIANCE MODÉRÉE : Interdiction de jouer le Moneyline. Bascule STRICTEMENT sur les marchés alternatifs selon le profil validé par ton analyse :
+      * Scénario "Match Serré" (Holds élevés, profils proches) : Cible en priorité le "Plus de 21.5 / 22.5 jeux". Si c'est un match WTA, privilégie le "Plus de 2.5 sets".
+      * Scénario "Match à sens unique" (Gros écart de niveau/forme) : Cible le "Moins de 20.5 / 19.5 jeux" ou le "2-0 Score Exact".
+      * Scénario "Favori prenable mais Outsider instable" : Privilégie le "Handicap de Jeux Positif" sur l'outsider (ex: +4.5 jeux).
+    - Tous ces marchés doivent être soumis et validés par le PROTOCOLE DE CALCUL DE LA VALUE.
+    """
+
+    # MAJ : STRATÉGIE DE MISE & PROTECTION DE BANKROLL (LIVRE DE RÈGLES)
+    instructions_agent += """
+    STRATÉGIE DE MISE & PROTECTION DE BANKROLL (STRICT) :
+    Tu dois définir et écrire la valeur de ta section 💰 MISE en respectant rigoureusement cette matrice croisée :
+    - SI LE TICKET EST UN PARI SIMPLE :
+      * Et que ton niveau de confiance est ÉLEVÉE -> Affiche strictement : 2%
+      * Et que ton niveau de confiance est MODÉRÉE -> Affiche strictement : 1%
+    - SI LE TICKET EST UN PARI COMBINÉ :
+      * Et que ton niveau de confiance est ÉLEVÉE -> Affiche strictement : 1%
+      * Et que ton niveau de confiance est MODÉRÉE -> RÈGLE CRUCIAL : C'est STRICTEMENT INTERDIT. N'émets pas ce ticket. La variance combinée à une incertitude modérée est mathématiquement dangereuse. Pas de combiné en confiance modérée.
     """
 
     # AJOUT FILTRE REPRISE DE BLESSURE / ABSENCE PROLONGÉE
@@ -262,7 +305,8 @@ def run_bot_autonome():
             contents=f"Effectue la double triple vérification et propose les meilleurs paris (max 3) pour la session du {date_du_jour}.",
             config=types.GenerateContentConfig(
                 system_instruction=instructions_agent,
-                tools=[{"google_search": {}}],
+                # MAJ SÉCURITÉ : Utilisation de la syntaxe native du SDK pour Google Search Grounding
+                tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.1,
             ),
         )
@@ -290,6 +334,10 @@ def run_bot_autonome():
                 try:
                     subprocess.run(["git", "config", "--global", "user.name", "bot-pari"], check=True)
                     subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"], check=True)
+                    
+                    # MAJ SÉCURITÉ ANTI-FREEZE : Intégration de -Xours lors du pull de sauvegarde des paris
+                    subprocess.run(["git", "pull", "--rebase", "-Xours"], check=False)
+                    
                     subprocess.run(["git", "add", "pari_en_cours.json", "historique.json"], check=True)
                     subprocess.run(["git", "commit", "-m", "📌 Sauvegarde des nouveaux paris de la session et historique"], check=True)
                     subprocess.run(["git", "push"], check=True)
