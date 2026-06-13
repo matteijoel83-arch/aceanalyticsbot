@@ -2,9 +2,9 @@ name: Bot Pronostics & Vérifications Tennis
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 Heure Française
+    # 06:00 UTC = 08:00 Heure Française (Ajusté selon l'heure d'été/hiver)
     - cron: '0 6 * * *'
-    # 12:00 UTC = 14:00 Heure Française
+    # 12:00 UTC = 14:00 Heure Française (Idéal pour ton basculement de session)
     - cron: '0 12 * * *'
   workflow_dispatch:
 
@@ -23,6 +23,9 @@ jobs:
     steps:
       - name: "Checkout du dépôt"
         uses: actions/checkout@v4
+        with:
+          # FIX CRUCIAL : Force Git à se positionner sur la vraie branche active
+          ref: ${{ github.ref_name }}
 
       - name: "Configuration de Python"
         uses: actions/setup-python@v5
@@ -31,7 +34,10 @@ jobs:
           cache: 'pip'
 
       - name: "Installation des dépendances"
-        run: pip install requests google-genai
+        # OPTIMISATION : On utilise ton fichier requirements.txt présent dans ton dépôt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: "Étape 1 : Vérification du résultat précédent"
         run: python verification_resultats.py
