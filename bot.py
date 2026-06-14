@@ -1,13 +1,18 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v5.0                      ║
-║  Modèle  : Claude Sonnet 4.6 + web_search + The Odds API            ║
+║          BOT TENNIS ACEANALYTICS — bot.py v6.0                      ║
+║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║                                                                      ║
 ║  Secrets GitHub requis :                                             ║
 ║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
-║    GITHUB_TOKEN       · GITHUB_REPO                                  ║
+║    GITHUB_TOKEN       · GITHUB_REPO · GEMINI_API_KEY                ║
 ║  Secret optionnel :                                                  ║
 ║    ODDS_API_KEY  (https://the-odds-api.com — gratuit 500 req/mois)  ║
+║                                                                      ║
+║  Flux :                                                              ║
+║    1. Gemini 2.5 Pro  → collecte données tennis via Google Search   ║
+║    2. Claude Sonnet   → analyse + calcul value + génère tickets      ║
+║    3. Telegram        → envoi + sauvegarde GitHub                    ║
 ║                                                                      ║
 ║  Usage CLI :                                                         ║
 ║    python bot.py              → analyse + envoi Telegram             ║
@@ -22,6 +27,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from logging.handlers import RotatingFileHandler
 import anthropic
+from google import genai
+from google.genai import types
 
 # =====================================================================
 # 1. CONFIGURATION & LOGGING
@@ -39,6 +46,7 @@ logging.basicConfig(
 )
 
 ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY")
+GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 GITHUB_TOKEN        = os.environ.get("GITHUB_TOKEN")
@@ -47,6 +55,7 @@ ODDS_API_KEY        = os.environ.get("ODDS_API_KEY")  # Optionnel
 
 MISSING = [k for k, v in {
     "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
+    "GEMINI_API_KEY":      GEMINI_API_KEY,
     "TELEGRAM_BOT_TOKEN":  TELEGRAM_BOT_TOKEN,
     "TELEGRAM_CHANNEL_ID": TELEGRAM_CHANNEL_ID,
     "GITHUB_TOKEN":        GITHUB_TOKEN,
@@ -57,8 +66,12 @@ if MISSING:
     logging.critical(f"Secrets manquants : {', '.join(MISSING)}")
     sys.exit(1)
 
-client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+# Clients IA
+claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
 CLAUDE_MODEL = "claude-sonnet-4-6"
+GEMINI_MODEL = "gemini-2.5-pro"
 
 GITHUB_API     = "https://api.github.com"
 GITHUB_HEADERS = {
@@ -73,11 +86,10 @@ TICKET_SEP    = "[SEPARATEUR]"
 MAX_TICKETS   = 3
 
 # =====================================================================
-# 2. COUCHE GITHUB — lecture/écriture atomique, sans Git subprocess
+# 2. COUCHE GITHUB — lecture/écriture atomique
 # =====================================================================
 
 def _gh_get(path: str) -> tuple:
-    """Retourne (contenu_dict_ou_list, sha) ou (None, None) si absent."""
     url = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     try:
         r = requests.get(url, headers=GITHUB_HEADERS, timeout=10)
@@ -92,11 +104,12 @@ def _gh_get(path: str) -> tuple:
 
 
 def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> bool:
-    """Crée ou met à jour un fichier JSON — gère le conflit 409 (SHA périmé)."""
     url     = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     payload = {
         "message": message,
-        "content": base64.b64encode(json.dumps(contenu, ensure_ascii=False, indent=2).encode()).decode(),
+        "content": base64.b64encode(
+            json.dumps(contenu, ensure_ascii=False, indent=2).encode()
+        ).decode(),
     }
     if sha:
         payload["sha"] = sha
@@ -104,7 +117,7 @@ def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> boo
         try:
             r = requests.put(url, headers=GITHUB_HEADERS, json=payload, timeout=15)
             if r.status_code == 409 and t < retries:
-                logging.warning(f"GitHub 409 sur '{path}' — re-fetch SHA.")
+                logging.warning(f"GitHub 409 '{path}' — re-fetch SHA.")
                 _, sha_frais = _gh_get(path)
                 if sha_frais:
                     payload["sha"] = sha_frais
@@ -203,11 +216,14 @@ def _tronquer(texte: str, limite: int = 3500) -> str:
     return texte[:coupe if coupe != -1 else limite] + "\n\n… [Analyse tronquée]"
 
 
-def envoyer_sur_telegram(message: str, retries: int = 3) -> bool:
-    s   = charger_stats()
-    sig = (f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
-           f"✅ V: {s['victoires']} | ❌ D: {s['defaites']}\n"
-           f"📈 <b>Win Rate : {calculer_winrate(s):.1f}%</b>")
+def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> bool:
+    if stats is None:
+        stats = charger_stats()
+    sig = (
+        f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
+        f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
+        f"📈 <b>Win Rate : {calculer_winrate(stats):.1f}%</b>"
+    )
     html = message + sig
     if len(html) > 4000:
         logging.warning("Message trop long — troncature propre.")
@@ -243,13 +259,11 @@ def envoyer_sur_telegram(message: str, retries: int = 3) -> bool:
         if t < retries:
             time.sleep(2 ** t)
     logging.error("❌ Telegram : échec définitif.")
-    # Alerte fallback en DM si disponible (canal différent)
     _alerter_telegram_erreur("❌ bot.py : échec envoi ticket après tous les retries.")
     return False
 
 
 def _alerter_telegram_erreur(msg: str):
-    """Tente d'envoyer une alerte d'erreur sur le même canal (best-effort)."""
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -282,7 +296,6 @@ def sauvegarder_pari_pour_suivi(pari_info: dict):
 
 def recuperer_cotes_tennis() -> str:
     if not ODDS_API_KEY:
-        logging.info("ODDS_API_KEY absente — mode dégradé (pas d'injection de cotes).")
         return ""
     try:
         r = requests.get(
@@ -295,7 +308,7 @@ def recuperer_cotes_tennis() -> str:
         matchs = r.json()
         if not matchs:
             return ""
-        lignes = ["📋 COTES TEMPS RÉEL (The Odds API / EU) :"]
+        lignes = ["COTES WINAMAX (source The Odds API) :"]
         for m in matchs[:20]:
             heure = m.get("commence_time", "")[:16].replace("T", " ")
             j1, j2 = m.get("home_team", "?"), m.get("away_team", "?")
@@ -310,55 +323,161 @@ def recuperer_cotes_tennis() -> str:
                     if is_winamax:
                         break
             if c1 and c2:
-                lignes.append(f"  • {heure} UTC | {j1} ({c1:.2f}) vs {j2} ({c2:.2f})")
-        logging.info(f"Cotes OK : {len(matchs)} matchs. Quota restant : {r.headers.get('x-requests-remaining', '?')}")
+                lignes.append(f"  {heure} UTC | {j1} ({c1:.2f}) vs {j2} ({c2:.2f})")
+        logging.info(f"Odds API OK : {len(matchs)} matchs.")
         return "\n".join(lignes)
     except Exception as e:
         logging.warning(f"Odds API indisponible : {e}")
         return ""
 
 # =====================================================================
-# 8. PROMPT SYSTÈME v4
+# 8. COLLECTE DES DONNÉES VIA GEMINI (rôle : chercheur)
 # =====================================================================
 
-def construire_prompt(date: str, heure: str, cotes: str = "") -> str:
-    session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
+def collecter_donnees_tennis(date: str, heure: str, cotes_injectees: str) -> str:
+    """
+    Gemini 2.5 Pro collecte toutes les données nécessaires via Google Search.
+    Retourne un bloc de données structurées à injecter dans le prompt Claude.
+    Claude ne fera AUCUNE recherche — il analyse uniquement ces données.
+    """
+
     bloc_cotes = (
-        f"COTES INJECTÉES (ne pas chercher ailleurs) :\n{cotes}\nMatch absent → web_search. Jamais inventer."
-        if cotes else
-        "Cotes via web_search (winamax.fr / sportytrader.com). Non trouvée → 'non vérifiée' + mise 0.5%."
+        f"Les cotes suivantes sont déjà disponibles, ne les cherche pas :\n{cotes_injectees}"
+        if cotes_injectees else
+        "Cherche les cotes sur winamax.fr ou sportytrader.com pour chaque match retenu."
     )
-    return f"""Expert paris tennis. {date} · {heure} France · Session {session}.
 
-SOURCES (max 4 appels web_search au total) :
-1. Calendrier → flashscore.fr ou atptour.com / wtatennis.com
-2. Cotes → {bloc_cotes}
-3-4. Stats/forme uniquement si nécessaire pour confirmer une value.
+    prompt_gemini = f"""
+Tu es un agent de collecte de données tennis. Date : {date}. Heure : {heure} France.
 
-FILTRES IMMÉDIATS (skip sans analyse) :
+MISSION : Collecter UNIQUEMENT les faits bruts. Tu ne fais AUCUNE analyse, AUCUN pronostic.
+Un autre système (Claude) se chargera de l'analyse. Ton seul rôle est de chercher et structurer.
+
+RECHERCHES À EFFECTUER (dans cet ordre) :
+1. Matchs ATP et WTA du {date} qui commencent APRÈS {heure} (heure France)
+   → Sources : flashscore.fr, atptour.com, wtatennis.com
+2. Pour chaque match trouvé : forme récente des 2 joueurs (5 derniers matchs)
+   → Sources : flashscore.fr, sofascore.com
+3. Forfaits, blessures ou absences annoncées dans les 48h
+   → Sources : actualités sportives, déclarations officielles
+4. {bloc_cotes}
+
+FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
+{{
+  "heure_collecte": "{heure}",
+  "matchs": [
+    {{
+      "heure_match": "HH:MM",
+      "joueur1": "Nom Prénom",
+      "joueur2": "Nom Prénom",
+      "tournoi": "Nom du tournoi",
+      "surface": "Terre / Dur / Gazon",
+      "indoor": true/false,
+      "cote_j1": 1.XX,
+      "cote_j2": 1.XX,
+      "source_cote": "Winamax / Sportytrader / non trouvée",
+      "forme_j1": ["V", "D", "V", "V", "D"],
+      "forme_j2": ["V", "V", "D", "V", "V"],
+      "details_forme_j1": "Résumé en 1 ligne : adversaires, surfaces, scores clés",
+      "details_forme_j2": "Résumé en 1 ligne : adversaires, surfaces, scores clés",
+      "h2h_recents": "Ex: J1 mène 3-1 sur les 2 dernières années, 2-0 sur terre",
+      "alertes_physiques": "Ex: J1 a reçu des soins médicaux hier | Aucune",
+      "absence_recente": "Ex: Retour après 6 semaines d'absence | Aucune",
+      "contexte": "Ex: Finale, points à défendre, Grand Chelem dans 5 jours"
+    }}
+  ],
+  "avertissements": "Données non trouvées ou incertaines à signaler à l'analyseur"
+}}
+
+RÈGLES STRICTES :
+- Si un champ est introuvable → mettre "non trouvé" (jamais inventer)
+- Si aucun match n'est prévu après {heure} → retourner {{"matchs": [], "avertissements": "Aucun match à venir"}}
+- JSON valide uniquement, sans backticks ni commentaires
+"""
+
+    try:
+        logging.info(f"Gemini collecte les données pour le {date} à {heure}…")
+        reponse = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt_gemini,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.1,
+            ),
+            # Timeout explicite : 90s max — évite le freeze si Gemini est lent
+            request_options={"timeout": 90},
+        )
+        texte = reponse.text.strip()
+
+        # Nettoyer les backticks éventuels que Gemini ajouterait malgré la consigne
+        texte = re.sub(r"^```json\s*", "", texte)
+        texte = re.sub(r"\s*```$", "", texte)
+
+        # Valider que c'est du JSON
+        donnees = json.loads(texte)
+        nb_matchs = len(donnees.get("matchs", []))
+        logging.info(f"Gemini OK — {nb_matchs} match(s) collecté(s).")
+        return json.dumps(donnees, ensure_ascii=False, indent=2)
+
+    except json.JSONDecodeError as e:
+        logging.error(f"Gemini a retourné un JSON invalide : {e}\nRéponse brute : {texte[:500]}")
+        # Fallback : on retourne quand même le texte brut pour que Claude ne soit pas bloqué
+        return f'{{"matchs": [], "avertissements": "Erreur collecte Gemini : JSON invalide. Données brutes : {texte[:1000]}"}}'
+    except Exception as e:
+        logging.error(f"Erreur Gemini collecte : {e}")
+        return '{"matchs": [], "avertissements": "Erreur collecte Gemini — analyse impossible."}'
+
+# =====================================================================
+# 9. PROMPT CLAUDE (rôle : analyste pur — zéro recherche web)
+# =====================================================================
+
+def construire_prompt_claude(date: str, heure: str, donnees_json: str) -> str:
+    session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
+
+    # Extraire les avertissements Gemini pour les mettre en évidence
+    try:
+        avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
+    except Exception:
+        avertissements = "Non disponibles"
+
+    return f"""Tu es un expert en paris tennis. Date : {date} · {heure} France · Session {session}.
+
+DONNÉES COLLECTÉES PAR GEMINI (source unique — ne pas chercher sur internet) :
+{donnees_json}
+
+⚠️ AVERTISSEMENTS GEMINI (données incertaines ou manquantes) : {avertissements}
+→ Si un match contient des avertissements sur des données manquantes (forme, H2H, cotes),
+  abandonne ce match plutôt que d'analyser avec des données incomplètes.
+→ Mieux vaut passer son chemin que parier sur des informations partielles.
+
+Tu disposes de TOUTES les données disponibles ci-dessus.
+Tu n'as PAS accès à internet. Analyse uniquement les données fournies.
+
+FILTRES IMMÉDIATS (élimine sans analyser) :
 • Match commencé/terminé avant {heure} → skip
-• Retour blessure >2 mois ou doute participation 48h → skip
-• Soins médicaux / match >3h hier / retour 3-8 sem → marchés de jeux interdits + mise 0.5%
-• Signaux physiques 48h (crampes, déclarations douleur) → Moneyline ÉLEVÉE uniquement sinon skip
+• absence_recente > 2 mois ou doute participation → skip
+• Données manquantes signalées par Gemini sur ce match → skip
+• alertes_physiques présentes → marchés de jeux interdits + mise 0.5%
+• Retour 3-8 semaines → marchés alternatifs uniquement + mise 0.5%
 
-ANALYSE — 2 ÉTAPES OBLIGATOIRES ET SÉQUENTIELLES :
-[1] FACTEURS BRUTS — lister POUR/CONTRE sans conclusion :
-  · Surface, forme 10 matchs, charge 72h, trajets/décalage horaire
-  · Points à défendre, Grand Chelem dans 7j → vigilance maximale
-  · H2H stylistique + bilan vs gauchers si applicable
-  · Hold% et % breaks : uniquement si trouvés, sinon omettre
-  · Hold% >83% les deux + historique Tie-breaks → Over/Under jeux
+ANALYSE EN 2 ÉTAPES SÉQUENTIELLES :
+[1] FACTEURS BRUTS — lister POUR/CONTRE chaque joueur (aucune conclusion) :
+  · Surface + forme des 5 derniers matchs + charge physique récente
+  · H2H + contexte (points à défendre, Grand Chelem dans 7j → vigilance max)
+  · Hold% / stats avancées : uniquement si présents dans les données, sinon omettre
+
 [2] DÉCISION — sur base exclusive de [1] :
   · Probabilité estimée en %
   · Cote Juste = 1/(prob/100)
   · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
-  · Cote réelle > Cote Juste+0.10 → VALUE ✅ ticket validé
-  · Cote réelle ≤ Cote Juste+0.10 → ❌ abandonné
-  · Zéro value → AUCUN_MATCH (rien d'autre)
+  · Cote réelle > Cote Juste+0.10 → VALUE ✅ → ticket validé
+  · Cote réelle ≤ Cote Juste+0.10 → ❌ → abandonné
+  · Si source_cote = "non trouvée" → indiquer "non vérifiée" + mise 0.5%
+  · Aucune value → AUCUN_MATCH (rien d'autre)
 
-MARCHÉS PAR NIVEAU :
-ÉLEVÉE  → Moneyline (ou Handicap Jeux / Victoire 2-0 si cote trop basse)
-MODÉRÉE → Over/Under jeux · Handicap +4.5 outsider · 2-0 Score Exact (Moneyline interdit)
+MARCHÉS :
+ÉLEVÉE  → Moneyline | si cote trop basse : Handicap Jeux ou Victoire 2-0
+MODÉRÉE → Over/Under jeux · Handicap +4.5 · 2-0 Score Exact (Moneyline interdit)
 Combiné + MODÉRÉE → INTERDIT
 
 MISES = MIN(Kelly quart, plafond) :
@@ -366,35 +485,20 @@ Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifi
 
 FORMAT (max {MAX_TICKETS} tickets, séparés par [SEPARATEUR] sur ligne isolée) :
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
-🏟 <b>MATCHS :</b> [joueurs]
-🏆 <b>COMPÉTITION :</b> [tournoi]
-⏰ <b>HEURE :</b> [heure]
-✅ <b>PRONO :</b> [pronostic]
-📈 <b>COTE :</b> [valeur ou "non vérifiée"]
-💰 <b>MISE :</b> [% Kelly plafonné]
-🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
-🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
-📌 <b>POURQUOI ?</b> [max 120 mots]
-⚠️ <b>DONNÉES MANQUANTES :</b> [stats absentes ou "Aucune"]
-
-{bloc_cotes}
-
-FORMAT (respecter exactement) :
-🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
-🏟 <b>MATCHS :</b> [A vs B]
+🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
-⏰ <b>HEURE :</b> [Heure]
-✅ <b>PRONO :</b> [Pronostic]
+⏰ <b>HEURE :</b> [Heure exacte]
+✅ <b>PRONO :</b> [Pronostic précis]
 📈 <b>COTE :</b> [Cote ou "non vérifiée"]
 💰 <b>MISE :</b> [% Kelly plafonné]
 🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
-📌 <b>POURQUOI ?</b> [Max 100 mots — facteurs clés uniquement]
-⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
+📌 <b>POURQUOI ?</b> [Max 120 mots — facteurs clés uniquement]
+⚠️ <b>DONNÉES MANQUANTES :</b> [Champs "non trouvé" utilisés, ou "Aucune"]
 """
 
 # =====================================================================
-# 9. ORCHESTRATION PRINCIPALE
+# 10. ORCHESTRATION PRINCIPALE
 # =====================================================================
 
 def run_bot_autonome():
@@ -408,23 +512,35 @@ def run_bot_autonome():
         logging.info("MODE DRY-RUN — aucun envoi réel.")
         logging.info("=" * 60)
 
-    cotes  = recuperer_cotes_tennis()
-    prompt = construire_prompt(date, heure, cotes)
+    # --- ÉTAPE 1 : Gemini collecte les données ---
+    cotes = recuperer_cotes_tennis()
+    donnees_json = collecter_donnees_tennis(date, heure, cotes)
+
+    # Vérification rapide : si Gemini n'a trouvé aucun match, on s'arrête
+    try:
+        donnees = json.loads(donnees_json)
+        if not donnees.get("matchs"):
+            logging.info(f"Aucun match trouvé par Gemini — session annulée. ({donnees.get('avertissements', '')})")
+            return
+    except Exception:
+        pass  # On laisse Claude gérer les données même partielles
+
+    # --- ÉTAPE 2 : Claude analyse les données ---
+    prompt = construire_prompt_claude(date, heure, donnees_json)
 
     try:
-        logging.info(f"Analyse Claude ({CLAUDE_MODEL}) — {date} {heure}")
+        logging.info(f"Claude ({CLAUDE_MODEL}) analyse les données — {date} {heure}")
 
-        reponse = client.messages.create(
+        reponse = claude_client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=4096,
             system=prompt,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            # Pas de web_search — Claude analyse uniquement les données de Gemini
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Recherche et analyse les matchs ATP/WTA du {date}. "
-                    f"Il est {heure} heure de France. "
-                    f"Propose les meilleurs paris (max {MAX_TICKETS}) pour cette session."
+                    f"Analyse les données collectées et propose les meilleurs paris "
+                    f"(max {MAX_TICKETS}) pour la session {date} {heure}."
                 ),
             }],
         )
@@ -434,17 +550,18 @@ def run_bot_autonome():
         ).strip()
 
         logging.info(
-            f"Réponse reçue ({len(texte)} chars) — "
+            f"Claude OK ({len(texte)} chars) — "
             f"{reponse.usage.input_tokens} tokens in / {reponse.usage.output_tokens} out"
         )
 
         if "AUCUN_MATCH" in texte:
-            logging.info("Aucun match disponible — session annulée proprement.")
+            logging.info("Claude : aucune value trouvée — session annulée proprement.")
             return
         if len(texte) <= 20:
-            logging.info("Réponse trop courte — aucun ticket émis.")
+            logging.info("Réponse Claude trop courte — aucun ticket émis.")
             return
 
+        # --- ÉTAPE 3 : Envoi Telegram + sauvegarde ---
         tickets_bruts = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20]
         tickets       = tickets_bruts[:MAX_TICKETS]
 
@@ -455,9 +572,10 @@ def run_bot_autonome():
             return
 
         historique, hist_sha = charger_historique()
-        hashes_connus  = set(historique)
+        hashes_connus   = set(historique)
         nouveaux_hashes = []
         paris_envoyes   = 0
+        stats_cached    = charger_stats()
 
         for i, ticket in enumerate(tickets, 1):
             h = _hash_ticket(ticket)
@@ -465,7 +583,7 @@ def run_bot_autonome():
                 logging.warning(f"Ticket {i} : doublon — ignoré.")
                 continue
             logging.info(f"Envoi ticket {i}/{len(tickets)}…")
-            if envoyer_sur_telegram(ticket):
+            if envoyer_sur_telegram(ticket, stats=stats_cached):
                 sauvegarder_pari_pour_suivi({"pari": ticket, "date": date})
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
@@ -482,13 +600,13 @@ def run_bot_autonome():
         )
 
     except Exception as e:
-        logging.error(f"Erreur critique : {e}", exc_info=True)
+        logging.error(f"Erreur critique Claude : {e}", exc_info=True)
         _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
         logging.info(f"Terminé en {time.time() - debut:.1f}s.")
 
 # =====================================================================
-# 10. POINT D'ENTRÉE CLI
+# 11. POINT D'ENTRÉE CLI
 # =====================================================================
 
 if __name__ == "__main__":
