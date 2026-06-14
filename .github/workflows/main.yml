@@ -2,11 +2,9 @@ name: AceAnalytics — Bot Tennis
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 heure France (session matin)
-    - cron: '0 6 * * *'
-    # 12:00 UTC = 14:00 heure France (session après-midi)
-    - cron: '0 12 * * *'
-  workflow_dispatch:   # Déclenchement manuel depuis l'onglet Actions
+    - cron: '0 6 * * *'    # 08:00 heure France (session matin)
+    - cron: '0 12 * * *'   # 14:00 heure France (session après-midi)
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,15 +12,15 @@ permissions:
 jobs:
   automation-tennis:
     runs-on: ubuntu-latest
-    timeout-minutes: 15   # Sécurité : tue le job si Gemini/Claude freeze
+    timeout-minutes: 15
 
     env:
       ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
       GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPO:         ${{ github.repository }}
-      # Optionnel — laisser vide si pas de compte The Odds API
       ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
 
     steps:
@@ -45,5 +43,5 @@ jobs:
       - name: "Étape 1 — Vérification des résultats précédents"
         run: python verification_resultats.py
 
-      - name: "Étape 2 — Génération du nouveau pronostic"
+      - name: "Étape 2 — Collecte Gemini + Analyse Claude + Envoi Telegram"
         run: python bot.py
