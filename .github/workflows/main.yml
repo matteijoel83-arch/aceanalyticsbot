@@ -1,12 +1,12 @@
-name: Bot Pronostics & Vérifications Tennis
+name: AceAnalytics — Bot Tennis
 
 on:
   schedule:
-    # 06:00 UTC = 08:00 Heure Française (Ajusté selon l'heure d'été/hiver)
+    # 06:00 UTC = 08:00 heure France (session matin)
     - cron: '0 6 * * *'
-    # 12:00 UTC = 14:00 Heure Française (Idéal pour ton basculement de session)
+    # 12:00 UTC = 14:00 heure France (session après-midi)
     - cron: '0 12 * * *'
-  workflow_dispatch:
+  workflow_dispatch:   # Déclenchement manuel depuis l'onglet Actions
 
 permissions:
   contents: write
@@ -14,33 +14,36 @@ permissions:
 jobs:
   automation-tennis:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15   # Sécurité : tue le job si Gemini/Claude freeze
+
     env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPO:         ${{ github.repository }}
+      # Optionnel — laisser vide si pas de compte The Odds API
+      ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
 
     steps:
       - name: "Checkout du dépôt"
         uses: actions/checkout@v4
         with:
-          # FIX CRUCIAL : Force Git à se positionner sur la vraie branche active
           ref: ${{ github.ref_name }}
 
-      - name: "Configuration de Python"
+      - name: "Configuration de Python 3.12"
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
 
       - name: "Installation des dépendances"
-        # OPTIMISATION : On utilise ton fichier requirements.txt présent dans ton dépôt
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: "Étape 1 : Vérification du résultat précédent"
+      - name: "Étape 1 — Vérification des résultats précédents"
         run: python verification_resultats.py
 
-      - name: "Étape 2 : Génération du nouveau pronostic"
+      - name: "Étape 2 — Génération du nouveau pronostic"
         run: python bot.py
