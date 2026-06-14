@@ -1,20 +1,20 @@
 """
-â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘          BOT TENNIS ACEANALYTICS â€” bot.py v5.0                      â•‘
-â•‘  ModÃ¨le  : Claude Sonnet 4.6 + web_search + The Odds API            â•‘
-â•‘                                                                      â•‘
-â•‘  Secrets GitHub requis :                                             â•‘
-â•‘    ANTHROPIC_API_KEY  Â· TELEGRAM_BOT_TOKEN Â· TELEGRAM_CHANNEL_ID    â•‘
-â•‘    GITHUB_TOKEN       Â· GITHUB_REPO                                  â•‘
-â•‘  Secret optionnel :                                                  â•‘
-â•‘    ODDS_API_KEY  (https://the-odds-api.com â€” gratuit 500 req/mois)  â•‘
-â•‘                                                                      â•‘
-â•‘  Usage CLI :                                                         â•‘
-â•‘    python bot.py              â†’ analyse + envoi Telegram             â•‘
-â•‘    python bot.py --dry-run    â†’ simulation, aucun envoi rÃ©el         â•‘
-â•‘    python bot.py resultat v   â†’ enregistrer une victoire             â•‘
-â•‘    python bot.py resultat d   â†’ enregistrer une dÃ©faite              â•‘
-â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+╔══════════════════════════════════════════════════════════════════════╗
+║          BOT TENNIS ACEANALYTICS — bot.py v5.0                      ║
+║  Modèle  : Claude Sonnet 4.6 + web_search + The Odds API            ║
+║                                                                      ║
+║  Secrets GitHub requis :                                             ║
+║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
+║    GITHUB_TOKEN       · GITHUB_REPO                                  ║
+║  Secret optionnel :                                                  ║
+║    ODDS_API_KEY  (https://the-odds-api.com — gratuit 500 req/mois)  ║
+║                                                                      ║
+║  Usage CLI :                                                         ║
+║    python bot.py              → analyse + envoi Telegram             ║
+║    python bot.py --dry-run    → simulation, aucun envoi réel         ║
+║    python bot.py resultat v   → enregistrer une victoire             ║
+║    python bot.py resultat d   → enregistrer une défaite              ║
+╚══════════════════════════════════════════════════════════════════════╝
 """
 
 import os, sys, json, hashlib, logging, re, time, base64, requests
@@ -73,7 +73,7 @@ TICKET_SEP    = "[SEPARATEUR]"
 MAX_TICKETS   = 3
 
 # =====================================================================
-# 2. COUCHE GITHUB â€” lecture/Ã©criture atomique, sans Git subprocess
+# 2. COUCHE GITHUB — lecture/écriture atomique, sans Git subprocess
 # =====================================================================
 
 def _gh_get(path: str) -> tuple:
@@ -92,7 +92,7 @@ def _gh_get(path: str) -> tuple:
 
 
 def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> bool:
-    """CrÃ©e ou met Ã  jour un fichier JSON â€” gÃ¨re le conflit 409 (SHA pÃ©rimÃ©)."""
+    """Crée ou met à jour un fichier JSON — gère le conflit 409 (SHA périmé)."""
     url     = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     payload = {
         "message": message,
@@ -104,14 +104,14 @@ def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> boo
         try:
             r = requests.put(url, headers=GITHUB_HEADERS, json=payload, timeout=15)
             if r.status_code == 409 and t < retries:
-                logging.warning(f"GitHub 409 sur '{path}' â€” re-fetch SHA.")
+                logging.warning(f"GitHub 409 sur '{path}' — re-fetch SHA.")
                 _, sha_frais = _gh_get(path)
                 if sha_frais:
                     payload["sha"] = sha_frais
                 time.sleep(1)
                 continue
             r.raise_for_status()
-            logging.info(f"GitHub '{path}' OK â€” {message}")
+            logging.info(f"GitHub '{path}' OK — {message}")
             return True
         except Exception as e:
             logging.error(f"GitHub PUT '{path}' tentative {t} : {e}")
@@ -126,7 +126,7 @@ def _gh_delete(path: str, message: str, sha: str) -> bool:
         r = requests.delete(url, headers=GITHUB_HEADERS,
                             json={"message": message, "sha": sha}, timeout=10)
         r.raise_for_status()
-        logging.info(f"GitHub '{path}' supprimÃ©.")
+        logging.info(f"GitHub '{path}' supprimé.")
         return True
     except Exception as e:
         logging.error(f"GitHub DELETE '{path}' : {e}")
@@ -161,21 +161,21 @@ def enregistrer_resultat(victoire: bool, pari_termine: str = None):
     s["victoires" if victoire else "defaites"] += 1
     s = _migrer_stats(s)
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Stats simulÃ©es : {s}")
+        logging.info(f"[DRY-RUN] Stats simulées : {s}")
     else:
-        _gh_put("stats.json", s, "ðŸ”„ Maj stats", sha=sha)
+        _gh_put("stats.json", s, "🔄 Maj stats", sha=sha)
     if pari_termine and not DRY_RUN:
         paris, psha = _gh_get("pari_en_cours.json")
         if isinstance(paris, list):
             restants = [p for p in paris if p.get("pari") != pari_termine]
             if restants:
-                _gh_put("pari_en_cours.json", restants, "ðŸ§¹ Nettoyage paris", sha=psha)
+                _gh_put("pari_en_cours.json", restants, "🧹 Nettoyage paris", sha=psha)
             elif psha:
-                _gh_delete("pari_en_cours.json", "ðŸ—‘ï¸ File vide", sha=psha)
-    logging.info(f"{'âœ… VICTOIRE' if victoire else 'âŒ DÃ‰FAITE'} â€” {s['victoires']}V / {s['defaites']}D")
+                _gh_delete("pari_en_cours.json", "🗑️ File vide", sha=psha)
+    logging.info(f"{'✅ VICTOIRE' if victoire else '❌ DÉFAITE'} — {s['victoires']}V / {s['defaites']}D")
 
 # =====================================================================
-# 4. DÃ‰DUPLICATION PAR HASH SHA-256
+# 4. DÉDUPLICATION PAR HASH SHA-256
 # =====================================================================
 
 def _hash_ticket(ticket: str) -> str:
@@ -190,33 +190,33 @@ def charger_historique() -> tuple:
 
 
 def sauvegarder_historique(hashes: list, sha):
-    _gh_put("historique.json", hashes[-20:], "ðŸ“š Maj historique", sha=sha)
+    _gh_put("historique.json", hashes[-20:], "📚 Maj historique", sha=sha)
 
 # =====================================================================
-# 5. TELEGRAM â€” retry + backoff exponentiel
+# 5. TELEGRAM — retry + backoff exponentiel
 # =====================================================================
 
 def _tronquer(texte: str, limite: int = 3500) -> str:
     if len(texte) <= limite:
         return texte
     coupe = texte.rfind("\n", 0, limite)
-    return texte[:coupe if coupe != -1 else limite] + "\n\nâ€¦ [Analyse tronquÃ©e]"
+    return texte[:coupe if coupe != -1 else limite] + "\n\n… [Analyse tronquée]"
 
 
 def envoyer_sur_telegram(message: str, retries: int = 3) -> bool:
     s   = charger_stats()
-    sig = (f"\n\nðŸ“Š <b>BILAN ACEANALYTICS</b>\n"
-           f"âœ… V: {s['victoires']} | âŒ D: {s['defaites']}\n"
-           f"ðŸ“ˆ <b>Win Rate : {calculer_winrate(s):.1f}%</b>")
+    sig = (f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
+           f"✅ V: {s['victoires']} | ❌ D: {s['defaites']}\n"
+           f"📈 <b>Win Rate : {calculer_winrate(s):.1f}%</b>")
     html = message + sig
     if len(html) > 4000:
-        logging.warning("Message trop long â€” troncature propre.")
+        logging.warning("Message trop long — troncature propre.")
         html = _tronquer(re.sub(r"<[^>]+>", "", message), 3500) + sig
         parse_mode = None
     else:
         parse_mode = "HTML"
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Telegram simulÃ© ({len(html)} chars)")
+        logging.info(f"[DRY-RUN] Telegram simulé ({len(html)} chars)")
         return True
     url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": html}
@@ -227,33 +227,33 @@ def envoyer_sur_telegram(message: str, retries: int = 3) -> bool:
             r = requests.post(url, json=payload, timeout=10)
             if r.status_code == 429:
                 wait = r.json().get("parameters", {}).get("retry_after", 5)
-                logging.warning(f"Rate-limit Telegram â€” attente {wait}s.")
+                logging.warning(f"Rate-limit Telegram — attente {wait}s.")
                 time.sleep(wait)
                 continue
             r.raise_for_status()
-            logging.info("âœ… Telegram envoyÃ©.")
+            logging.info("✅ Telegram envoyé.")
             return True
         except requests.exceptions.Timeout:
             logging.warning(f"Telegram timeout tentative {t}.")
         except requests.exceptions.HTTPError as e:
-            logging.error(f"Telegram HTTP {e} â€” {r.text}")
+            logging.error(f"Telegram HTTP {e} — {r.text}")
             break
         except Exception as e:
             logging.error(f"Telegram erreur : {e}")
         if t < retries:
             time.sleep(2 ** t)
-    logging.error("âŒ Telegram : Ã©chec dÃ©finitif.")
-    # Alerte fallback en DM si disponible (canal diffÃ©rent)
-    _alerter_telegram_erreur("âŒ bot.py : Ã©chec envoi ticket aprÃ¨s tous les retries.")
+    logging.error("❌ Telegram : échec définitif.")
+    # Alerte fallback en DM si disponible (canal différent)
+    _alerter_telegram_erreur("❌ bot.py : échec envoi ticket après tous les retries.")
     return False
 
 
 def _alerter_telegram_erreur(msg: str):
-    """Tente d'envoyer une alerte d'erreur sur le mÃªme canal (best-effort)."""
+    """Tente d'envoyer une alerte d'erreur sur le même canal (best-effort)."""
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": f"âš ï¸ ERREUR BOT\n{msg}"},
+            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": f"⚠️ ERREUR BOT\n{msg}"},
             timeout=5,
         )
     except Exception:
@@ -268,21 +268,21 @@ def sauvegarder_pari_pour_suivi(pari_info: dict):
         logging.error(f"Structure pari_info invalide : {pari_info}")
         return
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Pari non sauvegardÃ© : {pari_info['date']}")
+        logging.info(f"[DRY-RUN] Pari non sauvegardé : {pari_info['date']}")
         return
     paris, sha = _gh_get("pari_en_cours.json")
     if not isinstance(paris, list):
         paris = []
     paris.append(pari_info)
-    _gh_put("pari_en_cours.json", paris, "ðŸ“Œ Ajout pari", sha=sha)
+    _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
 # =====================================================================
-# 7. COTES TEMPS RÃ‰EL (The Odds API â€” optionnel)
+# 7. COTES TEMPS RÉEL (The Odds API — optionnel)
 # =====================================================================
 
 def recuperer_cotes_tennis() -> str:
     if not ODDS_API_KEY:
-        logging.info("ODDS_API_KEY absente â€” mode dÃ©gradÃ© (pas d'injection de cotes).")
+        logging.info("ODDS_API_KEY absente — mode dégradé (pas d'injection de cotes).")
         return ""
     try:
         r = requests.get(
@@ -295,7 +295,7 @@ def recuperer_cotes_tennis() -> str:
         matchs = r.json()
         if not matchs:
             return ""
-        lignes = ["ðŸ“‹ COTES TEMPS RÃ‰EL (The Odds API / EU) :"]
+        lignes = ["📋 COTES TEMPS RÉEL (The Odds API / EU) :"]
         for m in matchs[:20]:
             heure = m.get("commence_time", "")[:16].replace("T", " ")
             j1, j2 = m.get("home_team", "?"), m.get("away_team", "?")
@@ -310,7 +310,7 @@ def recuperer_cotes_tennis() -> str:
                     if is_winamax:
                         break
             if c1 and c2:
-                lignes.append(f"  â€¢ {heure} UTC | {j1} ({c1:.2f}) vs {j2} ({c2:.2f})")
+                lignes.append(f"  • {heure} UTC | {j1} ({c1:.2f}) vs {j2} ({c2:.2f})")
         logging.info(f"Cotes OK : {len(matchs)} matchs. Quota restant : {r.headers.get('x-requests-remaining', '?')}")
         return "\n".join(lignes)
     except Exception as e:
@@ -318,122 +318,122 @@ def recuperer_cotes_tennis() -> str:
         return ""
 
 # =====================================================================
-# 8. PROMPT SYSTÃˆME v4
+# 8. PROMPT SYSTÈME v4
 # =====================================================================
 
 def construire_prompt(date: str, heure: str, cotes: str = "") -> str:
     bloc_cotes = (
-        f"COTES CERTIFIÃ‰ES INJECTÃ‰ES (NE PAS rechercher ailleurs) :\n{cotes}\n"
-        f"â†’ RÃ©fÃ©rence officielle. Si match absent de la liste, chercher via web_search.\n"
-        f"â†’ Ne jamais inventer une cote."
+        f"COTES CERTIFIÉES INJECTÉES (NE PAS rechercher ailleurs) :\n{cotes}\n"
+        f"→ Référence officielle. Si match absent de la liste, chercher via web_search.\n"
+        f"→ Ne jamais inventer une cote."
         if cotes else
-        "AVERTISSEMENT : Aucune cote certifiÃ©e disponible.\n"
-        "â†’ Recherche via web_search (Winamax, Sportytrader).\n"
-        "â†’ Cote non trouvÃ©e = indiquer 'non vÃ©rifiÃ©e' + mise plafonnÃ©e 0.5%.\n"
-        "â†’ Ne jamais inventer une cote."
+        "AVERTISSEMENT : Aucune cote certifiée disponible.\n"
+        "→ Recherche via web_search (Winamax, Sportytrader).\n"
+        "→ Cote non trouvée = indiquer 'non vérifiée' + mise plafonnée 0.5%.\n"
+        "→ Ne jamais inventer une cote."
     )
     return f"""
 Tu es l'assistant personnel d'un parieur expert en tennis.
 Analyse les matchs ATP/WTA du {date}. Il est {heure} heure de France.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SESSIONS
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-â€¢ AVANT 14h00 â†’ SESSION MATIN (mi-journÃ©e / dÃ©but aprÃ¨s-midi)
-â€¢ APRÃˆS 14h00 â†’ SESSION APRÃˆS-MIDI (fin aprÃ¨s-midi / soirÃ©e / nuit)
-â€¢ Maximum {MAX_TICKETS} tickets. ZÃ©ro ticket si aucune value rÃ©elle.
-â€¢ Matchs dÃ©jÃ  commencÃ©s ou terminÃ©s Ã  {heure} â†’ EXCLUS immÃ©diatement.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• AVANT 14h00 → SESSION MATIN (mi-journée / début après-midi)
+• APRÈS 14h00 → SESSION APRÈS-MIDI (fin après-midi / soirée / nuit)
+• Maximum {MAX_TICKETS} tickets. Zéro ticket si aucune value réelle.
+• Matchs déjà commencés ou terminés à {heure} → EXCLUS immédiatement.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-SÃ‰PARATION MULTI-TICKETS
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-â€¢ DÃ©limiteur OBLIGATOIRE entre chaque ticket (ligne isolÃ©e) : [SEPARATEUR]
-â€¢ N'utilise JAMAIS ce dÃ©limiteur ailleurs.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SÉPARATION MULTI-TICKETS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Délimiteur OBLIGATOIRE entre chaque ticket (ligne isolée) : [SEPARATEUR]
+• N'utilise JAMAIS ce délimiteur ailleurs.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-SOURCES (classÃ©es par fiabilitÃ©)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-TIER 1 â€” Calendriers : atptour.com | wtatennis.com | flashscore.fr
-TIER 2 â€” Stats : sofascore.com/fr | flashscore.fr
-  âš  Hold% et % breaks non disponibles = OMIS, jamais inventÃ©s.
-TIER 3 â€” Cotes :
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SOURCES (classées par fiabilité)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TIER 1 — Calendriers : atptour.com | wtatennis.com | flashscore.fr
+TIER 2 — Stats : sofascore.com/fr | flashscore.fr
+  ⚠ Hold% et % breaks non disponibles = OMIS, jamais inventés.
+TIER 3 — Cotes :
 {bloc_cotes}
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ANALYSE EN 2 Ã‰TAPES (anti-biais de confirmation)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-Ã‰TAPE 1 â€” ANALYSE BRUTE (aucun pronostic Ã  ce stade) :
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANALYSE EN 2 ÉTAPES (anti-biais de confirmation)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 1 — ANALYSE BRUTE (aucun pronostic à ce stade) :
   Lister facteurs POUR / CONTRE sur 5 axes :
-  1. Surface & conditions (Terre/Dur/Gazon, CPI si trouvÃ©, indoor/outdoor, altitude)
-  2. Forme & charge physique (10 derniers matchs, heures de jeu 72h, trajets, dÃ©calage)
-  3. Contexte & psychologie (points Ã  dÃ©fendre, Grand Chelem dans 7j â†’ vigilance max)
-  4. Stats avancÃ©es : Hold% et % breaks UNIQUEMENT si trouvÃ©s. Hold% >83% des deux cÃ´tÃ©s
-     + historique Tie-breaks â†’ marchÃ©s de jeux (Over/Under).
-  5. H2H & tactique (style de jeu, gauchers â†’ bilan adversaire face aux gauchers)
+  1. Surface & conditions (Terre/Dur/Gazon, CPI si trouvé, indoor/outdoor, altitude)
+  2. Forme & charge physique (10 derniers matchs, heures de jeu 72h, trajets, décalage)
+  3. Contexte & psychologie (points à défendre, Grand Chelem dans 7j → vigilance max)
+  4. Stats avancées : Hold% et % breaks UNIQUEMENT si trouvés. Hold% >83% des deux côtés
+     + historique Tie-breaks → marchés de jeux (Over/Under).
+  5. H2H & tactique (style de jeu, gauchers → bilan adversaire face aux gauchers)
 
-Ã‰TAPE 2 â€” PROBABILITÃ‰ & DÃ‰CISION (aprÃ¨s liste complÃ¨te des facteurs) :
-  Sur base EXCLUSIVE de l'Ã‰tape 1 :
-  â†’ ProbabilitÃ© en % â†’ Calcul Value â†’ Conclusion.
+ÉTAPE 2 — PROBABILITÉ & DÉCISION (après liste complète des facteurs) :
+  Sur base EXCLUSIVE de l'Étape 1 :
+  → Probabilité en % → Calcul Value → Conclusion.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PROTOCOLE VALUE (obligatoire pour chaque match)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-1. ProbabilitÃ© estimÃ©e â†’ ex: 67%
-2. Cote Juste = 1 / (prob/100) â†’ ex: 1.49
-3. Kelly quart = ((prob Ã— cote - 1) / (cote - 1)) Ã— 0.25
-   â†’ Arrondi Ã  0.5%, plafonnÃ© selon matrice.
-4. Cote rÃ©elle > Cote Juste + 0.10 â†’ VALUE âœ… â†’ ticket validÃ©
-   Cote rÃ©elle â‰¤ Cote Juste + 0.10 â†’ PAS de value âŒ â†’ abandonnÃ©
-â€¢ Aucun match ne passe â†’ rÃ©pondre STRICTEMENT : AUCUN_MATCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Probabilité estimée → ex: 67%
+2. Cote Juste = 1 / (prob/100) → ex: 1.49
+3. Kelly quart = ((prob × cote - 1) / (cote - 1)) × 0.25
+   → Arrondi à 0.5%, plafonné selon matrice.
+4. Cote réelle > Cote Juste + 0.10 → VALUE ✅ → ticket validé
+   Cote réelle ≤ Cote Juste + 0.10 → PAS de value ❌ → abandonné
+• Aucun match ne passe → répondre STRICTEMENT : AUCUN_MATCH
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ORIENTATION DES MARCHÃ‰S
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-â€¢ Ã‰LEVÃ‰E  â†’ Moneyline (si value nette) sinon Handicap Jeux ou Victoire 2-0.
-â€¢ MODÃ‰RÃ‰E â†’ Moneyline INTERDIT. MarchÃ©s alternatifs :
-  - Match serrÃ© (Holds Ã©levÃ©s)         â†’ +21.5/22.5 jeux | WTA : +2.5 sets
-  - Match Ã  sens unique                â†’ -20.5/19.5 jeux | 2-0 Score Exact
-  - Favori prenable / Outsider fragile â†’ Handicap Jeux +4.5 outsider
-â€¢ Signaux physiques rÃ©cents (soins, crampes, dÃ©clarations 48h) â†’ INTERDIT marchÃ©s de jeux.
-  Moneyline uniquement si Ã‰LEVÃ‰E, sinon passe.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ORIENTATION DES MARCHÉS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• ÉLEVÉE  → Moneyline (si value nette) sinon Handicap Jeux ou Victoire 2-0.
+• MODÉRÉE → Moneyline INTERDIT. Marchés alternatifs :
+  - Match serré (Holds élevés)         → +21.5/22.5 jeux | WTA : +2.5 sets
+  - Match à sens unique                → -20.5/19.5 jeux | 2-0 Score Exact
+  - Favori prenable / Outsider fragile → Handicap Jeux +4.5 outsider
+• Signaux physiques récents (soins, crampes, déclarations 48h) → INTERDIT marchés de jeux.
+  Moneyline uniquement si ÉLEVÉE, sinon passe.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MATRICE BANKROLL
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Mise = MIN(Kelly quart, plafond) :
-â€¢ Simple   + Ã‰LEVÃ‰E  â†’ 2%   | Simple   + MODÃ‰RÃ‰E â†’ 1%
-â€¢ CombinÃ©  + Ã‰LEVÃ‰E  â†’ 1%   | CombinÃ©  + MODÃ‰RÃ‰E â†’ INTERDIT
-â€¢ Cote non vÃ©rifiÃ©e           â†’ 0.5% sans exception
+• Simple   + ÉLEVÉE  → 2%   | Simple   + MODÉRÉE → 1%
+• Combiné  + ÉLEVÉE  → 1%   | Combiné  + MODÉRÉE → INTERDIT
+• Cote non vérifiée           → 0.5% sans exception
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FILTRE BLESSURE (2 niveaux)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-NIVEAU 1 â€” Ã‰limination totale :
-  â€¢ Retour blessure > 2 mois | Doute public participation 48h
-NIVEAU 2 â€” Vigilance renforcÃ©e (marchÃ©s alternatifs + mise 0.5%) :
-  â€¢ Soins mÃ©dicaux dernier match | Match >3h dans les 24h | Retour 3-8 semaines
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NIVEAU 1 — Élimination totale :
+  • Retour blessure > 2 mois | Doute public participation 48h
+NIVEAU 2 — Vigilance renforcée (marchés alternatifs + mise 0.5%) :
+  • Soins médicaux dernier match | Match >3h dans les 24h | Retour 3-8 semaines
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ANTI-HALLUCINATION
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-â€¢ Aucun match trouvÃ© â†’ AUCUN_MATCH (strict, aucun autre texte)
-â€¢ Aucune rencontre fictive ni extrapolation depuis connaissances passÃ©es
-â€¢ Stat non trouvÃ©e â†’ omise, jamais estimÃ©e
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Aucun match trouvé → AUCUN_MATCH (strict, aucun autre texte)
+• Aucune rencontre fictive ni extrapolation depuis connaissances passées
+• Stat non trouvée → omise, jamais estimée
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMAT TICKET (respecter exactement)
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸ”´ <b>PRONOSTIC [SIMPLE OU COMBINÃ‰]</b> ðŸ”´
-ðŸŸ <b>MATCHS :</b> [Joueur A vs Joueur B]
-ðŸ† <b>COMPÃ‰TITION :</b> [Tournoi]
-â° <b>HEURE :</b> [Heure exacte]
-âœ… <b>PRONO :</b> [Pronostic prÃ©cis]
-ðŸ“ˆ <b>COTE :</b> [Cote rÃ©elle â€” "non vÃ©rifiÃ©e" si incertaine]
-ðŸ’° <b>MISE :</b> [% Kelly quart plafonnÃ©]
-ðŸ›¡ <b>CONFIANCE :</b> [Ã‰LEVÃ‰E / MODÃ‰RÃ‰E]
-ðŸ§® <b>VALUE :</b> [Proba X% â†’ Cote juste Y.YY â†’ Cote rÃ©elle Z.ZZ â†’ Kelly W%]
-ðŸ“Œ <b>POURQUOI ?</b> [Max 150 mots â€” facteurs clÃ©s, pas de transition]
-âš ï¸ <b>DONNÃ‰ES MANQUANTES :</b> [Stats non trouvÃ©es, ou "Aucune"]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 <b>PRONOSTIC [SIMPLE OU COMBINÉ]</b> 🔴
+🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
+🏆 <b>COMPÉTITION :</b> [Tournoi]
+⏰ <b>HEURE :</b> [Heure exacte]
+✅ <b>PRONO :</b> [Pronostic précis]
+📈 <b>COTE :</b> [Cote réelle — "non vérifiée" si incertaine]
+💰 <b>MISE :</b> [% Kelly quart plafonné]
+🛡 <b>CONFIANCE :</b> [ÉLEVÉE / MODÉRÉE]
+🧮 <b>VALUE :</b> [Proba X% → Cote juste Y.YY → Cote réelle Z.ZZ → Kelly W%]
+📌 <b>POURQUOI ?</b> [Max 150 mots — facteurs clés, pas de transition]
+⚠️ <b>DONNÉES MANQUANTES :</b> [Stats non trouvées, ou "Aucune"]
 """
 
 # =====================================================================
@@ -448,14 +448,14 @@ def run_bot_autonome():
 
     if DRY_RUN:
         logging.info("=" * 60)
-        logging.info("MODE DRY-RUN â€” aucun envoi rÃ©el.")
+        logging.info("MODE DRY-RUN — aucun envoi réel.")
         logging.info("=" * 60)
 
     cotes  = recuperer_cotes_tennis()
     prompt = construire_prompt(date, heure, cotes)
 
     try:
-        logging.info(f"Analyse Claude ({CLAUDE_MODEL}) â€” {date} {heure}")
+        logging.info(f"Analyse Claude ({CLAUDE_MODEL}) — {date} {heure}")
 
         reponse = client.messages.create(
             model=CLAUDE_MODEL,
@@ -477,22 +477,22 @@ def run_bot_autonome():
         ).strip()
 
         logging.info(
-            f"RÃ©ponse reÃ§ue ({len(texte)} chars) â€” "
+            f"Réponse reçue ({len(texte)} chars) — "
             f"{reponse.usage.input_tokens} tokens in / {reponse.usage.output_tokens} out"
         )
 
         if "AUCUN_MATCH" in texte:
-            logging.info("Aucun match disponible â€” session annulÃ©e proprement.")
+            logging.info("Aucun match disponible — session annulée proprement.")
             return
         if len(texte) <= 20:
-            logging.info("RÃ©ponse trop courte â€” aucun ticket Ã©mis.")
+            logging.info("Réponse trop courte — aucun ticket émis.")
             return
 
         tickets_bruts = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20]
         tickets       = tickets_bruts[:MAX_TICKETS]
 
         if len(tickets_bruts) > MAX_TICKETS:
-            logging.warning(f"Claude a gÃ©nÃ©rÃ© {len(tickets_bruts)} tickets â€” tronquÃ© Ã  {MAX_TICKETS}.")
+            logging.warning(f"Claude a généré {len(tickets_bruts)} tickets — tronqué à {MAX_TICKETS}.")
         if not tickets:
             logging.warning("Aucun ticket valide extrait.")
             return
@@ -505,9 +505,9 @@ def run_bot_autonome():
         for i, ticket in enumerate(tickets, 1):
             h = _hash_ticket(ticket)
             if h in hashes_connus:
-                logging.warning(f"Ticket {i} : doublon â€” ignorÃ©.")
+                logging.warning(f"Ticket {i} : doublon — ignoré.")
                 continue
-            logging.info(f"Envoi ticket {i}/{len(tickets)}â€¦")
+            logging.info(f"Envoi ticket {i}/{len(tickets)}…")
             if envoyer_sur_telegram(ticket):
                 sauvegarder_pari_pour_suivi({"pari": ticket, "date": date})
                 hashes_connus.add(h)
@@ -520,18 +520,18 @@ def run_bot_autonome():
             sauvegarder_historique(list(hashes_connus), hist_sha)
 
         logging.info(
-            f"âœ… {paris_envoyes} ticket(s) envoyÃ©(s)."
-            if paris_envoyes else "Aucun ticket envoyÃ© (doublons ou erreurs)."
+            f"✅ {paris_envoyes} ticket(s) envoyé(s)."
+            if paris_envoyes else "Aucun ticket envoyé (doublons ou erreurs)."
         )
 
     except Exception as e:
         logging.error(f"Erreur critique : {e}", exc_info=True)
-        _alerter_telegram_erreur(f"bot.py a plantÃ© : {e}")
+        _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
-        logging.info(f"TerminÃ© en {time.time() - debut:.1f}s.")
+        logging.info(f"Terminé en {time.time() - debut:.1f}s.")
 
 # =====================================================================
-# 10. POINT D'ENTRÃ‰E CLI
+# 10. POINT D'ENTRÉE CLI
 # =====================================================================
 
 if __name__ == "__main__":
@@ -547,11 +547,11 @@ if __name__ == "__main__":
         elif flag in ("d", "defaite", "lose", "0"):
             enregistrer_resultat(victoire=False)
         else:
-            print(f"âŒ Argument inconnu : '{flag}'. Utilise 'v' ou 'd'.")
+            print(f"❌ Argument inconnu : '{flag}'. Utilise 'v' ou 'd'.")
             sys.exit(1)
     elif args_filtres[0] in ("--help", "-h", "help"):
         print(__doc__)
     else:
-        print(f"âŒ Commande inconnue : {' '.join(args_filtres)}")
+        print(f"❌ Commande inconnue : {' '.join(args_filtres)}")
         print(__doc__)
         sys.exit(1)
