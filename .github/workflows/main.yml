@@ -2,8 +2,8 @@ name: AceAnalytics — Bot Tennis
 
 on:
   schedule:
-    - cron: '0 6 * * *'    # 08:00 heure France (session matin)
-    - cron: '0 12 * * *'   # 14:00 heure France (session après-midi)
+    - cron: '30 7 * * *'   # 09h30 heure France (UTC+2 été / UTC+1 hiver)
+    - cron: '30 12 * * *'  # 14h30 heure France (UTC+2 été / UTC+1 hiver)
   workflow_dispatch:
 
 permissions:
