@@ -4,7 +4,7 @@ Vérifie automatiquement les résultats des paris en cours via Claude + web_sear
 Notifie Telegram du résultat (gagné/perdu) et met à jour stats + file d'attente via API GitHub.
 """
 
-import os, sys, json, logging, base64, time, requests
+import os, sys, json, logging, base64, time, re, requests
 import anthropic
 from logging.handlers import RotatingFileHandler
 
