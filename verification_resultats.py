@@ -146,8 +146,11 @@ def notifier_resultat(statut: str, pari_texte: str, stats: dict):
         header = "❌ <b>PRONOSTIC PERDU</b>"
         emoji  = "❌"
 
-    # On extrait la première ligne du ticket comme résumé
-    resume = pari_texte.strip().split("\n")[0][:200]
+    # On extrait la ligne MATCHS comme résumé — plus informatif que la première ligne
+    resume = next(
+        (re.sub(r"<[^>]+>", "", l).strip() for l in pari_texte.splitlines() if "MATCHS" in l.upper()),
+        pari_texte.strip().split("\n")[0]  # Fallback si ligne MATCHS absente
+    )[:200]
 
     message = (
         f"{header}\n\n"
@@ -195,7 +198,7 @@ def interroger_claude_statut(pari_texte: str) -> str:
     try:
         reponse = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=16,          # Un seul mot attendu — 16 tokens largement suffisant
+            max_tokens=256,         # Absorbe les blocs tool_use/result + le mot final
             system=INSTRUCTIONS_VERIFICATION,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
