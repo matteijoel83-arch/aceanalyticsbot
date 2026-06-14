@@ -40,7 +40,7 @@ if MISSING:
     sys.exit(1)
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"  # Tâche simple → Haiku (10x moins cher que Sonnet)
 
 GITHUB_API     = "https://api.github.com"
 GITHUB_HEADERS = {
@@ -162,38 +162,51 @@ def notifier_resultat(statut: str, pari_texte: str, stats: dict):
 # 4. VÉRIFICATION VIA CLAUDE + WEB_SEARCH
 # =====================================================================
 
-INSTRUCTIONS_VERIFICATION = """
-Tu es un agent expert de vérification de scores de tennis.
-Détermine le résultat RÉEL du pronostic fourni.
+INSTRUCTIONS_VERIFICATION = (
+    "Vérificateur de scores tennis. "
+    "Cherche le résultat via web_search (Flashscore / Sofascore). "
+    "Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS. "
+    "Aucun autre texte. Doute = EN_COURS."
+)
 
-Utilise web_search pour chercher les résultats officiels sur :
-Flashscore, Sofascore, ATP Tour, WTA Tennis.
 
-Réponds STRICTEMENT par un seul de ces 3 mots, sans aucun autre texte :
-- GAGNE  : matchs terminés ET pronostic correct.
-- PERDU  : matchs terminés ET pronostic incorrect.
-- EN_COURS : match non commencé, en cours, ou résultat introuvable/incomplet.
-
-RÈGLE D'OR : moindre doute = EN_COURS. Ne devine jamais.
-"""
+def _extraire_resume_ticket(pari_texte: str) -> str:
+    """
+    Extrait uniquement les infos nécessaires à la vérification du score :
+    joueurs, tournoi, heure, pronostic. On retire tout le reste (analyse,
+    cotes, mise, confiance) pour minimiser les tokens envoyés à Claude.
+    """
+    champs_utiles = ("MATCHS", "COMPÉTITION", "HEURE", "PRONO")
+    lignes = []
+    for ligne in pari_texte.splitlines():
+        ligne_clean = ligne.strip()
+        # Garde uniquement les lignes contenant un champ utile
+        if any(c in ligne_clean.upper() for c in champs_utiles):
+            # Retire les balises HTML pour économiser encore des tokens
+            ligne_clean = re.sub(r"<[^>]+>", "", ligne_clean)
+            lignes.append(ligne_clean)
+    # Fallback : si l'extraction échoue, on prend les 3 premières lignes
+    return "\n".join(lignes) if lignes else "\n".join(pari_texte.splitlines()[:3])
 
 
 def interroger_claude_statut(pari_texte: str) -> str:
+    # On n'envoie que le résumé minimal — pas le ticket complet
+    resume = _extraire_resume_ticket(pari_texte)
     try:
         reponse = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=256,
+            max_tokens=16,          # Un seul mot attendu — 16 tokens largement suffisant
             system=INSTRUCTIONS_VERIFICATION,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": f"Vérifie le résultat réel pour ce ticket :\n\n{pari_texte}",
+                "content": f"Résultat de ce pari ?\n{resume}",
             }],
         )
         verdict = "\n".join(
             b.text for b in reponse.content if hasattr(b, "text") and b.text
         ).strip().upper()
-        logging.info(f"Verdict Claude brut : '{verdict}'")
+        logging.info(f"Verdict : '{verdict}'")
         if "GAGNE" in verdict:
             return "GAGNE"
         if "PERDU" in verdict:
@@ -201,7 +214,7 @@ def interroger_claude_statut(pari_texte: str) -> str:
         return "EN_COURS"
     except Exception as e:
         logging.error(f"Erreur Claude : {e}")
-        return "EN_COURS"  # Sécurité : on ne supprime rien en cas d'erreur
+        return "EN_COURS"
 
 # =====================================================================
 # 5. LOGIQUE PRINCIPALE
