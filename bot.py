@@ -404,8 +404,6 @@ RÈGLES STRICTES :
                 tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.1,
             ),
-            # Timeout explicite : 90s max — évite le freeze si Gemini est lent
-            request_options={"timeout": 90},
         )
         texte = reponse.text.strip()
 
