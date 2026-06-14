@@ -322,118 +322,75 @@ def recuperer_cotes_tennis() -> str:
 # =====================================================================
 
 def construire_prompt(date: str, heure: str, cotes: str = "") -> str:
+    session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
     bloc_cotes = (
-        f"COTES CERTIFIÉES INJECTÉES (NE PAS rechercher ailleurs) :\n{cotes}\n"
-        f"→ Référence officielle. Si match absent de la liste, chercher via web_search.\n"
-        f"→ Ne jamais inventer une cote."
+        f"COTES INJECTÉES (ne pas chercher ailleurs) :\n{cotes}\nMatch absent → web_search. Jamais inventer."
         if cotes else
-        "AVERTISSEMENT : Aucune cote certifiée disponible.\n"
-        "→ Recherche via web_search (Winamax, Sportytrader).\n"
-        "→ Cote non trouvée = indiquer 'non vérifiée' + mise plafonnée 0.5%.\n"
-        "→ Ne jamais inventer une cote."
+        "Cotes via web_search (winamax.fr / sportytrader.com). Non trouvée → 'non vérifiée' + mise 0.5%."
     )
-    return f"""
-Tu es l'assistant personnel d'un parieur expert en tennis.
-Analyse les matchs ATP/WTA du {date}. Il est {heure} heure de France.
+    return f"""Expert paris tennis. {date} · {heure} France · Session {session}.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SESSIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• AVANT 14h00 → SESSION MATIN (mi-journée / début après-midi)
-• APRÈS 14h00 → SESSION APRÈS-MIDI (fin après-midi / soirée / nuit)
-• Maximum {MAX_TICKETS} tickets. Zéro ticket si aucune value réelle.
-• Matchs déjà commencés ou terminés à {heure} → EXCLUS immédiatement.
+SOURCES (max 4 appels web_search au total) :
+1. Calendrier → flashscore.fr ou atptour.com / wtatennis.com
+2. Cotes → {bloc_cotes}
+3-4. Stats/forme uniquement si nécessaire pour confirmer une value.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SÉPARATION MULTI-TICKETS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Délimiteur OBLIGATOIRE entre chaque ticket (ligne isolée) : [SEPARATEUR]
-• N'utilise JAMAIS ce délimiteur ailleurs.
+FILTRES IMMÉDIATS (skip sans analyse) :
+• Match commencé/terminé avant {heure} → skip
+• Retour blessure >2 mois ou doute participation 48h → skip
+• Soins médicaux / match >3h hier / retour 3-8 sem → marchés de jeux interdits + mise 0.5%
+• Signaux physiques 48h (crampes, déclarations douleur) → Moneyline ÉLEVÉE uniquement sinon skip
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SOURCES (classées par fiabilité)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TIER 1 — Calendriers : atptour.com | wtatennis.com | flashscore.fr
-TIER 2 — Stats : sofascore.com/fr | flashscore.fr
-  ⚠ Hold% et % breaks non disponibles = OMIS, jamais inventés.
-TIER 3 — Cotes :
+ANALYSE — 2 ÉTAPES OBLIGATOIRES ET SÉQUENTIELLES :
+[1] FACTEURS BRUTS — lister POUR/CONTRE sans conclusion :
+  · Surface, forme 10 matchs, charge 72h, trajets/décalage horaire
+  · Points à défendre, Grand Chelem dans 7j → vigilance maximale
+  · H2H stylistique + bilan vs gauchers si applicable
+  · Hold% et % breaks : uniquement si trouvés, sinon omettre
+  · Hold% >83% les deux + historique Tie-breaks → Over/Under jeux
+[2] DÉCISION — sur base exclusive de [1] :
+  · Probabilité estimée en %
+  · Cote Juste = 1/(prob/100)
+  · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
+  · Cote réelle > Cote Juste+0.10 → VALUE ✅ ticket validé
+  · Cote réelle ≤ Cote Juste+0.10 → ❌ abandonné
+  · Zéro value → AUCUN_MATCH (rien d'autre)
+
+MARCHÉS PAR NIVEAU :
+ÉLEVÉE  → Moneyline (ou Handicap Jeux / Victoire 2-0 si cote trop basse)
+MODÉRÉE → Over/Under jeux · Handicap +4.5 outsider · 2-0 Score Exact (Moneyline interdit)
+Combiné + MODÉRÉE → INTERDIT
+
+MISES = MIN(Kelly quart, plafond) :
+Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifiée 0.5%
+
+FORMAT (max {MAX_TICKETS} tickets, séparés par [SEPARATEUR] sur ligne isolée) :
+🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
+🏟 <b>MATCHS :</b> [joueurs]
+🏆 <b>COMPÉTITION :</b> [tournoi]
+⏰ <b>HEURE :</b> [heure]
+✅ <b>PRONO :</b> [pronostic]
+📈 <b>COTE :</b> [valeur ou "non vérifiée"]
+💰 <b>MISE :</b> [% Kelly plafonné]
+🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
+🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
+📌 <b>POURQUOI ?</b> [max 120 mots]
+⚠️ <b>DONNÉES MANQUANTES :</b> [stats absentes ou "Aucune"]
+
 {bloc_cotes}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANALYSE EN 2 ÉTAPES (anti-biais de confirmation)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ÉTAPE 1 — ANALYSE BRUTE (aucun pronostic à ce stade) :
-  Lister facteurs POUR / CONTRE sur 5 axes :
-  1. Surface & conditions (Terre/Dur/Gazon, CPI si trouvé, indoor/outdoor, altitude)
-  2. Forme & charge physique (10 derniers matchs, heures de jeu 72h, trajets, décalage)
-  3. Contexte & psychologie (points à défendre, Grand Chelem dans 7j → vigilance max)
-  4. Stats avancées : Hold% et % breaks UNIQUEMENT si trouvés. Hold% >83% des deux côtés
-     + historique Tie-breaks → marchés de jeux (Over/Under).
-  5. H2H & tactique (style de jeu, gauchers → bilan adversaire face aux gauchers)
-
-ÉTAPE 2 — PROBABILITÉ & DÉCISION (après liste complète des facteurs) :
-  Sur base EXCLUSIVE de l'Étape 1 :
-  → Probabilité en % → Calcul Value → Conclusion.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PROTOCOLE VALUE (obligatoire pour chaque match)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Probabilité estimée → ex: 67%
-2. Cote Juste = 1 / (prob/100) → ex: 1.49
-3. Kelly quart = ((prob × cote - 1) / (cote - 1)) × 0.25
-   → Arrondi à 0.5%, plafonné selon matrice.
-4. Cote réelle > Cote Juste + 0.10 → VALUE ✅ → ticket validé
-   Cote réelle ≤ Cote Juste + 0.10 → PAS de value ❌ → abandonné
-• Aucun match ne passe → répondre STRICTEMENT : AUCUN_MATCH
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ORIENTATION DES MARCHÉS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• ÉLEVÉE  → Moneyline (si value nette) sinon Handicap Jeux ou Victoire 2-0.
-• MODÉRÉE → Moneyline INTERDIT. Marchés alternatifs :
-  - Match serré (Holds élevés)         → +21.5/22.5 jeux | WTA : +2.5 sets
-  - Match à sens unique                → -20.5/19.5 jeux | 2-0 Score Exact
-  - Favori prenable / Outsider fragile → Handicap Jeux +4.5 outsider
-• Signaux physiques récents (soins, crampes, déclarations 48h) → INTERDIT marchés de jeux.
-  Moneyline uniquement si ÉLEVÉE, sinon passe.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MATRICE BANKROLL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Mise = MIN(Kelly quart, plafond) :
-• Simple   + ÉLEVÉE  → 2%   | Simple   + MODÉRÉE → 1%
-• Combiné  + ÉLEVÉE  → 1%   | Combiné  + MODÉRÉE → INTERDIT
-• Cote non vérifiée           → 0.5% sans exception
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FILTRE BLESSURE (2 niveaux)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NIVEAU 1 — Élimination totale :
-  • Retour blessure > 2 mois | Doute public participation 48h
-NIVEAU 2 — Vigilance renforcée (marchés alternatifs + mise 0.5%) :
-  • Soins médicaux dernier match | Match >3h dans les 24h | Retour 3-8 semaines
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANTI-HALLUCINATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Aucun match trouvé → AUCUN_MATCH (strict, aucun autre texte)
-• Aucune rencontre fictive ni extrapolation depuis connaissances passées
-• Stat non trouvée → omise, jamais estimée
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMAT TICKET (respecter exactement)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 <b>PRONOSTIC [SIMPLE OU COMBINÉ]</b> 🔴
-🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
+FORMAT (respecter exactement) :
+🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
+🏟 <b>MATCHS :</b> [A vs B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
-⏰ <b>HEURE :</b> [Heure exacte]
-✅ <b>PRONO :</b> [Pronostic précis]
-📈 <b>COTE :</b> [Cote réelle — "non vérifiée" si incertaine]
-💰 <b>MISE :</b> [% Kelly quart plafonné]
-🛡 <b>CONFIANCE :</b> [ÉLEVÉE / MODÉRÉE]
-🧮 <b>VALUE :</b> [Proba X% → Cote juste Y.YY → Cote réelle Z.ZZ → Kelly W%]
-📌 <b>POURQUOI ?</b> [Max 150 mots — facteurs clés, pas de transition]
-⚠️ <b>DONNÉES MANQUANTES :</b> [Stats non trouvées, ou "Aucune"]
+⏰ <b>HEURE :</b> [Heure]
+✅ <b>PRONO :</b> [Pronostic]
+📈 <b>COTE :</b> [Cote ou "non vérifiée"]
+💰 <b>MISE :</b> [% Kelly plafonné]
+🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
+🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
+📌 <b>POURQUOI ?</b> [Max 100 mots — facteurs clés uniquement]
+⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
 """
 
 # =====================================================================
