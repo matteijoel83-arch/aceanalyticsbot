@@ -418,7 +418,7 @@ RECHERCHES À EFFECTUER (dans cet ordre) :
    → flashscore.fr (résultats récents, scores détaillés)
    → sofascore.com/fr (stats avancées : aces, double fautes, % 1ère balle)
    → tennisexplorer.com (historique complet par surface)
-   → tennisratio.com (statistiques avancées service/retour, Hold%)
+   → tennisratio.com (Hold% et % break points — PRIORITÉ HAUTE pour les marchés Over/Under)
 
 4. H2H (historique direct entre les deux joueurs) :
    → atptour.com ou wtatennis.com (H2H officiel)
@@ -426,7 +426,24 @@ RECHERCHES À EFFECTUER (dans cet ordre) :
    → tennissignals.com (H2H détaillé avec contexte)
    → flashscore.fr (onglet H2H sur chaque match)
 
-5. Forfaits, blessures ou absences annoncées dans les 48h :
+5. Charge physique et fatigue du calendrier (CRITIQUE) :
+   → Nombre de matchs joués dans les 72h précédentes + durée totale sur le court
+   → Signaler EXPLICITEMENT si l'un des joueurs :
+     * A joué plus de 2h30 la veille ou l'avant-veille
+     * A remporté un titre le dimanche précédant cette semaine
+     * A un match important prévu le lendemain (peut gérer son effort)
+     * A enchaîné 3 matchs ou plus en moins de 5 jours
+     * A voyagé sur un fuseau horaire différent dans les 72h
+
+6. Contexte psychologique et situationnel :
+   → Points ATP/WTA à défendre cette semaine vs l'an passé (pression de défense)
+   → Grand Chelem dans les 7 prochains jours (risque de gestion d'effort)
+   → Joueur qui joue devant son public national (avantage psychologique)
+   → Situation au classement : montée en puissance vs défense de rang
+   → Conflits publics récents (staff, blessure non déclarée, déclarations presse)
+   → Premier titre à portée (pression supplémentaire ou motivation décuplée)
+
+7. Forfaits, blessures ou absences annoncées dans les 48h :
    → tennis.com, eurosport.fr, atptour.com/news, déclarations officielles joueurs/staff
 
 FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
@@ -445,11 +462,16 @@ FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
       "source_cote": "Winamax / Sportytrader / non trouvée",
       "forme_j1": ["V", "D", "V", "V", "D"],
       "forme_j2": ["V", "V", "D", "V", "V"],
-      "details_forme_j1": "Résumé en 1 ligne : adversaires, surfaces, scores clés",
-      "details_forme_j2": "Résumé en 1 ligne : adversaires, surfaces, scores clés",
-      "h2h_recents": "Ex: J1 mène 3-1 sur les 2 dernières années, 2-0 sur terre",
-      "alertes_physiques": "Ex: J1 a reçu des soins médicaux hier | Aucune",
+      "details_forme_j1": "Résumé : adversaires, surfaces, scores clés",
+      "details_forme_j2": "Résumé : adversaires, surfaces, scores clés",
+      "hold_pct_j1": "XX% (source tennisratio) ou non trouvé",
+      "hold_pct_j2": "XX% (source tennisratio) ou non trouvé",
+      "h2h_recents": "Ex: J1 mène 3-1 sur les 2 dernières années, 2-0 sur gazon",
+      "charge_physique_j1": "Ex: 2h45 joués hier en 3 sets | Aucun match 72h",
+      "charge_physique_j2": "Ex: Titre remporté dimanche, 3 matchs en 4 jours | Repos 3 jours",
+      "alertes_physiques": "Ex: J1 soins médicaux hier | Aucune",
       "absence_recente": "Ex: Retour après 6 semaines d'absence | Aucune",
+      "contexte_psychologique": "Ex: 450pts à défendre, public local favorable, GC dans 6j",
       "contexte": "Ex: Finale, points à défendre, Grand Chelem dans 5 jours"
     }}
   ],
@@ -460,7 +482,6 @@ RÈGLES STRICTES :
 - Si un champ est introuvable → mettre "non trouvé" (jamais inventer)
 - Si aucun match n'est prévu après {heure} → retourner {{"matchs": [], "avertissements": "Aucun match à venir"}}
 - EXCLURE les matchs de qualifications (Q), wild cards (WC) et pre-qualifications
-  car les bookmakers comme Winamax ne les couvrent pas.
 - INCLURE uniquement les matchs du tableau principal (1er tour, 2e tour, quarts, demis, finale)
 - JSON valide uniquement, sans backticks ni commentaires
 """
@@ -547,8 +568,13 @@ Aucun titre, aucun sous-titre, aucune explication préalable, aucun récapitulat
 
 [1] FACTEURS BRUTS (en interne) — lister POUR/CONTRE chaque joueur :
   · Surface + forme des 5 derniers matchs + charge physique récente
-  · H2H + contexte (points à défendre, Grand Chelem dans 7j → vigilance max)
-  · Hold% / stats avancées : uniquement si présents dans les données, sinon omettre
+  · Hold% si disponible → >83% les deux côtés = scénario "Match de serveurs"
+  · Charge physique : signaler si match long la veille, titre dimanche, 3 matchs en 5 jours,
+    match important le lendemain (gestion d'effort probable) → facteur pénalisant
+  · H2H global ET par surface — distinguer les deux
+  · Contexte psychologique : points à défendre, public local, Grand Chelem dans 7j,
+    montée vs défense de classement, pression premier titre
+  · Contexte situationnel : tournoi en fin de semaine (demi/finale) → joueurs épuisés
 
 [2] DÉCISION (en interne) — sur base exclusive de [1] :
   · Probabilité estimée en % (respecter les plafonds de calibration ci-dessus)
@@ -574,7 +600,11 @@ CONFIANCE ÉLEVÉE → dans l'ordre de préférence :
   2. Victoire 2-0 — si l'analyse prédit un match à sens unique
   3. Victoire 2-1 — si l'analyse prédit une résistance du perdant
   4. Handicap Jeux Favori (-3.5 / -4.5) — si domination attendue mais cote basse
-  5. Combiné max 2 sélections (mise 1%) — uniquement si les 2 analyses sont solides
+  5. Combiné max 2 sélections (mise 1%) — règles strictes :
+     · Les 2 sélections DOIVENT être sur des tournois différents OU des surfaces différentes
+     · Deux sélections du même tournoi le même jour sont INTERDITES (corrélation météo/court)
+     · Chaque sélection doit passer individuellement les 2 conditions (Delta + Analyse)
+     · En cas de doute sur l'indépendance → jouer en simples séparés
 
 CONFIANCE MODÉRÉE → Moneyline INTERDIT, choisir selon le scénario analytique :
 
