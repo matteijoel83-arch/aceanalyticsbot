@@ -40,6 +40,15 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: "Keep-alive — Maintenir le cron GitHub actif"
+        run: |
+          git config --global user.name "bot-aceanalytics"
+          git config --global user.email "bot@github.com"
+          echo "$(date -u)" > .keep_alive
+          git add .keep_alive
+          git diff --staged --quiet || git commit -m "⏰ Keep-alive $(date -u '+%Y-%m-%d %H:%M')"
+          git push || true
+
       - name: "Étape 1 — Vérification des résultats précédents"
         run: python verification_resultats.py
 
