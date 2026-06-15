@@ -531,6 +531,14 @@ FILTRES IMMÉDIATS (élimine sans analyser) :
   Raison : les bookmakers comme Winamax ne couvrent pas les qualifications.
 • Cote absente ou "non trouvée" → analyser quand même + mise plafonnée 0.5% + indiquer "non vérifiée" dans le ticket
 
+CALIBRATION DES PROBABILITÉS (OBLIGATOIRE avant tout calcul) :
+Applique ces plafonds stricts — ils reflètent l'incertitude inhérente au tennis pro :
+• Favori clair   (cote < 1.50)  → probabilité MAX 75%
+• Favori modéré  (cote 1.50-1.80) → probabilité MAX 68%
+• Match serré    (cote 1.80-2.20) → probabilité MAX 58%
+• Outsider       (cote > 2.20)  → probabilité MAX 52%
+Ne jamais dépasser ces plafonds, même si l'analyse semble très favorable.
+
 ANALYSE EN 2 ÉTAPES SÉQUENTIELLES (INTERNE — NE PAS AFFICHER) :
 ⚠️ RÈGLE ABSOLUE : Ton raisonnement intermédiaire (étapes 1 et 2, filtres, calculs)
 doit rester INTERNE. Tu ne l'affiches JAMAIS dans ta réponse.
@@ -543,12 +551,12 @@ Aucun titre, aucun sous-titre, aucune explication préalable, aucun récapitulat
   · Hold% / stats avancées : uniquement si présents dans les données, sinon omettre
 
 [2] DÉCISION (en interne) — sur base exclusive de [1] :
-  · Probabilité estimée en %
+  · Probabilité estimée en % (respecter les plafonds de calibration ci-dessus)
   · Cote Juste = 1/(prob/100)
+  · Delta = Cote réelle - Cote Juste
+  · Si Delta < 0.10 → PAS DE VALUE ❌ → ticket ABANDONNÉ immédiatement
+  · Si Delta ≥ 0.10 → VALUE ✅ → continuer
   · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
-  · Cote réelle > Cote Juste+0.10 → VALUE ✅ → ticket validé
-  · Cote réelle ≤ Cote Juste+0.10 → ❌ → abandonné
-  · Si source_cote = "non trouvée" → indiquer "non vérifiée" + mise 0.5%
   · Aucune value → répondre UNIQUEMENT : AUCUN_MATCH
 
 MARCHÉS :
@@ -572,7 +580,7 @@ IMPORTANT : Ta réponse commence DIRECTEMENT par 🔴 ou par AUCUN_MATCH. Rien a
 📈 <b>COTE :</b> [Cote ou "non vérifiée"]
 💰 <b>MISE :</b> [% Kelly plafonné]
 🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
-🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
+🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → delta +D.DD ✅ → Kelly W%]
 📌 <b>POURQUOI ?</b> [Max 60 mots]
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou "Aucune"]
 """
