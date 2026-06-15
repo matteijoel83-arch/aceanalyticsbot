@@ -516,20 +516,25 @@ FILTRES IMMÉDIATS (élimine sans analyser) :
   Raison : les bookmakers comme Winamax ne couvrent pas les qualifications.
 • Cote absente ou "non trouvée" sur Winamax → skip (pas de marché = pas de pari possible)
 
-ANALYSE EN 2 ÉTAPES SÉQUENTIELLES :
-[1] FACTEURS BRUTS — lister POUR/CONTRE chaque joueur (aucune conclusion) :
+ANALYSE EN 2 ÉTAPES SÉQUENTIELLES (INTERNE — NE PAS AFFICHER) :
+⚠️ RÈGLE ABSOLUE : Ton raisonnement intermédiaire (étapes 1 et 2, filtres, calculs)
+doit rester INTERNE. Tu ne l'affiches JAMAIS dans ta réponse.
+Ta réponse finale ne doit contenir QUE les tickets formatés ou AUCUN_MATCH.
+Aucun titre, aucun sous-titre, aucune explication préalable, aucun récapitulatif.
+
+[1] FACTEURS BRUTS (en interne) — lister POUR/CONTRE chaque joueur :
   · Surface + forme des 5 derniers matchs + charge physique récente
   · H2H + contexte (points à défendre, Grand Chelem dans 7j → vigilance max)
   · Hold% / stats avancées : uniquement si présents dans les données, sinon omettre
 
-[2] DÉCISION — sur base exclusive de [1] :
+[2] DÉCISION (en interne) — sur base exclusive de [1] :
   · Probabilité estimée en %
   · Cote Juste = 1/(prob/100)
   · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
   · Cote réelle > Cote Juste+0.10 → VALUE ✅ → ticket validé
   · Cote réelle ≤ Cote Juste+0.10 → ❌ → abandonné
   · Si source_cote = "non trouvée" → indiquer "non vérifiée" + mise 0.5%
-  · Aucune value → AUCUN_MATCH (rien d'autre)
+  · Aucune value → répondre UNIQUEMENT : AUCUN_MATCH
 
 MARCHÉS :
 ÉLEVÉE  → Moneyline | si cote trop basse : Handicap Jeux ou Victoire 2-0
@@ -539,9 +544,10 @@ Combiné + MODÉRÉE → INTERDIT
 MISES = MIN(Kelly quart, plafond) :
 Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifiée 0.5%
 
-FORMAT (max {MAX_TICKETS} tickets, séparés par [SEPARATEUR] sur ligne isolée) :
-IMPORTANT : Utilise UNIQUEMENT des balises HTML pour le gras : <b>texte</b>
-N'utilise JAMAIS le format Markdown avec des astérisques **texte**
+FORMAT DE RÉPONSE (max {MAX_TICKETS} tickets, séparés par [SEPARATEUR] sur ligne isolée) :
+IMPORTANT : Balises HTML uniquement — <b>texte</b>. JAMAIS de Markdown **texte**.
+IMPORTANT : Section POURQUOI max 60 mots — ultra concis, facteurs clés uniquement.
+IMPORTANT : Ta réponse commence DIRECTEMENT par 🔴 ou par AUCUN_MATCH. Rien avant.
 
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
 🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
@@ -552,8 +558,8 @@ N'utilise JAMAIS le format Markdown avec des astérisques **texte**
 💰 <b>MISE :</b> [% Kelly plafonné]
 🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → Kelly W%]
-📌 <b>POURQUOI ?</b> [Max 120 mots — facteurs clés uniquement]
-⚠️ <b>DONNÉES MANQUANTES :</b> [Champs "non trouvé" utilisés, ou "Aucune"]
+📌 <b>POURQUOI ?</b> [Max 60 mots]
+⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou "Aucune"]
 """
 
 # =====================================================================
