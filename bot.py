@@ -392,6 +392,9 @@ FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
 RÈGLES STRICTES :
 - Si un champ est introuvable → mettre "non trouvé" (jamais inventer)
 - Si aucun match n'est prévu après {heure} → retourner {{"matchs": [], "avertissements": "Aucun match à venir"}}
+- EXCLURE les matchs de qualifications (Q), wild cards (WC) et pre-qualifications
+  car les bookmakers comme Winamax ne les couvrent pas.
+- INCLURE uniquement les matchs du tableau principal (1er tour, 2e tour, quarts, demis, finale)
 - JSON valide uniquement, sans backticks ni commentaires
 """
 
@@ -457,6 +460,9 @@ FILTRES IMMÉDIATS (élimine sans analyser) :
 • Données manquantes signalées par Gemini sur ce match → skip
 • alertes_physiques présentes → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs uniquement + mise 0.5%
+• Match de QUALIFICATIONS (Q), de WILD CARD (WC) ou hors tableau principal → skip
+  Raison : les bookmakers comme Winamax ne couvrent pas les qualifications.
+• Cote absente ou "non trouvée" sur Winamax → skip (pas de marché = pas de pari possible)
 
 ANALYSE EN 2 ÉTAPES SÉQUENTIELLES :
 [1] FACTEURS BRUTS — lister POUR/CONTRE chaque joueur (aucune conclusion) :
@@ -482,6 +488,9 @@ MISES = MIN(Kelly quart, plafond) :
 Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifiée 0.5%
 
 FORMAT (max {MAX_TICKETS} tickets, séparés par [SEPARATEUR] sur ligne isolée) :
+IMPORTANT : Utilise UNIQUEMENT des balises HTML pour le gras : <b>texte</b>
+N'utilise JAMAIS le format Markdown avec des astérisques **texte**
+
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
 🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
