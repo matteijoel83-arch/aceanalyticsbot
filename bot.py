@@ -366,9 +366,22 @@ def collecter_donnees_tennis(date: str, heure: str, cotes_injectees: str) -> str
     """
 
     bloc_cotes = (
-        f"Les cotes suivantes sont déjà disponibles, ne les cherche pas :\n{cotes_injectees}"
+        f"Cotes partielles disponibles via Odds API (ne couvre pas tous les tournois) :\n{cotes_injectees}\n"
+        f"→ Pour les matchs ABSENTS de cette liste, cherche leurs cotes Winamax sur :\n"
+        f"  1. sportytrader.com/fr/cotes/tennis/\n"
+        f"  2. compare-bet.fr (comparateur cotes tennis)\n"
+        f"  3. cotesports.fr (comparateur temps réel)\n"
+        f"  4. flashscore.fr (onglet 'Cotes' sur chaque match)\n"
+        f"  Ou en recherchant 'cote [Joueur1] vs [Joueur2] Winamax' sur Google.\n"
+        f"→ Si la cote reste introuvable après recherche → mettre 'non trouvée'."
         if cotes_injectees else
-        "Cherche les cotes sur winamax.fr ou sportytrader.com pour chaque match retenu."
+        "Cherche les cotes Winamax pour CHAQUE match sur ces sources (dans l'ordre) :\n"
+        "  1. sportytrader.com/fr/cotes/tennis/\n"
+        "  2. compare-bet.fr (comparateur cotes tennis)\n"
+        "  3. cotesports.fr (comparateur temps réel)\n"
+        "  4. flashscore.fr (onglet 'Cotes' sur chaque match)\n"
+        "  Ou en recherchant 'cote [Joueur1] vs [Joueur2] Winamax' sur Google.\n"
+        "→ Si introuvable après recherche → mettre 'non trouvée'."
     )
 
     prompt_gemini = f"""
@@ -380,11 +393,26 @@ Un autre système (Claude) se chargera de l'analyse. Ton seul rôle est de cherc
 RECHERCHES À EFFECTUER (dans cet ordre) :
 1. Matchs ATP et WTA du {date} qui commencent APRÈS {heure} (heure France)
    → Sources : flashscore.fr, atptour.com, wtatennis.com
-2. Pour chaque match trouvé : forme récente des 2 joueurs (5 derniers matchs)
-   → Sources : flashscore.fr, sofascore.com
-3. Forfaits, blessures ou absences annoncées dans les 48h
-   → Sources : actualités sportives, déclarations officielles
-4. {bloc_cotes}
+   → INCLURE tous les tournois : Grand Chelem, Masters, ATP/WTA 500, ATP/WTA 250
+   → EXCLURE : qualifications (Q), wild cards (WC), doubles, pré-qualifications
+
+2. Cotes Winamax pour CHAQUE match du tableau principal :
+   {bloc_cotes}
+
+3. Pour chaque match retenu — forme récente des 2 joueurs (5 derniers matchs) :
+   → flashscore.fr (résultats récents, scores détaillés)
+   → sofascore.com/fr (stats avancées : aces, double fautes, % 1ère balle)
+   → tennisexplorer.com (historique complet par surface)
+   → tennisratio.com (statistiques avancées service/retour, Hold%)
+
+4. H2H (historique direct entre les deux joueurs) :
+   → atptour.com ou wtatennis.com (H2H officiel)
+   → livetennis.com/h2h (H2H par surface)
+   → tennissignals.com (H2H détaillé avec contexte)
+   → flashscore.fr (onglet H2H sur chaque match)
+
+5. Forfaits, blessures ou absences annoncées dans les 48h :
+   → tennis.com, eurosport.fr, atptour.com/news, déclarations officielles joueurs/staff
 
 FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
 {{
