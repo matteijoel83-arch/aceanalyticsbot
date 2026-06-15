@@ -263,6 +263,30 @@ def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> 
     return False
 
 
+def _envoyer_notification_sans_ticket(raison: str):
+    """Informe les abonnés qu'aucun ticket n'est émis pour cette session."""
+    stats = charger_stats()
+    wr    = calculer_winrate(stats)
+    msg   = (
+        f"📊 <b>ACEANALYTICS — Analyse du jour</b>\n\n"
+        f"{raison}\n\n"
+        f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']} | "
+        f"📈 Win Rate : {wr:.1f}%"
+    )
+    if DRY_RUN:
+        logging.info(f"[DRY-RUN] Notification sans ticket : {msg}")
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": msg, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        logging.info("Notification 'sans ticket' envoyée sur Telegram.")
+    except Exception as e:
+        logging.warning(f"Échec notification sans ticket : {e}")
+
+
 def _alerter_telegram_erreur(msg: str):
     try:
         requests.post(
@@ -528,6 +552,11 @@ def run_bot_autonome():
         donnees = json.loads(donnees_json)
         if not donnees.get("matchs"):
             logging.info(f"Aucun match trouvé par Gemini — session annulée. ({donnees.get('avertissements', '')})")
+            session = "matin" if heure < "14:00" else "après-midi"
+            _envoyer_notification_sans_ticket(
+                f"🔍 Aucun match ATP/WTA à venir trouvé pour la session {session}.\n"
+                f"Le bot reprendra à la prochaine session."
+            )
             return
     except Exception:
         pass  # On laisse Claude gérer les données même partielles
@@ -563,6 +592,11 @@ def run_bot_autonome():
 
         if "AUCUN_MATCH" in texte:
             logging.info("Claude : aucune value trouvée — session annulée proprement.")
+            session = "matin" if heure < "14:00" else "après-midi"
+            _envoyer_notification_sans_ticket(
+                f"🔎 Session {session} analysée — {len(json.loads(donnees_json).get('matchs', []))} match(s) étudié(s).\n"
+                f"Aucune value suffisante détectée. On passe notre chemin. 💼"
+            )
             return
         if len(texte) <= 20:
             logging.info("Réponse Claude trop courte — aucun ticket émis.")
