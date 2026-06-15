@@ -529,7 +529,7 @@ FILTRES IMMÉDIATS (élimine sans analyser) :
 • Retour 3-8 semaines → marchés alternatifs uniquement + mise 0.5%
 • Match de QUALIFICATIONS (Q), de WILD CARD (WC) ou hors tableau principal → skip
   Raison : les bookmakers comme Winamax ne couvrent pas les qualifications.
-• Cote absente ou "non trouvée" sur Winamax → skip (pas de marché = pas de pari possible)
+• Cote absente ou "non trouvée" → analyser quand même + mise plafonnée 0.5% + indiquer "non vérifiée" dans le ticket
 
 ANALYSE EN 2 ÉTAPES SÉQUENTIELLES (INTERNE — NE PAS AFFICHER) :
 ⚠️ RÈGLE ABSOLUE : Ton raisonnement intermédiaire (étapes 1 et 2, filtres, calculs)
