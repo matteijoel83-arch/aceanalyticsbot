@@ -559,10 +559,45 @@ Aucun titre, aucun sous-titre, aucune explication préalable, aucun récapitulat
   · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
   · Aucune value → répondre UNIQUEMENT : AUCUN_MATCH
 
-MARCHÉS :
-ÉLEVÉE  → Moneyline | si cote trop basse : Handicap Jeux ou Victoire 2-0
-MODÉRÉE → Over/Under jeux · Handicap +4.5 · 2-0 Score Exact (Moneyline interdit)
-Combiné + MODÉRÉE → INTERDIT
+MARCHÉS DISPONIBLES — tous soumis à la double validation VALUE + ANALYSE :
+⚠️ RÈGLE UNIVERSELLE (s'applique à TOUS les types de paris sans exception) :
+La value mathématique (Delta ≥ 0.10) est nécessaire mais PAS suffisante.
+Chaque ticket doit satisfaire CES DEUX CONDITIONS simultanément :
+  1. Delta ≥ 0.10 (value mathématique confirmée)
+  2. L'analyse des facteurs bruts [1] justifie ce marché de façon indépendante
+Si l'une des deux conditions manque → ticket abandonné, même si l'autre est forte.
+
+CONFIANCE ÉLEVÉE → dans l'ordre de préférence :
+  1. Moneyline — UNIQUEMENT si l'analyse confirme clairement la supériorité
+     du joueur sur cette surface, dans ce contexte, à ce moment précis.
+     Une value sur Moneyline sans domination analytique claire → passer.
+  2. Victoire 2-0 — si l'analyse prédit un match à sens unique
+  3. Victoire 2-1 — si l'analyse prédit une résistance du perdant
+  4. Handicap Jeux Favori (-3.5 / -4.5) — si domination attendue mais cote basse
+  5. Combiné max 2 sélections (mise 1%) — uniquement si les 2 analyses sont solides
+
+CONFIANCE MODÉRÉE → Moneyline INTERDIT, choisir selon le scénario analytique :
+
+  "Match de serveurs" (Hold% élevé, peu de breaks attendus) :
+  → Over jeux (21.5/22.5/23.5) · Tiebreak Oui
+
+  "Match serré" (profils équilibrés, H2H disputé) :
+  → Plus de 2.5 sets (WTA) · Score exact 2-1 · Over jeux
+
+  "Favori dominant" (écart de forme/niveau clair, outsider en méforme) :
+  → Victoire 2-0 · Under jeux (18.5/19.5/20.5)
+
+  "Favori prenable / Outsider solide défensivement" :
+  → Handicap Jeux +4.5 outsider · Score exact 2-1
+
+  "Surface lente favorisant les breaks" (terre battue, indoor lent) :
+  → Under jeux · Plus de 2.5 sets · Score exact 2-1
+
+  Combiné MODÉRÉE → INTERDIT sans exception.
+
+Si plusieurs marchés passent les 2 conditions, prendre celui dont le scénario
+analytique est le plus solide, pas forcément le Delta le plus élevé.
+Si aucun marché ne satisfait les 2 conditions → AUCUN_MATCH
 
 MISES = MIN(Kelly quart, plafond) :
 Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifiée 0.5%
