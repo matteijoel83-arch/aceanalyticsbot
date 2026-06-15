@@ -253,6 +253,21 @@ def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> 
             logging.warning(f"Telegram timeout tentative {t}.")
         except requests.exceptions.HTTPError as e:
             logging.error(f"Telegram HTTP {e} — {r.text}")
+            # Erreur 400 = HTML invalide → retenter en texte brut
+            if r.status_code == 400 and parse_mode == "HTML":
+                logging.warning("Telegram 400 HTML invalide — fallback texte brut.")
+                try:
+                    texte_brut = re.sub(r"<[^>]+>", "", html)[:4000]
+                    r2 = requests.post(
+                        url,
+                        json={"chat_id": TELEGRAM_CHANNEL_ID, "text": texte_brut},
+                        timeout=10,
+                    )
+                    r2.raise_for_status()
+                    logging.info("✅ Telegram envoyé (texte brut).")
+                    return True
+                except Exception as e2:
+                    logging.error(f"Telegram fallback brut échoué : {e2}")
             break
         except Exception as e:
             logging.error(f"Telegram erreur : {e}")
