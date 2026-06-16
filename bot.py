@@ -210,7 +210,20 @@ def sauvegarder_historique(hashes: list, sha):
 # 5. TELEGRAM
 # =====================================================================
 
-def _tronquer(texte: str, limite: int = 3500) -> str:
+def _nettoyer_html_telegram(texte: str) -> str:
+    """
+    Nettoie le texte pour qu'il soit compatible avec le parse_mode HTML de Telegram.
+    Supprime les caractères problématiques que Claude génère parfois malgré l'interdiction.
+    """
+    # Supprimer les backslashes échappés \" qui causent l'erreur 400
+    texte = texte.replace('\\"', '"')
+    # Supprimer les balises Markdown résiduelles **texte** → texte
+    texte = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texte)
+    # Supprimer les balises Markdown _texte_ → texte
+    texte = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'\1', texte)
+    # Nettoyer les balises HTML mal formées (attributs, balises inconnues)
+    texte = re.sub(r'<(?!/?b>|/?i>|/?code>|/?pre>)[^>]+>', '', texte)
+    return texte
     if len(texte) <= limite:
         return texte
     coupe = texte.rfind("\n", 0, limite)
@@ -220,6 +233,8 @@ def _tronquer(texte: str, limite: int = 3500) -> str:
 def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> bool:
     if stats is None:
         stats = charger_stats()
+    # Nettoyer le HTML avant tout — élimine les \" et balises problématiques
+    message = _nettoyer_html_telegram(message)
     sig = (
         f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
         f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
@@ -398,60 +413,77 @@ def precollecte_odds_api(heure_utc_min: str) -> dict:
     return matchs
 
 # =====================================================================
-# 8. MODULE B — PRÉ-COLLECTE FLASHSCORE (calendrier complet)
+# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS (calendrier complet)
 # =====================================================================
 
-def precollecte_flashscore(date_fr: str) -> list:
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
+
+def precollecte_rapidapi_tennis(date_fr: str) -> list:
     """
-    Récupère le programme tennis du jour via l'API non officielle Flashscore.
+    Récupère le programme tennis du jour via RapidAPI Tennis ATP/WTA/ITF.
     Retourne une liste de matchs {joueur1, joueur2, heure, tournoi, surface}.
-    Aucune clé API requise — endpoint public.
+    Nécessite le secret RAPIDAPI_KEY dans GitHub.
     """
     matchs = []
-    try:
-        # Flashscore expose un endpoint JSON pour le programme tennis du jour
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; AceAnalytics/1.0)",
-            "X-Fsign":    "SW9D1eZo",  # Header requis par Flashscore
-        }
-        # Format date Flashscore : YYYYMMDD
-        date_obj = datetime.strptime(date_fr, "%d/%m/%Y")
-        date_fs  = date_obj.strftime("%Y%m%d")
+    if not RAPIDAPI_KEY:
+        logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
+        return matchs
 
-        url = f"https://d.flashscore.com/x/feed/f_1_{date_fs}_1_en_1"
-        r   = requests.get(url, headers=headers, timeout=10)
-        r.raise_for_status()
+    date_obj = datetime.strptime(date_fr, "%d/%m/%Y")
+    date_api = date_obj.strftime("%Y-%m-%d")
 
-        # Flashscore retourne un format propriétaire — on parse les noms de joueurs
-        contenu = r.text
-        # Pattern : ¬AA÷Joueur1¬AB÷Joueur2¬
-        pattern_joueurs = r'AA÷([^¬]+)¬AB÷([^¬]+)¬'
-        pattern_heure   = r'AD÷(\d+)¬'  # Timestamp Unix
-        pattern_tournoi = r'CL÷([^¬]+)¬'
+    headers = {
+        "x-rapidapi-key":  RAPIDAPI_KEY,
+        "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
+        "Content-Type":    "application/json",
+    }
 
-        joueurs  = re.findall(pattern_joueurs, contenu)
-        heures   = re.findall(pattern_heure, contenu)
-        tournois = re.findall(pattern_tournoi, contenu)
+    # On récupère ATP et WTA séparément
+    for tour in ["atp", "wta"]:
+        try:
+            url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{tour}/{date_api}"
+            r   = requests.get(url, headers=headers, timeout=10)
+            r.raise_for_status()
+            data = r.json()
 
-        for i, (j1, j2) in enumerate(joueurs[:30]):
-            heure_match = "heure non disponible"
-            tournoi     = tournois[i] if i < len(tournois) else "Tournoi inconnu"
-            if i < len(heures):
-                try:
-                    ts = int(heures[i])
-                    heure_match = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M UTC")
-                except Exception:
-                    pass
-            matchs.append({
-                "joueur1": j1.strip(),
-                "joueur2": j2.strip(),
-                "heure":   heure_match,
-                "tournoi": tournoi.strip(),
-            })
+            # Format attendu : {"schedule": [{"homePlayer": {...}, "awayPlayer": {...}, ...}]}
+            schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
 
-        logging.info(f"Flashscore — {len(matchs)} match(s) récupéré(s).")
-    except Exception as e:
-        logging.warning(f"Flashscore indisponible : {e}")
+            for m in schedule:
+                # Extraction joueurs — plusieurs formats possibles selon l'endpoint
+                j1 = (m.get("homePlayer") or m.get("home_player") or m.get("player1") or {})
+                j2 = (m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {})
+
+                nom_j1 = j1.get("name") or j1.get("fullName") or str(j1) if isinstance(j1, dict) else str(j1)
+                nom_j2 = j2.get("name") or j2.get("fullName") or str(j2) if isinstance(j2, dict) else str(j2)
+
+                if not nom_j1 or not nom_j2 or nom_j1 == nom_j2:
+                    continue
+
+                # Extraction heure
+                heure_match = m.get("startTime") or m.get("time") or m.get("date", "heure inconnue")
+                if "T" in str(heure_match):
+                    heure_match = heure_match[:16].replace("T", " ") + " UTC"
+
+                # Extraction tournoi et surface
+                tournoi = (m.get("tournament") or m.get("league") or {})
+                nom_tournoi = tournoi.get("name") or tournoi.get("title") or str(tournoi) if isinstance(tournoi, dict) else str(tournoi)
+                surface = m.get("surface") or m.get("courtType") or "non disponible"
+
+                matchs.append({
+                    "joueur1": str(nom_j1).strip(),
+                    "joueur2": str(nom_j2).strip(),
+                    "heure":   str(heure_match).strip(),
+                    "tournoi": str(nom_tournoi).strip(),
+                    "surface": str(surface).strip(),
+                })
+
+        except requests.exceptions.HTTPError as e:
+            logging.warning(f"RapidAPI Tennis {tour.upper()} : {e}")
+        except Exception as e:
+            logging.warning(f"RapidAPI Tennis {tour.upper()} erreur : {e}")
+
+    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s) récupéré(s).")
     return matchs
 
 # =====================================================================
@@ -513,7 +545,7 @@ def fusionner_calendrier(odds_matchs: dict, fs_matchs: list) -> str:
             lignes.append(f"• {m['heure_utc']} | {j1} vs {j2}{cote_info}")
 
     total = len(matchs_affiches)
-    logging.info(f"Calendrier fusionné : {total} match(s) total (Flashscore + Odds API).")
+    logging.info(f"Calendrier fusionné : {total} match(s) total (RapidAPI + Odds API).")
 
     if total == 0:
         return ""
@@ -748,8 +780,8 @@ def run_bot_autonome():
     # --- PRÉ-COLLECTE A : Odds API ---
     odds_matchs = precollecte_odds_api(heure_utc_min)
 
-    # --- PRÉ-COLLECTE B : Flashscore ---
-    fs_matchs = precollecte_flashscore(date)
+    # --- PRÉ-COLLECTE B : RapidAPI Tennis ---
+    fs_matchs = precollecte_rapidapi_tennis(date)
 
     # --- FUSION des deux sources ---
     calendrier_injecte = fusionner_calendrier(odds_matchs, fs_matchs)
