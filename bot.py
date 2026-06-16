@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.2                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.3                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
 ║                                                                      ║
@@ -8,8 +8,8 @@
 ║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
 ║    GITHUB_TOKEN       · GITHUB_REPO · GEMINI_API_KEY                ║
 ║  Secrets optionnels :                                                ║
-║    ODDS_API_KEY   ([https://the-odds-api.com](https://the-odds-api.com) — 500 req/mois gratuit) ║
-║    RAPIDAPI_KEY   ([https://rapidapi.com](https://rapidapi.com) — calendrier complet)        ║
+║    ODDS_API_KEY   (https://the-odds-api.com — 500 req/mois gratuit) ║
+║    RAPIDAPI_KEY   (https://rapidapi.com — calendrier complet)        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -63,7 +63,7 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 CLAUDE_MODEL  = "claude-sonnet-4-6"
 GEMINI_MODEL  = "gemini-2.5-pro"
-GITHUB_API    = "[https://api.github.com](https://api.github.com)"
+GITHUB_API    = "https://api.github.com"
 GITHUB_HEADERS = {
     "Authorization":        f"Bearer {GITHUB_TOKEN}",
     "Accept":               "application/vnd.github+json",
@@ -232,7 +232,7 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
     if DRY_RUN:
         logging.info(f"[DRY-RUN] Telegram ({len(html)} chars)")
         return True
-    url     = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){TELEGRAM_BOT_TOKEN}/sendMessage"
+    url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": html}
     if parse_mode:
         payload["parse_mode"] = parse_mode
@@ -283,7 +283,7 @@ def _envoyer_notification_sans_ticket(raison):
         return
     try:
         requests.post(
-            f"[https://api.telegram.org/bot](https://api.telegram.org/bot){TELEGRAM_BOT_TOKEN}/sendMessage",
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json={"chat_id": TELEGRAM_CHANNEL_ID, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
@@ -295,7 +295,7 @@ def _envoyer_notification_sans_ticket(raison):
 def _alerter_telegram_erreur(msg):
     try:
         requests.post(
-            f"[https://api.telegram.org/bot](https://api.telegram.org/bot){TELEGRAM_BOT_TOKEN}/sendMessage",
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json={"chat_id": TELEGRAM_CHANNEL_ID, "text": f"⚠️ ERREUR BOT\n{msg}"},
             timeout=5,
         )
@@ -329,7 +329,7 @@ def precollecte_odds_api(heure_utc_min):
         return matchs
     try:
         r = requests.get(
-            "[https://api.the-odds-api.com/v4/sports/tennis/odds](https://api.the-odds-api.com/v4/sports/tennis/odds)",
+            "https://api.the-odds-api.com/v4/sports/tennis/odds",
             params={"apiKey": ODDS_API_KEY, "regions": "eu",
                     "markets": "h2h", "oddsFormat": "decimal", "dateFormat": "iso"},
             timeout=10,
@@ -384,8 +384,7 @@ def precollecte_rapidapi_tennis(date_fr):
     }
     for tour in ["atp", "wta"]:
         try:
-            # URL modifiée avec /extend/api/
-            url  = f"[https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/extend/api/schedule/](https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/extend/api/schedule/){tour}/{date_api}"
+            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/extend/api/schedule/{tour}/{date_api}"
             r    = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
@@ -519,7 +518,6 @@ FORMAT JSON STRICT :
             ),
         )
         texte = rep.text.strip()
-        # Sécurisation des regex pour éviter le problème "unterminated string" du markdown
         texte = re.sub(r"^`{3}(?:json)?\s*", "", texte, flags=re.IGNORECASE)
         texte = re.sub(r"\s*`{3}$", "", texte)
         data  = json.loads(texte)
