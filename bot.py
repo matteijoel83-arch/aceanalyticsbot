@@ -668,8 +668,11 @@ RECHERCHES (max 10 requêtes — H2H et forme déjà fournis ci-dessus) :
 3. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
 4. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j, public local
 
-⚠️ NE PAS re-chercher le H2H ni la forme récente — ils sont déjà fournis dans le calendrier ci-dessus.
-PRIORITÉ : matchs avec cotes disponibles en premier.
+RÈGLES DE PRIORITÉ :
+- Retenir OBLIGATOIREMENT tous les matchs avec cotes disponibles dans le calendrier
+- Pour les matchs sans stats complètes → les inclure avec "non trouvé" dans les champs manquants
+- Ne jamais exclure un match à cause de données manquantes — Claude décidera
+- Si tu manques de requêtes, inclure le match avec les données partielles disponibles
 EXCLURE : qualifications, doubles. INCLURE : tableau principal uniquement.
 
 FORMAT JSON STRICT :
