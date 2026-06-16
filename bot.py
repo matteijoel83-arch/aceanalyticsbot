@@ -212,17 +212,18 @@ def sauvegarder_historique(hashes: list, sha):
 
 def _nettoyer_html_telegram(texte: str) -> str:
     """
-    Nettoie le texte pour qu'il soit compatible avec le parse_mode HTML de Telegram.
-    Supprime les caractères problématiques que Claude génère parfois malgré l'interdiction.
+    Nettoie le texte pour compatibilité HTML Telegram.
+    Supprime tous les caractères problématiques que Claude génère.
     """
-    # Supprimer les backslashes échappés \" qui causent l'erreur 400
+    # Supprimer les backslashes échappés \" → "
     texte = texte.replace('\\"', '"')
-    # Supprimer les balises Markdown résiduelles **texte** → texte
-    texte = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texte)
-    # Supprimer les balises Markdown _texte_ → texte
-    texte = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'\1', texte)
-    # Nettoyer les balises HTML mal formées (attributs, balises inconnues)
-    texte = re.sub(r'<(?!/?b>|/?i>|/?code>|/?pre>)[^>]+>', '', texte)
+    # Supprimer les backslashes résiduels \ seuls
+    texte = re.sub(r'\\(?![nrt])', '', texte)
+    # Convertir Markdown résiduel **texte** → <b>texte</b>
+    texte = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texte, flags=re.DOTALL)
+    # Supprimer les balises HTML non supportées par Telegram
+    # Telegram supporte uniquement : b, i, u, s, code, pre, a
+    texte = re.sub(r'<(?!/?(b|i|u|s|code|pre|a)(\s[^>]*)?>)[^>]+>', '', texte)
     return texte
     if len(texte) <= limite:
         return texte
