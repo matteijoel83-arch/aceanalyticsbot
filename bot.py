@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.4                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.6                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
 ║                                                                      ║
@@ -77,7 +77,7 @@ MAX_TICKETS   = 3
 
 # =====================================================================
 # 2. COUCHE GITHUB
-# =====================================================================
+# =================================================════====
 
 def _gh_get(path):
     url = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
@@ -377,8 +377,8 @@ def precollecte_rapidapi_tennis(date_fr):
         logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
         return matchs
     
-    # CORRECTION : Utilisation des slashes %Y/%m/%d pour correspondre à la route de l'API (ex: 2024/02/07)
-    date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y/%m/%d")
+    # CORRECTION : L'API attend le format AAAA-MM-JJ avec des tirets (vu sur l'image 1781606664222.jpeg)
+    date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
     
     headers  = {
         "x-rapidapi-key":  RAPIDAPI_KEY,
