@@ -368,7 +368,7 @@ def precollecte_odds_api(heure_utc_min):
     return matchs
 
 # =====================================================================
-# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS
+# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS (CORRIGÉ)
 # =====================================================================
 
 def precollecte_rapidapi_tennis(date_fr):
@@ -384,12 +384,23 @@ def precollecte_rapidapi_tennis(date_fr):
     }
     for tour in ["atp", "wta"]:
         try:
-            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/extend/api/schedule/{tour}/{date_api}"
+            # URL corrigée d'après l'endpoint getDateFixtures
+            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
             r    = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
-            schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
+            
+            # Gestion dynamique du format de réponse (liste ou dictionnaire imbriqué)
+            if isinstance(data, list):
+                schedule = data
+            else:
+                schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
+                if isinstance(schedule, dict):
+                    schedule = [schedule]
+                    
             for m in schedule:
+                if not isinstance(m, dict):
+                    continue
                 j1 = m.get("homePlayer") or m.get("home_player") or m.get("player1") or {}
                 j2 = m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {}
                 n1 = (j1.get("name") or j1.get("fullName") or str(j1)) if isinstance(j1, dict) else str(j1)
