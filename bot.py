@@ -406,45 +406,29 @@ MISSION : Collecter UNIQUEMENT les faits bruts. Tu ne fais AUCUNE analyse, AUCUN
 Un autre système (Claude) se chargera de l'analyse. Ton seul rôle est de chercher et structurer.
 
 RECHERCHES À EFFECTUER (dans cet ordre) :
-1. Matchs ATP et WTA du {date} qui commencent APRÈS {heure} (heure France)
-   → Sources : flashscore.fr, atptour.com, wtatennis.com
-   → INCLURE tous les tournois : Grand Chelem, Masters, ATP/WTA 500, ATP/WTA 250
-   → EXCLURE : qualifications (Q), wild cards (WC), doubles, pré-qualifications
+1. Liste COMPLÈTE des matchs ATP et WTA du {date} commençant APRÈS {heure} (heure France)
+   STRATÉGIE : Fais UNE recherche globale sur flashscore.fr/tennis/ pour obtenir
+   TOUS les matchs du jour en une seule requête, puis complète avec atptour.com et wtatennis.com.
+   → Rechercher : "tennis {date} matchs aujourd'hui programme complet flashscore"
+   → INCLURE : Grand Chelem, Masters 1000, ATP/WTA 500, ATP/WTA 250, ATP/WTA 125
+   → EXCLURE UNIQUEMENT : qualifications (Q), doubles, pré-qualifications
+   → Les Wild Cards (WC) du tableau principal sont INCLUS car couverts par Winamax
+   → Objectif : collecter le MAXIMUM de matchs possible en un minimum de requêtes
 
-2. Cotes Winamax pour CHAQUE match du tableau principal :
+2. Cotes Winamax pour les matchs retenus :
    {bloc_cotes}
 
-3. Pour chaque match retenu — forme récente des 2 joueurs (5 derniers matchs) :
-   → flashscore.fr (résultats récents, scores détaillés)
-   → sofascore.com/fr (stats avancées : aces, double fautes, % 1ère balle)
-   → tennisexplorer.com (historique complet par surface)
-   → tennisratio.com (Hold% et % break points — PRIORITÉ HAUTE pour les marchés Over/Under)
+3. Pour chaque match retenu — stats essentielles uniquement (1 requête par match max) :
+   → Forme récente J1 et J2 (5 derniers matchs) + Hold% si disponible sur tennisratio.com
+   → H2H global et par surface
+   → Priorité : flashscore.fr couvre forme ET H2H en une seule page par match
 
-4. H2H (historique direct entre les deux joueurs) :
-   → atptour.com ou wtatennis.com (H2H officiel)
-   → livetennis.com/h2h (H2H par surface)
-   → tennissignals.com (H2H détaillé avec contexte)
-   → flashscore.fr (onglet H2H sur chaque match)
+4. Charge physique (inclure dans la même requête que la forme) :
+   → Heures jouées 72h | Titre récent | Matchs enchaînés
 
-5. Charge physique et fatigue du calendrier (CRITIQUE) :
-   → Nombre de matchs joués dans les 72h précédentes + durée totale sur le court
-   → Signaler EXPLICITEMENT si l'un des joueurs :
-     * A joué plus de 2h30 la veille ou l'avant-veille
-     * A remporté un titre le dimanche précédant cette semaine
-     * A un match important prévu le lendemain (peut gérer son effort)
-     * A enchaîné 3 matchs ou plus en moins de 5 jours
-     * A voyagé sur un fuseau horaire différent dans les 72h
-
-6. Contexte psychologique et situationnel :
-   → Points ATP/WTA à défendre cette semaine vs l'an passé (pression de défense)
-   → Grand Chelem dans les 7 prochains jours (risque de gestion d'effort)
-   → Joueur qui joue devant son public national (avantage psychologique)
-   → Situation au classement : montée en puissance vs défense de rang
-   → Conflits publics récents (staff, blessure non déclarée, déclarations presse)
-   → Premier titre à portée (pression supplémentaire ou motivation décuplée)
-
-7. Forfaits, blessures ou absences annoncées dans les 48h :
-   → tennis.com, eurosport.fr, atptour.com/news, déclarations officielles joueurs/staff
+5. Contexte psychologique et blessures (1 requête globale) :
+   → "blessures forfaits tennis {date}" sur eurosport.fr ou tennis.com
+   → Points à défendre, Grand Chelem imminent, public local
 
 FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
 {{
