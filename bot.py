@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.3                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.4                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
 ║                                                                      ║
@@ -368,7 +368,7 @@ def precollecte_odds_api(heure_utc_min):
     return matchs
 
 # =====================================================================
-# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS (CORRIGÉ)
+# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS
 # =====================================================================
 
 def precollecte_rapidapi_tennis(date_fr):
@@ -376,7 +376,10 @@ def precollecte_rapidapi_tennis(date_fr):
     if not RAPIDAPI_KEY:
         logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
         return matchs
-    date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
+    
+    # CORRECTION : Utilisation des slashes %Y/%m/%d pour correspondre à la route de l'API (ex: 2024/02/07)
+    date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y/%m/%d")
+    
     headers  = {
         "x-rapidapi-key":  RAPIDAPI_KEY,
         "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
@@ -384,13 +387,11 @@ def precollecte_rapidapi_tennis(date_fr):
     }
     for tour in ["atp", "wta"]:
         try:
-            # URL corrigée d'après l'endpoint getDateFixtures
             url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
             r    = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
             
-            # Gestion dynamique du format de réponse (liste ou dictionnaire imbriqué)
             if isinstance(data, list):
                 schedule = data
             else:
