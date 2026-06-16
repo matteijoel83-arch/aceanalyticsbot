@@ -73,7 +73,7 @@ GITHUB_HEADERS = {
 STATS_VERSION = 1
 STATS_DEFAUT  = {"version": STATS_VERSION, "victoires": 0, "defaites": 0}
 TICKET_SEP    = "[SEPARATEUR]"
-MAX_TICKETS   = 3
+MAX_TICKETS   = 5
 
 # =====================================================================
 # 2. COUCHE GITHUB
@@ -784,6 +784,10 @@ CONFIANCE MODÉRÉE — Moneyline INTERDIT :
 MISES : Simple ÉLEVÉE 2% · Modérée 1% · Combiné 1% · Non vérifiée 0.5%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
+⚠️ RÈGLE FONDAMENTALE : La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
+Ne génère que les tickets où les 2 conditions sont solidement remplies.
+1 ticket excellent vaut mieux que 5 tickets moyens.
+Si seulement 1 ou 2 vraies opportunités existent → génère 1 ou 2 tickets.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
