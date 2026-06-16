@@ -481,14 +481,29 @@ def precollecte_rapidapi_tennis(date_fr):
 # 9. FUSION DES DEUX SOURCES
 # =====================================================================
 
+# =====================================================================
+# 9. FUSION DES DEUX SOURCES
+# =====================================================================
+
 def fusionner_calendrier(odds_matchs, rapid_matchs):
-    lignes = ["📋 CALENDRIER TENNIS PRÉ-COLLECTÉ :\n"]
+    """
+    Logique de fusion en 3 étapes :
+    1. RapidAPI Tennis → calendrier complet (468+ matchs)
+    2. Odds API → filtre "disponible sur Winamax" (cotes vérifiées)
+    3. Intersection → uniquement les matchs RapidAPI avec cote Winamax confirmée
+       + données complètes RapidAPI (H2H, forme, surface)
+    """
+    lignes = ["📋 MATCHS DISPONIBLES SUR WINAMAX (calendrier RapidAPI filtré) :\n"]
+
+    # Index Odds API par nom de joueur pour la correspondance
     odds_index = {}
     for cle, m in odds_matchs.items():
         odds_index[m["joueur1"].lower()] = m
         odds_index[m["joueur2"].lower()] = m
 
-    affiches = set()
+    matchs_winamax   = []  # Matchs RapidAPI avec cote Winamax confirmée
+    matchs_sans_cote = []  # Matchs RapidAPI sans cote Winamax
+    affiches         = set()
 
     for m in rapid_matchs:
         j1, j2 = m["joueur1"], m["joueur2"]
@@ -496,31 +511,62 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
         if cle in affiches:
             continue
         affiches.add(cle)
-        cote_info = ""
+
+        # Chercher cote Winamax correspondante dans Odds API
+        cote_trouvee = None
         for nom, data in odds_index.items():
             if j1.lower() in nom or nom in j1.lower() or j2.lower() in nom or nom in j2.lower():
                 if data.get("cote_j1") and data.get("cote_j2"):
-                    cote_info = (f" | Cotes {data['source_cote']}: "
-                                 f"{data['joueur1']} {data['cote_j1']:.2f} / "
-                                 f"{data['joueur2']} {data['cote_j2']:.2f}")
+                    cote_trouvee = data
                     break
-        lignes.append(f"• {m['heure']} | {j1} vs {j2} | {m['tournoi']}{cote_info}")
 
+        if cote_trouvee:
+            # ✅ Match disponible sur Winamax — on enrichit avec les données RapidAPI
+            m["cote_j1"]    = cote_trouvee["cote_j1"]
+            m["cote_j2"]    = cote_trouvee["cote_j2"]
+            m["source_cote"] = cote_trouvee["source_cote"]
+            matchs_winamax.append(m)
+            lignes.append(
+                f"• {m['heure']} | {j1} vs {j2} | {m['tournoi']} | {m['surface']}"
+                f" | Cotes {cote_trouvee['source_cote']}: {j1} {cote_trouvee['cote_j1']:.2f}"
+                f" / {j2} {cote_trouvee['cote_j2']:.2f}"
+            )
+        else:
+            # ❌ Pas de cote Winamax — Gemini vérifiera sur Sportytrader
+            matchs_sans_cote.append(m)
+
+    # Ajouter les matchs Odds API non trouvés dans RapidAPI (fallback)
     for cle, m in odds_matchs.items():
         j1, j2 = m["joueur1"], m["joueur2"]
         if f"{j1}|{j2}" not in affiches:
             affiches.add(f"{j1}|{j2}")
-            cote_info = ""
             if m.get("cote_j1") and m.get("cote_j2"):
-                cote_info = (f" | Cotes {m['source_cote']}: "
-                             f"{j1} {m['cote_j1']:.2f} / {j2} {m['cote_j2']:.2f}")
-            lignes.append(f"• {m['heure_utc']} | {j1} vs {j2}{cote_info}")
+                lignes.append(
+                    f"• {m['heure_utc']} | {j1} vs {j2}"
+                    f" | Cotes {m['source_cote']}: {j1} {m['cote_j1']:.2f}"
+                    f" / {j2} {m['cote_j2']:.2f}"
+                )
+                matchs_winamax.append({
+                    "joueur1": j1, "joueur2": j2,
+                    "heure": m["heure_utc"], "tournoi": "ATP/WTA",
+                    "surface": "non disponible",
+                    "cote_j1": m["cote_j1"], "cote_j2": m["cote_j2"],
+                    "source_cote": m["source_cote"],
+                })
 
-    total = len(affiches)
-    logging.info(f"Calendrier fusionné : {total} match(s) (RapidAPI + Odds API).")
-    if total == 0:
+    # Ajouter les matchs sans cote pour que Gemini vérifie sur Sportytrader
+    if matchs_sans_cote:
+        lignes.append(f"\n📋 MATCHS À VÉRIFIER SUR SPORTYTRADER ({len(matchs_sans_cote)}) :")
+        for m in matchs_sans_cote[:20]:  # Limiter pour ne pas surcharger Gemini
+            lignes.append(f"• {m['heure']} | {m['joueur1']} vs {m['joueur2']} | {m['tournoi']}")
+
+    total_winamax = len(matchs_winamax)
+    logging.info(f"Calendrier fusionné : {total_winamax} match(s) Winamax confirmés + {len(matchs_sans_cote)} à vérifier.")
+
+    if total_winamax == 0 and not matchs_sans_cote:
         return ""
-    lignes.append(f"\nTotal : {total} match(s).")
+
+    lignes.append(f"\nTotal Winamax confirmé : {total_winamax} match(s).")
     return "\n".join(lignes)
 
 # =====================================================================
@@ -568,7 +614,7 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
         if not id1 or not id2:
             continue
 
-        # --- H2H (1 requête) ---
+        # --- REQ 1 : H2H info (bilan all-time + récent) ---
         if requetes_utilisees < budget_requetes:
             data = _get(f"{base}/{tour}/h2h/info/{id1}/{id2}")
             requetes_utilisees += 1
@@ -580,10 +626,29 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
                 m["h2h_api"] = (
                     f"{m['joueur1']} {p1w} victoires all-time / "
                     f"{m['joueur2']} {p2w} victoires all-time. "
-                    f"Récent (derniers matchs) : {p1r} vs {p2r}"
+                    f"Récent : {p1r} vs {p2r}"
                 )
 
-        # --- Forme récente J1 (1 requête pour les 2 joueurs via past-matches) ---
+        # --- REQ 2 : H2H matches (forme des 2 joueurs + surface en 1 seule requête) ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(
+                f"{base}/{tour}/h2h/matches/{id1}/{id2}",
+                params={"include": "tournament.court,round", "pageSize": 10}
+            )
+            requetes_utilisees += 1
+            if data:
+                matchs_h2h = data.get("data", [])
+                h2h_detail = []
+                for pm in matchs_h2h[:5]:
+                    gagnant = pm.get("player1", {}).get("id")
+                    surf    = ((pm.get("tournament") or {}).get("court") or {}).get("name", "?")
+                    rnd     = (pm.get("round") or {}).get("name", "?")
+                    score   = pm.get("result", "")
+                    vainqueur = m["joueur1"] if gagnant == id1 else m["joueur2"]
+                    h2h_detail.append(f"{vainqueur} ({surf} / {rnd}) {score}")
+                m["h2h_detail_api"] = " | ".join(h2h_detail) if h2h_detail else "Première confrontation"
+
+        # --- REQ 3 : Forme récente J1 (5 derniers matchs avec surface) ---
         if requetes_utilisees < budget_requetes:
             data = _get(
                 f"{base}/{tour}/player/past-matches/{id1}",
@@ -591,18 +656,16 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
             )
             requetes_utilisees += 1
             if data:
-                matchs_recents = data.get("data", [])
                 forme = []
-                for pm in matchs_recents[:5]:
+                for pm in data.get("data", [])[:5]:
                     gagnant = pm.get("player1", {}).get("id")
                     surf    = ((pm.get("tournament") or {}).get("court") or {}).get("name", "?")
                     adv     = pm.get("player2", {}) if gagnant == id1 else pm.get("player1", {})
                     res     = "V" if gagnant == id1 else "D"
-                    score   = pm.get("result", "")
-                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {score}")
+                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {pm.get('result','')}")
                 m["forme_j1_api"] = " | ".join(forme) if forme else "non disponible"
 
-        # --- Forme récente J2 (1 requête) ---
+        # --- REQ 4 : Forme récente J2 ---
         if requetes_utilisees < budget_requetes:
             data = _get(
                 f"{base}/{tour}/player/past-matches/{id2}",
@@ -610,16 +673,62 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
             )
             requetes_utilisees += 1
             if data:
-                matchs_recents = data.get("data", [])
                 forme = []
-                for pm in matchs_recents[:5]:
+                for pm in data.get("data", [])[:5]:
                     gagnant = pm.get("player1", {}).get("id")
                     surf    = ((pm.get("tournament") or {}).get("court") or {}).get("name", "?")
                     adv     = pm.get("player2", {}) if gagnant == id2 else pm.get("player1", {})
                     res     = "V" if gagnant == id2 else "D"
-                    score   = pm.get("result", "")
-                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {score}")
+                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {pm.get('result','')}")
                 m["forme_j2_api"] = " | ".join(forme) if forme else "non disponible"
+
+        # --- REQ 5 : Stats service/retour J1 (Hold%, aces, break points) ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(f"{base}/{tour}/player/match-stats/{id1}")
+            requetes_utilisees += 1
+            if data:
+                srv = (data.get("data") or {}).get("serviceStats") or {}
+                bp  = (data.get("data") or {}).get("breakPointsServeStats") or {}
+                fs_in  = srv.get("firstServeGm", 0) or 0
+                fs_tot = srv.get("firstServeOfGm", 1) or 1
+                ws1_in  = srv.get("winningOnFirstServeGm", 0) or 0
+                ws1_tot = srv.get("winningOnFirstServeOfGm", 1) or 1
+                ws2_in  = srv.get("winningOnSecondServeGm", 0) or 0
+                ws2_tot = srv.get("winningOnSecondServeOfGm", 1) or 1
+                bp_face = bp.get("breakPointFacedGm", 0) or 0
+                bp_save = bp.get("breakPointSavedGm", 0) or 0
+                hold_pct = round((bp_save / bp_face * 100) if bp_face > 0 else 0, 1)
+                m["stats_j1_api"] = (
+                    f"1ère balle: {round(fs_in/fs_tot*100,1) if fs_tot else '?'}% | "
+                    f"Pts gagnés/1ère: {round(ws1_in/ws1_tot*100,1) if ws1_tot else '?'}% | "
+                    f"Pts gagnés/2ème: {round(ws2_in/ws2_tot*100,1) if ws2_tot else '?'}% | "
+                    f"Hold%: {hold_pct}% | "
+                    f"Aces: {srv.get('acesGm','?')} | DF: {srv.get('doubleFaultsGm','?')}"
+                )
+
+        # --- REQ 6 : Stats service/retour J2 ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(f"{base}/{tour}/player/match-stats/{id2}")
+            requetes_utilisees += 1
+            if data:
+                srv = (data.get("data") or {}).get("serviceStats") or {}
+                bp  = (data.get("data") or {}).get("breakPointsServeStats") or {}
+                fs_in  = srv.get("firstServeGm", 0) or 0
+                fs_tot = srv.get("firstServeOfGm", 1) or 1
+                ws1_in  = srv.get("winningOnFirstServeGm", 0) or 0
+                ws1_tot = srv.get("winningOnFirstServeOfGm", 1) or 1
+                ws2_in  = srv.get("winningOnSecondServeGm", 0) or 0
+                ws2_tot = srv.get("winningOnSecondServeOfGm", 1) or 1
+                bp_face = bp.get("breakPointFacedGm", 0) or 0
+                bp_save = bp.get("breakPointSavedGm", 0) or 0
+                hold_pct = round((bp_save / bp_face * 100) if bp_face > 0 else 0, 1)
+                m["stats_j2_api"] = (
+                    f"1ère balle: {round(fs_in/fs_tot*100,1) if fs_tot else '?'}% | "
+                    f"Pts gagnés/1ère: {round(ws1_in/ws1_tot*100,1) if ws1_tot else '?'}% | "
+                    f"Pts gagnés/2ème: {round(ws2_in/ws2_tot*100,1) if ws2_tot else '?'}% | "
+                    f"Hold%: {hold_pct}% | "
+                    f"Aces: {srv.get('acesGm','?')} | DF: {srv.get('doubleFaultsGm','?')}"
+                )
 
     logging.info(f"RapidAPI enrichissement — {requetes_utilisees} requête(s) utilisée(s).")
     return tries  # Retourne dans l'ordre priorisé
@@ -637,10 +746,16 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None)
                 if m.get("joueur1", "") in ligne and m.get("joueur2", "") in ligne:
                     if m.get("h2h_api"):
                         lignes_enrichies.append(f"  ↳ H2H: {m['h2h_api']}")
+                    if m.get("h2h_detail_api"):
+                        lignes_enrichies.append(f"  ↳ H2H détail: {m['h2h_detail_api']}")
                     if m.get("forme_j1_api"):
                         lignes_enrichies.append(f"  ↳ Forme {m['joueur1']}: {m['forme_j1_api']}")
+                    if m.get("stats_j1_api"):
+                        lignes_enrichies.append(f"  ↳ Stats service {m['joueur1']}: {m['stats_j1_api']}")
                     if m.get("forme_j2_api"):
                         lignes_enrichies.append(f"  ↳ Forme {m['joueur2']}: {m['forme_j2_api']}")
+                    if m.get("stats_j2_api"):
+                        lignes_enrichies.append(f"  ↳ Stats service {m['joueur2']}: {m['stats_j2_api']}")
                     break
         calendrier_injecte = "\n".join(lignes_enrichies)
 
@@ -667,10 +782,16 @@ RECHERCHES (max 10 requêtes — H2H et forme déjà fournis ci-dessus) :
 2. Charge physique — heures jouées 72h, titre récent, matchs enchaînés (flashscore.fr)
 3. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
 4. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j, public local
+5. Pour tout match SANS cote dans le calendrier — vérifier sur sportytrader.com/fr/cotes/tennis/
+   → Cote Winamax trouvée sur Sportytrader → l'inclure avec source_cote = "Sportytrader"
+   → Introuvable sur Sportytrader → source_cote = "non trouvée" (sera exclu par l'analyseur)
+
+⚠️ NE PAS re-chercher le H2H ni la forme récente — déjà fournis dans le calendrier.
+⚠️ Un match sans cote vérifiée (Odds API OU Sportytrader) = source_cote "non trouvée".
 
 RÈGLES DE PRIORITÉ :
-- Retenir OBLIGATOIREMENT tous les matchs avec cotes disponibles dans le calendrier
-- Pour les matchs sans stats complètes → les inclure avec "non trouvé" dans les champs manquants
+- Retenir OBLIGATOIREMENT tous les matchs avec cotes disponibles (Odds API ou Sportytrader)
+- Pour les matchs sans stats complètes → inclure avec "non trouvé" dans les champs manquants
 - Ne jamais exclure un match à cause de données manquantes — Claude décidera
 - Si tu manques de requêtes, inclure le match avec les données partielles disponibles
 EXCLURE : qualifications, doubles. INCLURE : tableau principal uniquement.
@@ -746,7 +867,7 @@ FILTRES IMMÉDIATS :
 • alertes_physiques → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs + mise 0.5%
 • Qualifications ou hors tableau principal → skip
-• Cote non trouvée → analyser + mise 0.5% + "non vérifiée"
+• Cote "non trouvée" → skip automatique (pas de marché = impossible à jouer sur Winamax)
 
 CALIBRATION PROBABILITÉS :
 • Cote < 1.50  → MAX 75%
@@ -784,7 +905,7 @@ CONFIANCE MODÉRÉE — Moneyline INTERDIT :
   Surface lente → Under · +2.5 sets · 2-1
   Combiné MODÉRÉE → INTERDIT
 
-MISES : Simple ÉLEVÉE 2% · Modérée 1% · Combiné 1% · Non vérifiée 0.5%
+MISES : Simple ÉLEVÉE 2% · Modérée 1% · Combiné 1%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️ RÈGLE FONDAMENTALE : La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
