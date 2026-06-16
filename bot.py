@@ -376,39 +376,42 @@ def precollecte_rapidapi_tennis(date_fr):
     if not RAPIDAPI_KEY:
         logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
         return matchs
-    
-    # MatchStat utilise le format YYYY-MM-DD
     date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
-    
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com" 
-        # Vérifiez sur le Dashboard RapidAPI si l'hôte est bien celui-ci
+    headers  = {
+        "x-rapidapi-key":  RAPIDAPI_KEY,
+        "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
+        "Content-Type":    "application/json",
     }
-    
-    try:
-        # Endpoint typique pour le calendrier du jour selon la doc MatchStat
-        url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{date_api}"
-        r = requests.get(url, headers=headers, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        
-        # Adaptation selon la structure retournée par MatchStat
-        # (souvent une liste d'objets 'match')
-        for m in data.get("result", []):
-            matchs.append({
-                "joueur1": m.get("home_player", {}).get("name", "Inconnu"),
-                "joueur2": m.get("away_player", {}).get("name", "Inconnu"),
-                "heure": m.get("start_time", "00:00"),
-                "tournoi": m.get("tournament", {}).get("name", "ATP/WTA"),
-                "surface": m.get("surface", "Non précisé")
-            })
-    except Exception as e:
-        logging.error(f"Erreur MatchStat API : {e}")
-        
-    logging.info(f"MatchStat Tennis — {len(matchs)} match(s) récupérés.")
+    for tour in ["atp", "wta"]:
+        try:
+            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{tour}/{date_api}"
+            r    = requests.get(url, headers=headers, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
+            for m in schedule:
+                j1 = m.get("homePlayer") or m.get("home_player") or m.get("player1") or {}
+                j2 = m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {}
+                n1 = (j1.get("name") or j1.get("fullName") or str(j1)) if isinstance(j1, dict) else str(j1)
+                n2 = (j2.get("name") or j2.get("fullName") or str(j2)) if isinstance(j2, dict) else str(j2)
+                if not n1 or not n2 or n1 == n2:
+                    continue
+                h  = m.get("startTime") or m.get("time") or m.get("date", "?")
+                if "T" in str(h):
+                    h = h[:16].replace("T", " ") + " UTC"
+                trn = m.get("tournament") or m.get("league") or {}
+                nom_trn = (trn.get("name") or trn.get("title") or str(trn)) if isinstance(trn, dict) else str(trn)
+                matchs.append({
+                    "joueur1": str(n1).strip(), "joueur2": str(n2).strip(),
+                    "heure": str(h).strip(), "tournoi": str(nom_trn).strip(),
+                    "surface": str(m.get("surface") or "non disponible").strip(),
+                })
+        except requests.exceptions.HTTPError as e:
+            logging.warning(f"RapidAPI {tour.upper()} : {e}")
+        except Exception as e:
+            logging.warning(f"RapidAPI {tour.upper()} erreur : {e}")
+    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s).")
     return matchs
-
 
 # =====================================================================
 # 9. FUSION DES DEUX SOURCES
