@@ -1,4 +1,4 @@
-name: AceAnalytics — Bot Tennis
+Name: AceAnalytics — Bot Tennis
 
 on:
   workflow_dispatch:   # Déclenché uniquement par cron-job.org ou manuellement
@@ -19,6 +19,7 @@ jobs:
       GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPO:         ${{ github.repository }}
       ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
+      RAPIDAPI_KEY:        ${{ secrets.RAPIDAPI_KEY }}
 
     steps:
       - name: "Checkout du dépôt"
