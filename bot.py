@@ -200,10 +200,24 @@ def sauvegarder_historique(hashes, sha):
 
 def _nettoyer_html_telegram(texte):
     """Nettoie le texte pour compatibilité HTML Telegram."""
+    # Backslashes problématiques
     texte = texte.replace('\\"', '"')
     texte = re.sub(r'\\(?![nrt"\'\\])', '', texte)
+    # Markdown résiduel → HTML
     texte = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texte, flags=re.DOTALL)
+    # Supprimer balises non supportées par Telegram
     texte = re.sub(r'<(?!/?(b|i|u|s|code|pre|a)(\s[^>]*)?>)[^>]+>', '', texte)
+    # Supprimer balises fermantes orphelines </b> </i> sans ouvrante correspondante
+    for tag in ['b', 'i', 'u', 's', 'code', 'pre']:
+        ouvertes = texte.count(f'<{tag}>')
+        fermees  = texte.count(f'</{tag}>')
+        if fermees > ouvertes:
+            # Supprimer les fermantes en excès (de droite à gauche)
+            for _ in range(fermees - ouvertes):
+                texte = texte[::-1].replace(f'>{tag}/<'[::-1], '', 1)[::-1]
+        elif ouvertes > fermees:
+            # Fermer les ouvrantes non fermées
+            texte += f'</{tag}>' * (ouvertes - fermees)
     return texte
 
 
@@ -437,13 +451,16 @@ def precollecte_rapidapi_tennis(date_fr):
                     round_n = rnd.get("name", "")
 
                     matchs.append({
-                        "joueur1": n1.strip(),
-                        "joueur2": n2.strip(),
-                        "heure":   h,
-                        "tournoi": f"{nom_trn} — {round_n}".strip(" —"),
-                        "surface": surface,
-                        "odd1":    m.get("odd1"),
-                        "odd2":    m.get("odd2"),
+                        "joueur1":    n1.strip(),
+                        "joueur2":    n2.strip(),
+                        "id1":        j1.get("id"),   # ID RapidAPI — utilisé pour H2H/stats
+                        "id2":        j2.get("id"),
+                        "tour":       tour,            # atp ou wta
+                        "heure":      h,
+                        "tournoi":    f"{nom_trn} — {round_n}".strip(" —"),
+                        "surface":    surface,
+                        "odd1":       m.get("odd1"),
+                        "odd2":       m.get("odd2"),
                     })
 
                 if not has_next:
@@ -507,15 +524,131 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
     return "\n".join(lignes)
 
 # =====================================================================
-# 10. COLLECTE GEMINI (stats + H2H + contexte)
+# 10. MODULE C — ENRICHISSEMENT RAPIDAPI (H2H + Forme + Stats)
 # =====================================================================
 
-def collecter_donnees_tennis(date, heure, calendrier_injecte):
+def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> list:
+    """
+    Enrichit les matchs avec H2H, forme récente et stats via RapidAPI.
+    Budget strict : max budget_requetes appels pour garder < 500/mois.
+    Priorité : matchs avec cotes disponibles en premier.
+    Les IDs joueurs viennent directement des fixtures — pas de résolution nom→ID.
+    """
+    if not RAPIDAPI_KEY or not rapid_matchs:
+        return rapid_matchs
+
+    headers = {
+        "x-rapidapi-key":  RAPIDAPI_KEY,
+        "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
+    }
+
+    def _get(url, params=None):
+        try:
+            r = requests.get(url, headers=headers, params=params, timeout=8)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            logging.warning(f"RapidAPI enrichissement : {e}")
+            return None
+
+    # Prioriser les matchs avec cotes (plus analysables)
+    tries = sorted(rapid_matchs, key=lambda m: (m.get("odd1") is None))
+
+    requetes_utilisees = 0
+    base = "https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2"
+
+    for m in tries:
+        if requetes_utilisees >= budget_requetes:
+            break
+
+        id1  = m.get("id1")
+        id2  = m.get("id2")
+        tour = m.get("tour", "atp")
+
+        if not id1 or not id2:
+            continue
+
+        # --- H2H (1 requête) ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(f"{base}/{tour}/h2h/info/{id1}/{id2}")
+            requetes_utilisees += 1
+            if data:
+                p1w = data.get("player1AllWins", "?")
+                p2w = data.get("player2AllWins", "?")
+                p1r = data.get("player1Wins", "?")
+                p2r = data.get("player2Wins", "?")
+                m["h2h_api"] = (
+                    f"{m['joueur1']} {p1w} victoires all-time / "
+                    f"{m['joueur2']} {p2w} victoires all-time. "
+                    f"Récent (derniers matchs) : {p1r} vs {p2r}"
+                )
+
+        # --- Forme récente J1 (1 requête pour les 2 joueurs via past-matches) ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(
+                f"{base}/{tour}/player/past-matches/{id1}",
+                params={"include": "tournament.court", "pageSize": 5}
+            )
+            requetes_utilisees += 1
+            if data:
+                matchs_recents = data.get("data", [])
+                forme = []
+                for pm in matchs_recents[:5]:
+                    gagnant = pm.get("player1", {}).get("id")
+                    surf    = ((pm.get("tournament") or {}).get("court") or {}).get("name", "?")
+                    adv     = pm.get("player2", {}) if gagnant == id1 else pm.get("player1", {})
+                    res     = "V" if gagnant == id1 else "D"
+                    score   = pm.get("result", "")
+                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {score}")
+                m["forme_j1_api"] = " | ".join(forme) if forme else "non disponible"
+
+        # --- Forme récente J2 (1 requête) ---
+        if requetes_utilisees < budget_requetes:
+            data = _get(
+                f"{base}/{tour}/player/past-matches/{id2}",
+                params={"include": "tournament.court", "pageSize": 5}
+            )
+            requetes_utilisees += 1
+            if data:
+                matchs_recents = data.get("data", [])
+                forme = []
+                for pm in matchs_recents[:5]:
+                    gagnant = pm.get("player1", {}).get("id")
+                    surf    = ((pm.get("tournament") or {}).get("court") or {}).get("name", "?")
+                    adv     = pm.get("player2", {}) if gagnant == id2 else pm.get("player1", {})
+                    res     = "V" if gagnant == id2 else "D"
+                    score   = pm.get("result", "")
+                    forme.append(f"{res} vs {adv.get('name','?')} ({surf}) {score}")
+                m["forme_j2_api"] = " | ".join(forme) if forme else "non disponible"
+
+    logging.info(f"RapidAPI enrichissement — {requetes_utilisees} requête(s) utilisée(s).")
+    return tries  # Retourne dans l'ordre priorisé
+
+
+
+
+def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None):
+    # Enrichir le texte du calendrier avec les données RapidAPI déjà collectées
+    if rapid_matchs and calendrier_injecte:
+        lignes_enrichies = []
+        for ligne in calendrier_injecte.split("\n"):
+            lignes_enrichies.append(ligne)
+            for m in rapid_matchs:
+                if m.get("joueur1", "") in ligne and m.get("joueur2", "") in ligne:
+                    if m.get("h2h_api"):
+                        lignes_enrichies.append(f"  ↳ H2H: {m['h2h_api']}")
+                    if m.get("forme_j1_api"):
+                        lignes_enrichies.append(f"  ↳ Forme {m['joueur1']}: {m['forme_j1_api']}")
+                    if m.get("forme_j2_api"):
+                        lignes_enrichies.append(f"  ↳ Forme {m['joueur2']}: {m['forme_j2_api']}")
+                    break
+        calendrier_injecte = "\n".join(lignes_enrichies)
+
     bloc = (
         f"{calendrier_injecte}\n\n"
-        f"→ Calendrier COMPLET. Ne pas le re-vérifier.\n"
+        f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
         f"→ Filtrer les matchs commençant APRÈS {heure} (heure France).\n"
-        f"→ Pour cotes manquantes : sportytrader.com ou compare-bet.fr."
+        f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
         if calendrier_injecte else
         f"Cherche les matchs du {date} après {heure} sur flashscore.fr et atptour.com."
     )
@@ -529,12 +662,13 @@ Tes 10 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
 
 {bloc}
 
-RECHERCHES (max 10 requêtes) :
-1. Forme J1 et J2 (5 derniers matchs) + Hold% — 1 requête/match sur flashscore.fr
-2. H2H global et par surface — flashscore.fr ou atptour.com
-3. Charge physique — heures jouées 72h, titre récent, matchs enchaînés
-4. Blessures/forfaits (1 requête globale) — eurosport.fr ou tennis.com
+RECHERCHES (max 10 requêtes — H2H et forme déjà fournis ci-dessus) :
+1. Hold% service/retour via tennisratio.com — 1 requête par match avec cotes
+2. Charge physique — heures jouées 72h, titre récent, matchs enchaînés (flashscore.fr)
+3. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
+4. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j, public local
 
+⚠️ NE PAS re-chercher le H2H ni la forme récente — ils sont déjà fournis dans le calendrier ci-dessus.
 PRIORITÉ : matchs avec cotes disponibles en premier.
 EXCLURE : qualifications, doubles. INCLURE : tableau principal uniquement.
 
@@ -682,8 +816,9 @@ def run_bot_autonome():
 
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     rapid_matchs       = precollecte_rapidapi_tennis(date)
+    rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
-    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte)
+    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs)
 
     try:
         donnees = json.loads(donnees_json)
