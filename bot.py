@@ -1,26 +1,15 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.0                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.1                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
-║  Pré-collecte : Odds API + Flashscore → calendrier complet injecté  ║
+║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
 ║                                                                      ║
 ║  Secrets GitHub requis :                                             ║
 ║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
 ║    GITHUB_TOKEN       · GITHUB_REPO · GEMINI_API_KEY                ║
-║  Secret optionnel :                                                  ║
-║    ODDS_API_KEY  (https://the-odds-api.com — gratuit 500 req/mois)  ║
-║                                                                      ║
-║  Flux :                                                              ║
-║    1. Odds API + Flashscore → pré-collecte calendrier complet        ║
-║    2. Gemini 2.5 Pro  → stats, H2H, contexte (10 requêtes dédiées)  ║
-║    3. Claude Sonnet   → analyse + calcul value + génère tickets      ║
-║    4. Telegram        → envoi + sauvegarde GitHub                    ║
-║                                                                      ║
-║  Usage CLI :                                                         ║
-║    python bot.py              → analyse + envoi Telegram             ║
-║    python bot.py --dry-run    → simulation, aucun envoi réel         ║
-║    python bot.py resultat v   → enregistrer une victoire             ║
-║    python bot.py resultat d   → enregistrer une défaite              ║
+║  Secrets optionnels :                                                ║
+║    ODDS_API_KEY   (https://the-odds-api.com — 500 req/mois gratuit) ║
+║    RAPIDAPI_KEY   (https://rapidapi.com — calendrier complet)        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -53,7 +42,8 @@ TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 GITHUB_TOKEN        = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO         = os.environ.get("GITHUB_REPO")
-ODDS_API_KEY        = os.environ.get("ODDS_API_KEY")
+ODDS_API_KEY        = os.environ.get("ODDS_API_KEY")    # Optionnel
+RAPIDAPI_KEY        = os.environ.get("RAPIDAPI_KEY")    # Optionnel
 
 MISSING = [k for k, v in {
     "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
@@ -71,10 +61,9 @@ if MISSING:
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
-CLAUDE_MODEL = "claude-sonnet-4-6"
-GEMINI_MODEL = "gemini-2.5-pro"
-
-GITHUB_API     = "https://api.github.com"
+CLAUDE_MODEL  = "claude-sonnet-4-6"
+GEMINI_MODEL  = "gemini-2.5-pro"
+GITHUB_API    = "https://api.github.com"
 GITHUB_HEADERS = {
     "Authorization":        f"Bearer {GITHUB_TOKEN}",
     "Accept":               "application/vnd.github+json",
@@ -90,7 +79,7 @@ MAX_TICKETS   = 3
 # 2. COUCHE GITHUB
 # =====================================================================
 
-def _gh_get(path: str) -> tuple:
+def _gh_get(path):
     url = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     try:
         r = requests.get(url, headers=GITHUB_HEADERS, timeout=10)
@@ -104,7 +93,7 @@ def _gh_get(path: str) -> tuple:
         return None, None
 
 
-def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> bool:
+def _gh_put(path, contenu, message, sha=None, retries=2):
     url     = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     payload = {
         "message": message,
@@ -118,7 +107,6 @@ def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> boo
         try:
             r = requests.put(url, headers=GITHUB_HEADERS, json=payload, timeout=15)
             if r.status_code == 409 and t < retries:
-                logging.warning(f"GitHub 409 '{path}' — re-fetch SHA.")
                 _, sha_frais = _gh_get(path)
                 if sha_frais:
                     payload["sha"] = sha_frais
@@ -134,7 +122,7 @@ def _gh_put(path: str, contenu, message: str, sha=None, retries: int = 2) -> boo
     return False
 
 
-def _gh_delete(path: str, message: str, sha: str) -> bool:
+def _gh_delete(path, message, sha):
     url = f"{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}"
     try:
         r = requests.delete(url, headers=GITHUB_HEADERS,
@@ -150,32 +138,32 @@ def _gh_delete(path: str, message: str, sha: str) -> bool:
 # 3. STATISTIQUES
 # =====================================================================
 
-def _migrer_stats(s: dict) -> dict:
+def _migrer_stats(s):
     if s.get("version", 0) < 1:
         s["version"] = STATS_VERSION
     return s
 
 
-def charger_stats() -> dict:
+def charger_stats():
     s, _ = _gh_get("stats.json")
     if not isinstance(s, dict) or "victoires" not in s:
         return dict(STATS_DEFAUT)
     return _migrer_stats(s)
 
 
-def calculer_winrate(s: dict) -> float:
+def calculer_winrate(s):
     total = s["victoires"] + s["defaites"]
     return (s["victoires"] / total * 100) if total > 0 else 0.0
 
 
-def enregistrer_resultat(victoire: bool, pari_termine: str = None):
+def enregistrer_resultat(victoire, pari_termine=None):
     s, sha = _gh_get("stats.json")
     if not isinstance(s, dict) or "victoires" not in s:
         s = dict(STATS_DEFAUT)
     s["victoires" if victoire else "defaites"] += 1
     s = _migrer_stats(s)
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Stats simulées : {s}")
+        logging.info(f"[DRY-RUN] Stats : {s}")
     else:
         _gh_put("stats.json", s, "🔄 Maj stats", sha=sha)
     if pari_termine and not DRY_RUN:
@@ -183,7 +171,7 @@ def enregistrer_resultat(victoire: bool, pari_termine: str = None):
         if isinstance(paris, list):
             restants = [p for p in paris if p.get("pari") != pari_termine]
             if restants:
-                _gh_put("pari_en_cours.json", restants, "🧹 Nettoyage paris", sha=psha)
+                _gh_put("pari_en_cours.json", restants, "🧹 Nettoyage", sha=psha)
             elif psha:
                 _gh_delete("pari_en_cours.json", "🗑️ File vide", sha=psha)
     logging.info(f"{'✅ VICTOIRE' if victoire else '❌ DÉFAITE'} — {s['victoires']}V / {s['defaites']}D")
@@ -192,49 +180,43 @@ def enregistrer_resultat(victoire: bool, pari_termine: str = None):
 # 4. DÉDUPLICATION PAR HASH SHA-256
 # =====================================================================
 
-def _hash_ticket(ticket: str) -> str:
+def _hash_ticket(ticket):
     return hashlib.sha256(
         re.sub(r"\s+", " ", ticket.strip().lower())[:300].encode()
     ).hexdigest()
 
 
-def charger_historique() -> tuple:
+def charger_historique():
     h, sha = _gh_get("historique.json")
     return (h if isinstance(h, list) else []), sha
 
 
-def sauvegarder_historique(hashes: list, sha):
+def sauvegarder_historique(hashes, sha):
     _gh_put("historique.json", hashes[-20:], "📚 Maj historique", sha=sha)
 
 # =====================================================================
 # 5. TELEGRAM
 # =====================================================================
 
-def _nettoyer_html_telegram(texte: str) -> str:
-    """
-    Nettoie le texte pour compatibilité HTML Telegram.
-    Supprime tous les caractères problématiques que Claude génère.
-    """
-    # Supprimer les backslashes échappés \" → "
+def _nettoyer_html_telegram(texte):
+    """Nettoie le texte pour compatibilité HTML Telegram."""
     texte = texte.replace('\\"', '"')
-    # Supprimer les backslashes résiduels \ seuls
-    texte = re.sub(r'\\(?![nrt])', '', texte)
-    # Convertir Markdown résiduel **texte** → <b>texte</b>
+    texte = re.sub(r'\\(?![nrt"\'\\])', '', texte)
     texte = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texte, flags=re.DOTALL)
-    # Supprimer les balises HTML non supportées par Telegram
-    # Telegram supporte uniquement : b, i, u, s, code, pre, a
     texte = re.sub(r'<(?!/?(b|i|u|s|code|pre|a)(\s[^>]*)?>)[^>]+>', '', texte)
     return texte
+
+
+def _tronquer(texte, limite=3500):
     if len(texte) <= limite:
         return texte
     coupe = texte.rfind("\n", 0, limite)
     return texte[:coupe if coupe != -1 else limite] + "\n\n… [Analyse tronquée]"
 
 
-def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> bool:
+def envoyer_sur_telegram(message, stats=None, retries=3):
     if stats is None:
         stats = charger_stats()
-    # Nettoyer le HTML avant tout — élimine les \" et balises problématiques
     message = _nettoyer_html_telegram(message)
     sig = (
         f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
@@ -243,13 +225,12 @@ def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> 
     )
     html = message + sig
     if len(html) > 4000:
-        logging.warning("Message trop long — troncature propre.")
         html = _tronquer(re.sub(r"<[^>]+>", "", message), 3500) + sig
         parse_mode = None
     else:
         parse_mode = "HTML"
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Telegram simulé ({len(html)} chars)")
+        logging.info(f"[DRY-RUN] Telegram ({len(html)} chars)")
         return True
     url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": html}
@@ -259,26 +240,22 @@ def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> 
         try:
             r = requests.post(url, json=payload, timeout=10)
             if r.status_code == 429:
-                wait = r.json().get("parameters", {}).get("retry_after", 5)
-                logging.warning(f"Rate-limit Telegram — attente {wait}s.")
-                time.sleep(wait)
+                time.sleep(r.json().get("parameters", {}).get("retry_after", 5))
                 continue
             r.raise_for_status()
             logging.info("✅ Telegram envoyé.")
             return True
         except requests.exceptions.Timeout:
-            logging.warning(f"Telegram timeout tentative {t}.")
+            logging.warning(f"Telegram timeout {t}.")
         except requests.exceptions.HTTPError as e:
             logging.error(f"Telegram HTTP {e} — {r.text}")
             if r.status_code == 400 and parse_mode == "HTML":
                 logging.warning("Telegram 400 — fallback texte brut.")
                 try:
-                    r2 = requests.post(
-                        url,
-                        json={"chat_id": TELEGRAM_CHANNEL_ID,
-                              "text": re.sub(r"<[^>]+>", "", html)[:4000]},
-                        timeout=10,
-                    )
+                    r2 = requests.post(url, json={
+                        "chat_id": TELEGRAM_CHANNEL_ID,
+                        "text": re.sub(r"<[^>]+>", "", html)[:4000]
+                    }, timeout=10)
                     r2.raise_for_status()
                     logging.info("✅ Telegram envoyé (texte brut).")
                     return True
@@ -294,17 +271,15 @@ def envoyer_sur_telegram(message: str, stats: dict = None, retries: int = 3) -> 
     return False
 
 
-def _envoyer_notification_sans_ticket(raison: str):
+def _envoyer_notification_sans_ticket(raison):
     stats = charger_stats()
-    wr    = calculer_winrate(stats)
     msg   = (
-        f"📊 <b>ACEANALYTICS — Analyse du jour</b>\n\n"
-        f"{raison}\n\n"
+        f"📊 <b>ACEANALYTICS — Analyse du jour</b>\n\n{raison}\n\n"
         f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']} | "
-        f"📈 Win Rate : {wr:.1f}%"
+        f"📈 Win Rate : {calculer_winrate(stats):.1f}%"
     )
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Notification sans ticket : {msg}")
+        logging.info(f"[DRY-RUN] Notification sans ticket")
         return
     try:
         requests.post(
@@ -314,10 +289,10 @@ def _envoyer_notification_sans_ticket(raison: str):
         )
         logging.info("Notification 'sans ticket' envoyée.")
     except Exception as e:
-        logging.warning(f"Échec notification sans ticket : {e}")
+        logging.warning(f"Échec notification : {e}")
 
 
-def _alerter_telegram_erreur(msg: str):
+def _alerter_telegram_erreur(msg):
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -331,12 +306,11 @@ def _alerter_telegram_erreur(msg: str):
 # 6. PARIS EN COURS
 # =====================================================================
 
-def sauvegarder_pari_pour_suivi(pari_info: dict):
+def sauvegarder_pari_pour_suivi(pari_info):
     if "pari" not in pari_info or "date" not in pari_info:
-        logging.error(f"Structure pari_info invalide : {pari_info}")
+        logging.error(f"Structure invalide : {pari_info}")
         return
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Pari non sauvegardé : {pari_info['date']}")
         return
     paris, sha = _gh_get("pari_en_cours.json")
     if not isinstance(paris, list):
@@ -345,332 +319,227 @@ def sauvegarder_pari_pour_suivi(pari_info: dict):
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
 # =====================================================================
-# 7. MODULE A — PRÉ-COLLECTE ODDS API (cotes + matchs)
+# 7. MODULE A — PRÉ-COLLECTE ODDS API
 # =====================================================================
 
-def precollecte_odds_api(heure_utc_min: str) -> dict:
-    """
-    Récupère via The Odds API :
-    - La liste des matchs tennis à venir
-    - Les cotes Winamax associées
-    Retourne un dict {clé_match: {joueurs, heure, cotes}}
-    """
+def precollecte_odds_api(heure_utc_min):
     matchs = {}
     if not ODDS_API_KEY:
-        logging.info("ODDS_API_KEY absente — pré-collecte Odds API ignorée.")
+        logging.info("ODDS_API_KEY absente.")
         return matchs
     try:
         r = requests.get(
             "https://api.the-odds-api.com/v4/sports/tennis/odds",
-            params={
-                "apiKey":     ODDS_API_KEY,
-                "regions":    "eu",
-                "markets":    "h2h",
-                "oddsFormat": "decimal",
-                "dateFormat": "iso",
-            },
+            params={"apiKey": ODDS_API_KEY, "regions": "eu",
+                    "markets": "h2h", "oddsFormat": "decimal", "dateFormat": "iso"},
             timeout=10,
         )
         r.raise_for_status()
-        data = r.json()
+        data  = r.json()
         quota = r.headers.get("x-requests-remaining", "?")
-
         for m in data:
             commence = m.get("commence_time", "")
-            # Filtre : seulement les matchs après l'heure actuelle UTC
             if commence < heure_utc_min:
                 continue
-            j1 = m.get("home_team", "?")
-            j2 = m.get("away_team", "?")
-            heure_match = commence[:16].replace("T", " ") + " UTC"
+            j1  = m.get("home_team", "?")
+            j2  = m.get("away_team", "?")
             cle = f"{j1}|{j2}"
-
-            cote_j1 = cote_j2 = None
-            source_cote = "non trouvée"
+            c1  = c2 = None
+            src = "non trouvée"
             for bk in m.get("bookmakers", []):
-                is_winamax = "winamax" in bk.get("key", "").lower()
-                if is_winamax or not cote_j1:
+                is_w = "winamax" in bk.get("key", "").lower()
+                if is_w or not c1:
                     for mkt in bk.get("markets", []):
                         if mkt.get("key") == "h2h":
                             out = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
-                            cote_j1 = out.get(j1)
-                            cote_j2 = out.get(j2)
-                            source_cote = "Winamax" if is_winamax else bk.get("title", "EU")
-                    if is_winamax:
+                            c1  = out.get(j1)
+                            c2  = out.get(j2)
+                            src = "Winamax" if is_w else bk.get("title", "EU")
+                    if is_w:
                         break
-
             matchs[cle] = {
-                "joueur1":    j1,
-                "joueur2":    j2,
-                "heure_utc":  heure_match,
-                "cote_j1":    cote_j1,
-                "cote_j2":    cote_j2,
-                "source_cote": source_cote,
+                "joueur1": j1, "joueur2": j2,
+                "heure_utc": commence[:16].replace("T", " ") + " UTC",
+                "cote_j1": c1, "cote_j2": c2, "source_cote": src,
             }
-
-        logging.info(f"Odds API — {len(matchs)} match(s) avec cotes. Quota restant : {quota}")
+        logging.info(f"Odds API — {len(matchs)} match(s). Quota : {quota}")
     except Exception as e:
-        logging.warning(f"Odds API indisponible : {e}")
+        logging.warning(f"Odds API : {e}")
     return matchs
 
 # =====================================================================
-# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS (calendrier complet)
+# 8. MODULE B — PRÉ-COLLECTE RAPIDAPI TENNIS
 # =====================================================================
 
-RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
-
-def precollecte_rapidapi_tennis(date_fr: str) -> list:
-    """
-    Récupère le programme tennis du jour via RapidAPI Tennis ATP/WTA/ITF.
-    Retourne une liste de matchs {joueur1, joueur2, heure, tournoi, surface}.
-    Nécessite le secret RAPIDAPI_KEY dans GitHub.
-    """
+def precollecte_rapidapi_tennis(date_fr):
     matchs = []
     if not RAPIDAPI_KEY:
         logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
         return matchs
-
-    date_obj = datetime.strptime(date_fr, "%d/%m/%Y")
-    date_api = date_obj.strftime("%Y-%m-%d")
-
-    headers = {
+    date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
+    headers  = {
         "x-rapidapi-key":  RAPIDAPI_KEY,
         "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
         "Content-Type":    "application/json",
     }
-
-    # On récupère ATP et WTA séparément
     for tour in ["atp", "wta"]:
         try:
-            url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{tour}/{date_api}"
-            r   = requests.get(url, headers=headers, timeout=10)
+            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{tour}/{date_api}"
+            r    = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
-
-            # Format attendu : {"schedule": [{"homePlayer": {...}, "awayPlayer": {...}, ...}]}
             schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
-
             for m in schedule:
-                # Extraction joueurs — plusieurs formats possibles selon l'endpoint
-                j1 = (m.get("homePlayer") or m.get("home_player") or m.get("player1") or {})
-                j2 = (m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {})
-
-                nom_j1 = j1.get("name") or j1.get("fullName") or str(j1) if isinstance(j1, dict) else str(j1)
-                nom_j2 = j2.get("name") or j2.get("fullName") or str(j2) if isinstance(j2, dict) else str(j2)
-
-                if not nom_j1 or not nom_j2 or nom_j1 == nom_j2:
+                j1 = m.get("homePlayer") or m.get("home_player") or m.get("player1") or {}
+                j2 = m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {}
+                n1 = (j1.get("name") or j1.get("fullName") or str(j1)) if isinstance(j1, dict) else str(j1)
+                n2 = (j2.get("name") or j2.get("fullName") or str(j2)) if isinstance(j2, dict) else str(j2)
+                if not n1 or not n2 or n1 == n2:
                     continue
-
-                # Extraction heure
-                heure_match = m.get("startTime") or m.get("time") or m.get("date", "heure inconnue")
-                if "T" in str(heure_match):
-                    heure_match = heure_match[:16].replace("T", " ") + " UTC"
-
-                # Extraction tournoi et surface
-                tournoi = (m.get("tournament") or m.get("league") or {})
-                nom_tournoi = tournoi.get("name") or tournoi.get("title") or str(tournoi) if isinstance(tournoi, dict) else str(tournoi)
-                surface = m.get("surface") or m.get("courtType") or "non disponible"
-
+                h  = m.get("startTime") or m.get("time") or m.get("date", "?")
+                if "T" in str(h):
+                    h = h[:16].replace("T", " ") + " UTC"
+                trn = m.get("tournament") or m.get("league") or {}
+                nom_trn = (trn.get("name") or trn.get("title") or str(trn)) if isinstance(trn, dict) else str(trn)
                 matchs.append({
-                    "joueur1": str(nom_j1).strip(),
-                    "joueur2": str(nom_j2).strip(),
-                    "heure":   str(heure_match).strip(),
-                    "tournoi": str(nom_tournoi).strip(),
-                    "surface": str(surface).strip(),
+                    "joueur1": str(n1).strip(), "joueur2": str(n2).strip(),
+                    "heure": str(h).strip(), "tournoi": str(nom_trn).strip(),
+                    "surface": str(m.get("surface") or "non disponible").strip(),
                 })
-
         except requests.exceptions.HTTPError as e:
-            logging.warning(f"RapidAPI Tennis {tour.upper()} : {e}")
+            logging.warning(f"RapidAPI {tour.upper()} : {e}")
         except Exception as e:
-            logging.warning(f"RapidAPI Tennis {tour.upper()} erreur : {e}")
-
-    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s) récupéré(s).")
+            logging.warning(f"RapidAPI {tour.upper()} erreur : {e}")
+    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s).")
     return matchs
 
 # =====================================================================
-# 9. FUSION DES DEUX SOURCES → CALENDRIER ENRICHI
+# 9. FUSION DES DEUX SOURCES
 # =====================================================================
 
-def fusionner_calendrier(odds_matchs: dict, fs_matchs: list) -> str:
-    """
-    Fusionne Odds API (cotes) + Flashscore (calendrier complet).
-    Retourne un bloc texte structuré à injecter dans le prompt Gemini.
-    Gemini n'a plus besoin de chercher le calendrier — il cherche uniquement les stats.
-    """
-    lignes = ["📋 CALENDRIER TENNIS PRÉ-COLLECTÉ (NE PAS rechercher ces matchs) :\n"]
-
-    # Index des matchs Odds API par noms de joueurs pour la fusion
+def fusionner_calendrier(odds_matchs, rapid_matchs):
+    lignes = ["📋 CALENDRIER TENNIS PRÉ-COLLECTÉ :\n"]
     odds_index = {}
     for cle, m in odds_matchs.items():
-        j1_norm = m["joueur1"].lower().strip()
-        j2_norm = m["joueur2"].lower().strip()
-        odds_index[j1_norm] = m
-        odds_index[j2_norm] = m
+        odds_index[m["joueur1"].lower()] = m
+        odds_index[m["joueur2"].lower()] = m
 
-    matchs_affiches = set()
+    affiches = set()
 
-    # 1. Matchs Flashscore enrichis avec cotes Odds API si disponibles
-    for m in fs_matchs:
-        j1 = m["joueur1"]
-        j2 = m["joueur2"]
+    for m in rapid_matchs:
+        j1, j2 = m["joueur1"], m["joueur2"]
         cle = f"{j1}|{j2}"
-        if cle in matchs_affiches:
+        if cle in affiches:
             continue
-        matchs_affiches.add(cle)
-
-        # Recherche des cotes correspondantes
+        affiches.add(cle)
         cote_info = ""
-        j1_norm = j1.lower().strip()
-        j2_norm = j2.lower().strip()
         for nom, data in odds_index.items():
-            if j1_norm in nom or nom in j1_norm or j2_norm in nom or nom in j2_norm:
+            if j1.lower() in nom or nom in j1.lower() or j2.lower() in nom or nom in j2.lower():
                 if data.get("cote_j1") and data.get("cote_j2"):
                     cote_info = (f" | Cotes {data['source_cote']}: "
                                  f"{data['joueur1']} {data['cote_j1']:.2f} / "
                                  f"{data['joueur2']} {data['cote_j2']:.2f}")
                     break
-
         lignes.append(f"• {m['heure']} | {j1} vs {j2} | {m['tournoi']}{cote_info}")
 
-    # 2. Matchs Odds API non trouvés dans Flashscore (tournois non couverts par FS)
     for cle, m in odds_matchs.items():
-        j1 = m["joueur1"]
-        j2 = m["joueur2"]
-        cle_check = f"{j1}|{j2}"
-        if cle_check not in matchs_affiches:
-            matchs_affiches.add(cle_check)
+        j1, j2 = m["joueur1"], m["joueur2"]
+        if f"{j1}|{j2}" not in affiches:
+            affiches.add(f"{j1}|{j2}")
             cote_info = ""
             if m.get("cote_j1") and m.get("cote_j2"):
                 cote_info = (f" | Cotes {m['source_cote']}: "
                              f"{j1} {m['cote_j1']:.2f} / {j2} {m['cote_j2']:.2f}")
             lignes.append(f"• {m['heure_utc']} | {j1} vs {j2}{cote_info}")
 
-    total = len(matchs_affiches)
-    logging.info(f"Calendrier fusionné : {total} match(s) total (RapidAPI + Odds API).")
-
+    total = len(affiches)
+    logging.info(f"Calendrier fusionné : {total} match(s) (RapidAPI + Odds API).")
     if total == 0:
         return ""
-
-    lignes.append(f"\nTotal : {total} match(s) pré-collecté(s).")
+    lignes.append(f"\nTotal : {total} match(s).")
     return "\n".join(lignes)
 
 # =====================================================================
-# 10. COLLECTE DES DONNÉES VIA GEMINI (stats + H2H + contexte uniquement)
+# 10. COLLECTE GEMINI (stats + H2H + contexte)
 # =====================================================================
 
-def collecter_donnees_tennis(date: str, heure: str, calendrier_injecte: str) -> str:
-    """
-    Gemini reçoit le calendrier complet déjà pré-collecté.
-    Ses 10 requêtes Google sont dédiées aux stats, H2H et contexte.
-    """
-
-    bloc_calendrier = (
+def collecter_donnees_tennis(date, heure, calendrier_injecte):
+    bloc = (
         f"{calendrier_injecte}\n\n"
-        f"→ Ce calendrier est COMPLET et FIABLE. Ne pas le re-vérifier.\n"
-        f"→ Filtrer uniquement les matchs commençant APRÈS {heure} (heure France).\n"
-        f"→ Pour les cotes manquantes, chercher sur sportytrader.com ou compare-bet.fr."
+        f"→ Calendrier COMPLET. Ne pas le re-vérifier.\n"
+        f"→ Filtrer les matchs commençant APRÈS {heure} (heure France).\n"
+        f"→ Pour cotes manquantes : sportytrader.com ou compare-bet.fr."
         if calendrier_injecte else
-        f"Aucun calendrier pré-collecté disponible. Cherche les matchs du {date} "
-        f"après {heure} sur flashscore.fr et atptour.com."
+        f"Cherche les matchs du {date} après {heure} sur flashscore.fr et atptour.com."
     )
 
-    prompt_gemini = f"""
-Tu es un agent de collecte de données tennis. Date : {date}. Heure : {heure} France.
+    prompt = f"""
+Tu es un agent de collecte tennis. Date : {date}. Heure : {heure} France.
 
-MISSION : Enrichir les données des matchs avec stats, H2H et contexte.
-Tu NE cherches PAS le calendrier — il est déjà fourni ci-dessous.
-Tes 10 requêtes Google sont EXCLUSIVEMENT pour : stats joueurs, H2H, blessures, contexte.
+MISSION : Enrichir les données avec stats, H2H et contexte.
+Tu NE cherches PAS le calendrier — il est fourni ci-dessous.
+Tes 10 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
 
-{bloc_calendrier}
+{bloc}
 
-RECHERCHES À EFFECTUER (dans cet ordre, max 10 requêtes total) :
-1. Pour chaque match du calendrier ci-dessus commençant APRÈS {heure} :
-   → Forme récente J1 et J2 (5 derniers matchs) — 1 requête par match sur flashscore.fr
-   → Hold% si disponible sur tennisratio.com (inclure dans la même requête si possible)
-   → H2H global et par surface — utiliser flashscore.fr ou atptour.com
+RECHERCHES (max 10 requêtes) :
+1. Forme J1 et J2 (5 derniers matchs) + Hold% — 1 requête/match sur flashscore.fr
+2. H2H global et par surface — flashscore.fr ou atptour.com
+3. Charge physique — heures jouées 72h, titre récent, matchs enchaînés
+4. Blessures/forfaits (1 requête globale) — eurosport.fr ou tennis.com
 
-2. Charge physique (inclure dans la même requête que la forme) :
-   → Heures jouées 72h | Titre remporté récemment | Matchs enchaînés
+PRIORITÉ : matchs avec cotes disponibles en premier.
+EXCLURE : qualifications, doubles. INCLURE : tableau principal uniquement.
 
-3. Blessures et contexte (1 seule requête globale) :
-   → "blessures forfaits tennis {date}" sur eurosport.fr ou tennis.com
-   → Points à défendre, Grand Chelem dans 7j, public local
-
-RÈGLES DE PRIORITÉ :
-- Traite en priorité les matchs avec cotes disponibles dans le calendrier
-- Si tu manques de requêtes, note "stats non vérifiées" pour les matchs restants
-- EXCLURE : qualifications (Q), doubles, pré-qualifications
-- INCLURE : tableau principal uniquement (1er tour, QF, SF, Finale)
-
-FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict, aucun autre texte) :
+FORMAT JSON STRICT :
 {{
   "heure_collecte": "{heure}",
-  "matchs": [
-    {{
-      "heure_match": "HH:MM",
-      "joueur1": "Nom Prénom",
-      "joueur2": "Nom Prénom",
-      "tournoi": "Nom du tournoi",
-      "surface": "Terre / Dur / Gazon",
-      "indoor": true/false,
-      "cote_j1": 1.XX,
-      "cote_j2": 1.XX,
-      "source_cote": "Winamax / Sportytrader / non trouvée",
-      "forme_j1": ["V", "D", "V", "V", "D"],
-      "forme_j2": ["V", "V", "D", "V", "V"],
-      "details_forme_j1": "Résumé : adversaires, surfaces, scores clés",
-      "details_forme_j2": "Résumé : adversaires, surfaces, scores clés",
-      "hold_pct_j1": "XX% ou non trouvé",
-      "hold_pct_j2": "XX% ou non trouvé",
-      "h2h_recents": "Ex: J1 mène 3-1, 2-0 sur gazon",
-      "charge_physique_j1": "Ex: 2h45 hier | Aucun match 72h",
-      "charge_physique_j2": "Ex: Titre dimanche, 3 matchs en 4j | Repos",
-      "alertes_physiques": "Ex: Soins médicaux hier | Aucune",
-      "absence_recente": "Ex: Retour après 6 semaines | Aucune",
-      "contexte_psychologique": "Ex: 450pts à défendre, GC dans 6j",
-      "contexte": "Ex: QF, points à défendre"
-    }}
-  ],
-  "avertissements": "Données non vérifiées ou incertitudes à signaler"
+  "matchs": [{{
+    "heure_match": "HH:MM",
+    "joueur1": "Nom", "joueur2": "Nom",
+    "tournoi": "Nom", "surface": "Terre/Dur/Gazon", "indoor": false,
+    "cote_j1": 1.XX, "cote_j2": 1.XX, "source_cote": "Winamax/non trouvée",
+    "forme_j1": ["V","D"], "forme_j2": ["V","D"],
+    "details_forme_j1": "résumé", "details_forme_j2": "résumé",
+    "hold_pct_j1": "XX% ou non trouvé", "hold_pct_j2": "XX% ou non trouvé",
+    "h2h_recents": "résumé", "charge_physique_j1": "résumé", "charge_physique_j2": "résumé",
+    "alertes_physiques": "résumé ou Aucune", "absence_recente": "résumé ou Aucune",
+    "contexte_psychologique": "résumé", "contexte": "résumé"
+  }}],
+  "avertissements": "données incertaines"
 }}
 
-RÈGLES STRICTES :
-- Champ introuvable → "non trouvé" (jamais inventer)
-- Aucun match après {heure} → {{"matchs": [], "avertissements": "Aucun match à venir"}}
-- JSON valide uniquement, sans backticks ni commentaires
+Champ introuvable → "non trouvé". JSON valide, sans backticks.
 """
 
     try:
-        logging.info(f"Gemini enrichit les données pour le {date} à {heure}…")
-        reponse = gemini_client.models.generate_content(
+        logging.info(f"Gemini enrichit les données — {date} {heure}…")
+        rep   = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt_gemini,
+            contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
                 temperature=0.1,
             ),
         )
-        texte = reponse.text.strip()
+        texte = rep.text.strip()
         texte = re.sub(r"^```json\s*", "", texte)
         texte = re.sub(r"\s*```$", "", texte)
-
-        donnees   = json.loads(texte)
-        nb_matchs = len(donnees.get("matchs", []))
-        logging.info(f"Gemini OK — {nb_matchs} match(s) enrichi(s).")
-        return json.dumps(donnees, ensure_ascii=False, indent=2)
-
+        data  = json.loads(texte)
+        logging.info(f"Gemini OK — {len(data.get('matchs', []))} match(s).")
+        return json.dumps(data, ensure_ascii=False, indent=2)
     except json.JSONDecodeError as e:
-        logging.error(f"Gemini JSON invalide : {e}\nRéponse : {texte[:500]}")
-        return f'{{"matchs": [], "avertissements": "Erreur Gemini : JSON invalide."}}'
+        logging.error(f"Gemini JSON invalide : {e}")
+        return '{"matchs": [], "avertissements": "Erreur Gemini JSON."}'
     except Exception as e:
         logging.error(f"Erreur Gemini : {e}")
-        return '{"matchs": [], "avertissements": "Erreur Gemini — analyse impossible."}'
+        return '{"matchs": [], "avertissements": "Erreur Gemini."}'
 
 # =====================================================================
 # 11. PROMPT CLAUDE
 # =====================================================================
 
-def construire_prompt_claude(date: str, heure: str, donnees_json: str) -> str:
+def construire_prompt_claude(date, heure, donnees_json):
     session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
     try:
         avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
@@ -683,85 +552,74 @@ DONNÉES COLLECTÉES (source unique — ne pas chercher sur internet) :
 {donnees_json}
 
 ⚠️ AVERTISSEMENTS : {avertissements}
-→ Match avec données manquantes importantes → abandonner plutôt qu'analyser à moitié.
+→ Données manquantes importantes → abandonner le match.
 
 Tu n'as PAS accès à internet. Analyse uniquement les données fournies.
 
 FILTRES IMMÉDIATS :
-• Match commencé/terminé avant {heure} → skip
+• Match commencé avant {heure} → skip
 • absence_recente > 2 mois → skip
-• alertes_physiques présentes → marchés de jeux interdits + mise 0.5%
+• alertes_physiques → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs + mise 0.5%
-• Qualifications (Q) ou hors tableau principal → skip
-• Cote "non trouvée" → analyser + mise 0.5% + indiquer "non vérifiée"
+• Qualifications ou hors tableau principal → skip
+• Cote non trouvée → analyser + mise 0.5% + "non vérifiée"
 
-CALIBRATION DES PROBABILITÉS (OBLIGATOIRE) :
-• Favori clair   (cote < 1.50)   → MAX 75%
-• Favori modéré  (cote 1.50-1.80) → MAX 68%
-• Match serré    (cote 1.80-2.20) → MAX 58%
-• Outsider       (cote > 2.20)   → MAX 52%
+CALIBRATION PROBABILITÉS :
+• Cote < 1.50  → MAX 75%
+• 1.50-1.80    → MAX 68%
+• 1.80-2.20    → MAX 58%
+• > 2.20       → MAX 52%
 
 ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
-⚠️ Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH. Rien d'autre avant.
+⚠️ Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH.
 
-[1] FACTEURS BRUTS (interne) :
-  · Surface + forme 5 derniers matchs + charge physique 72h
-  · Hold% → >83% les deux = "Match de serveurs"
-  · H2H global ET par surface
-  · Contexte psychologique : points à défendre, public local, GC dans 7j
-  · Fatigue : match long hier, titre récent, 3 matchs en 5j → facteur pénalisant
+[1] FACTEURS BRUTS :
+  Surface + forme 5 matchs + charge 72h + Hold% + H2H par surface
+  Contexte psychologique : points à défendre, public local, GC dans 7j
+  Fatigue : match long hier, titre récent, 3 matchs en 5j
 
-[2] DÉCISION (interne) :
-  · Probabilité % (respecter plafonds calibration)
-  · Cote Juste = 1/(prob/100)
-  · Delta = Cote réelle - Cote Juste
-  · Delta < 0.10 → PAS DE VALUE ❌ → abandonné
-  · Delta ≥ 0.10 → VALUE ✅
-  · Kelly quart = ((prob×cote−1)/(cote−1))×0.25 → arrondi 0.5%
-  · Zéro value → AUCUN_MATCH
+[2] DÉCISION :
+  Proba % → Cote Juste = 1/proba → Delta = Cote réelle - Cote Juste
+  Delta < 0.10 → ❌ abandonné
+  Delta ≥ 0.10 → VALUE ✅ → Kelly quart = ((p×c−1)/(c−1))×0.25
+  Zéro value → AUCUN_MATCH
 
-RÈGLE UNIVERSELLE — DOUBLE VALIDATION (TOUS les marchés sans exception) :
-  1. Delta ≥ 0.10 ✅
-  2. Analyse [1] justifie ce marché indépendamment ✅
-  Si l'une manque → ticket abandonné.
+DOUBLE VALIDATION (TOUS les marchés) :
+  1. Delta ≥ 0.10 ✅  2. Analyse [1] justifie le marché ✅
+  Si l'une manque → abandonné.
 
 CONFIANCE ÉLEVÉE :
-  1. Moneyline — si analyse confirme clairement la supériorité sur cette surface/contexte
-  2. Victoire 2-0 — match à sens unique attendu
-  3. Victoire 2-1 — résistance du perdant attendue
-  4. Handicap Jeux Favori (-3.5/-4.5) — domination + cote basse
-  5. Combiné max 2 (mise 1%) — tournois différents OU surfaces différentes OBLIGATOIRE
+  Moneyline (si supériorité claire) · 2-0 · 2-1 · Handicap Jeux
+  Combiné max 2 (tournois différents OU surfaces différentes) mise 1%
 
 CONFIANCE MODÉRÉE — Moneyline INTERDIT :
-  "Match de serveurs" (Hold% >83%) → Over jeux · Tiebreak Oui
-  "Match serré"                    → +2.5 sets (WTA) · Score 2-1 · Over jeux
-  "Favori dominant"                → Victoire 2-0 · Under jeux
-  "Favori prenable"                → Handicap +4.5 · Score 2-1
-  "Surface lente/breaks"           → Under jeux · +2.5 sets · Score 2-1
+  Serveurs (Hold>83%) → Over jeux · Tiebreak
+  Serré → +2.5 sets · Score 2-1 · Over jeux
+  Dominant → 2-0 · Under jeux
+  Prenable → Handicap +4.5 · Score 2-1
+  Surface lente → Under · +2.5 sets · 2-1
   Combiné MODÉRÉE → INTERDIT
 
-MISES = MIN(Kelly quart, plafond) :
-Simple ÉLEVÉE 2% · Simple MODÉRÉE 1% · Combiné ÉLEVÉE 1% · Non vérifiée 0.5%
+MISES : Simple ÉLEVÉE 2% · Modérée 1% · Combiné 1% · Non vérifiée 0.5%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
-HTML uniquement — <b>texte</b>. JAMAIS **texte**.
-POURQUOI max 60 mots.
+HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
-🏟 <b>MATCHS :</b> [Joueur A vs Joueur B]
+🏟 <b>MATCHS :</b> [A vs B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
-⏰ <b>HEURE :</b> [Heure exacte]
-✅ <b>PRONO :</b> [Pronostic précis]
-📈 <b>COTE :</b> [Cote ou "non vérifiée"]
-💰 <b>MISE :</b> [% Kelly plafonné]
+⏰ <b>HEURE :</b> [Heure]
+✅ <b>PRONO :</b> [Pronostic]
+📈 <b>COTE :</b> [Cote ou non vérifiée]
+💰 <b>MISE :</b> [% Kelly]
 🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → delta +D.DD ✅ → Kelly W%]
 📌 <b>POURQUOI ?</b> [Max 60 mots]
-⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou "Aucune"]
+⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
 """
 
 # =====================================================================
-# 12. ORCHESTRATION PRINCIPALE
+# 12. ORCHESTRATION
 # =====================================================================
 
 def run_bot_autonome():
@@ -771,86 +629,51 @@ def run_bot_autonome():
     heure      = maintenant.strftime("%H:%M")
 
     if DRY_RUN:
-        logging.info("=" * 60)
-        logging.info("MODE DRY-RUN — aucun envoi réel.")
-        logging.info("=" * 60)
+        logging.info("MODE DRY-RUN")
 
-    # Heure UTC minimum pour filtrer les matchs passés
     heure_utc_min = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
 
-    # --- PRÉ-COLLECTE A : Odds API ---
-    odds_matchs = precollecte_odds_api(heure_utc_min)
-
-    # --- PRÉ-COLLECTE B : RapidAPI Tennis ---
-    fs_matchs = precollecte_rapidapi_tennis(date)
-
-    # --- FUSION des deux sources ---
-    calendrier_injecte = fusionner_calendrier(odds_matchs, fs_matchs)
-
-    # --- ÉTAPE 1 : Gemini enrichit les stats ---
-    donnees_json = collecter_donnees_tennis(date, heure, calendrier_injecte)
+    odds_matchs        = precollecte_odds_api(heure_utc_min)
+    rapid_matchs       = precollecte_rapidapi_tennis(date)
+    calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
+    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte)
 
     try:
         donnees = json.loads(donnees_json)
         if not donnees.get("matchs"):
-            logging.info(f"Aucun match — session annulée. ({donnees.get('avertissements', '')})")
             session = "matin" if heure < "14:00" else "après-midi"
             _envoyer_notification_sans_ticket(
-                f"🔍 Aucun match ATP/WTA à venir pour la session {session}.\n"
+                f"🔍 Aucun match à venir pour la session {session}.\n"
                 f"Le bot reprendra à la prochaine session."
             )
             return
     except Exception:
         pass
 
-    # --- ÉTAPE 2 : Claude analyse ---
     prompt = construire_prompt_claude(date, heure, donnees_json)
 
     try:
-        logging.info(f"Claude ({CLAUDE_MODEL}) analyse — {date} {heure}")
-
-        reponse = claude_client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=4096,
-            system=prompt,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Analyse les données et propose les meilleurs paris "
-                    f"(max {MAX_TICKETS}) pour la session {date} {heure}."
-                ),
-            }],
+        logging.info(f"Claude analyse — {date} {heure}")
+        rep = claude_client.messages.create(
+            model=CLAUDE_MODEL, max_tokens=4096, system=prompt,
+            messages=[{"role": "user", "content":
+                f"Analyse et propose les meilleurs paris (max {MAX_TICKETS}) — {date} {heure}."}],
         )
-
-        texte = "\n".join(
-            b.text for b in reponse.content if hasattr(b, "text") and b.text
-        ).strip()
-
-        logging.info(
-            f"Claude OK ({len(texte)} chars) — "
-            f"{reponse.usage.input_tokens} tokens in / {reponse.usage.output_tokens} out"
-        )
+        texte = "\n".join(b.text for b in rep.content if hasattr(b, "text") and b.text).strip()
+        logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
 
         if "AUCUN_MATCH" in texte:
-            logging.info("Claude : aucune value — session annulée.")
             session = "matin" if heure < "14:00" else "après-midi"
             _envoyer_notification_sans_ticket(
-                f"🔎 Session {session} analysée — "
-                f"{len(json.loads(donnees_json).get('matchs', []))} match(s) étudié(s).\n"
+                f"🔎 Session {session} — {len(json.loads(donnees_json).get('matchs', []))} match(s) analysé(s).\n"
                 f"Aucune value suffisante. On passe notre chemin. 💼"
             )
             return
         if len(texte) <= 20:
-            logging.info("Réponse Claude trop courte.")
             return
 
-        tickets_bruts = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20]
-        tickets       = tickets_bruts[:MAX_TICKETS]
-
-        if len(tickets_bruts) > MAX_TICKETS:
-            logging.warning(f"{len(tickets_bruts)} tickets générés — tronqué à {MAX_TICKETS}.")
+        tickets = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20][:MAX_TICKETS]
         if not tickets:
-            logging.warning("Aucun ticket valide extrait.")
             return
 
         historique, hist_sha = charger_historique()
@@ -862,9 +685,8 @@ def run_bot_autonome():
         for i, ticket in enumerate(tickets, 1):
             h = _hash_ticket(ticket)
             if h in hashes_connus:
-                logging.warning(f"Ticket {i} : doublon — ignoré.")
+                logging.warning(f"Ticket {i} : doublon.")
                 continue
-            logging.info(f"Envoi ticket {i}/{len(tickets)}…")
             if envoyer_sur_telegram(ticket, stats=stats_cached):
                 sauvegarder_pari_pour_suivi({"pari": ticket, "date": date})
                 hashes_connus.add(h)
@@ -875,11 +697,7 @@ def run_bot_autonome():
 
         if nouveaux_hashes and not DRY_RUN:
             sauvegarder_historique(list(hashes_connus), hist_sha)
-
-        logging.info(
-            f"✅ {paris_envoyes} ticket(s) envoyé(s)."
-            if paris_envoyes else "Aucun ticket envoyé."
-        )
+        logging.info(f"✅ {paris_envoyes} ticket(s) envoyé(s).")
 
     except Exception as e:
         logging.error(f"Erreur critique : {e}", exc_info=True)
@@ -892,23 +710,20 @@ def run_bot_autonome():
 # =====================================================================
 
 if __name__ == "__main__":
-    args         = sys.argv[1:]
-    args_filtres = [a for a in args if a != "--dry-run"]
-
-    if not args_filtres:
+    args         = [a for a in sys.argv[1:] if a != "--dry-run"]
+    if not args:
         run_bot_autonome()
-    elif args_filtres[0] == "resultat" and len(args_filtres) == 2:
-        flag = args_filtres[1].lower()
+    elif args[0] == "resultat" and len(args) == 2:
+        flag = args[1].lower()
         if flag in ("v", "victoire", "win", "1"):
-            enregistrer_resultat(victoire=True)
+            enregistrer_resultat(True)
         elif flag in ("d", "defaite", "lose", "0"):
-            enregistrer_resultat(victoire=False)
+            enregistrer_resultat(False)
         else:
-            print(f"❌ Argument inconnu : '{flag}'. Utilise 'v' ou 'd'.")
+            print(f"❌ Utilise 'v' ou 'd'.")
             sys.exit(1)
-    elif args_filtres[0] in ("--help", "-h", "help"):
+    elif args[0] in ("--help", "-h"):
         print(__doc__)
     else:
-        print(f"❌ Commande inconnue : {' '.join(args_filtres)}")
-        print(__doc__)
+        print(f"❌ Commande inconnue.")
         sys.exit(1)
