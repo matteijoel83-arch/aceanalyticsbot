@@ -372,6 +372,12 @@ def precollecte_odds_api(heure_utc_min):
 # =====================================================================
 
 def precollecte_rapidapi_tennis(date_fr):
+    """
+    Récupère le calendrier tennis via RapidAPI Tennis (matchstat.com).
+    Endpoint correct : /tennis/v2/{type}/fixtures/{date}
+    Inclut tournoi, surface, round, cotes odd1/odd2.
+    Pagine automatiquement pour tout récupérer.
+    """
     matchs = []
     if not RAPIDAPI_KEY:
         logging.info("RAPIDAPI_KEY absente — pré-collecte RapidAPI ignorée.")
@@ -380,37 +386,78 @@ def precollecte_rapidapi_tennis(date_fr):
     headers  = {
         "x-rapidapi-key":  RAPIDAPI_KEY,
         "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
-        "Content-Type":    "application/json",
     }
     for tour in ["atp", "wta"]:
-        try:
-            url  = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/schedule/{tour}/{date_api}"
-            r    = requests.get(url, headers=headers, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            schedule = data.get("schedule", data.get("fixtures", data.get("result", [])))
-            for m in schedule:
-                j1 = m.get("homePlayer") or m.get("home_player") or m.get("player1") or {}
-                j2 = m.get("awayPlayer") or m.get("away_player") or m.get("player2") or {}
-                n1 = (j1.get("name") or j1.get("fullName") or str(j1)) if isinstance(j1, dict) else str(j1)
-                n2 = (j2.get("name") or j2.get("fullName") or str(j2)) if isinstance(j2, dict) else str(j2)
-                if not n1 or not n2 or n1 == n2:
-                    continue
-                h  = m.get("startTime") or m.get("time") or m.get("date", "?")
-                if "T" in str(h):
-                    h = h[:16].replace("T", " ") + " UTC"
-                trn = m.get("tournament") or m.get("league") or {}
-                nom_trn = (trn.get("name") or trn.get("title") or str(trn)) if isinstance(trn, dict) else str(trn)
-                matchs.append({
-                    "joueur1": str(n1).strip(), "joueur2": str(n2).strip(),
-                    "heure": str(h).strip(), "tournoi": str(nom_trn).strip(),
-                    "surface": str(m.get("surface") or "non disponible").strip(),
+        page = 1
+        while True:
+            try:
+                url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
+                r   = requests.get(url, headers=headers, timeout=10, params={
+                    "include":  "tournament,round",
+                    "filter":   "PlayerGroup:singles",
+                    "pageSize": 50,
+                    "pageNo":   page,
                 })
-        except requests.exceptions.HTTPError as e:
-            logging.warning(f"RapidAPI {tour.upper()} : {e}")
-        except Exception as e:
-            logging.warning(f"RapidAPI {tour.upper()} erreur : {e}")
-    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s).")
+                r.raise_for_status()
+                data = r.json()
+
+                # Réponse = liste directe ou {data: [...], hasNextPage: bool}
+                if isinstance(data, list):
+                    items    = data
+                    has_next = False
+                else:
+                    items    = data.get("data", [])
+                    has_next = data.get("hasNextPage", False)
+
+                for m in items:
+                    j1 = m.get("player1") or {}
+                    j2 = m.get("player2") or {}
+                    n1 = j1.get("name", "")
+                    n2 = j2.get("name", "")
+                    if not n1 or not n2:
+                        continue
+
+                    # Exclure qualifiés (seed = "Q")
+                    if str(m.get("seed1") or "") == "Q" or str(m.get("seed2") or "") == "Q":
+                        continue
+
+                    # Heure
+                    h = m.get("date") or "heure inconnue"
+                    if "T" in str(h):
+                        h = h[:16].replace("T", " ") + " UTC"
+
+                    # Tournoi et surface
+                    trn     = m.get("tournament") or {}
+                    nom_trn = trn.get("name", "Tournoi inconnu")
+                    court   = trn.get("court") or {}
+                    surface = court.get("name", "non disponible")
+
+                    # Round
+                    rnd     = m.get("round") or {}
+                    round_n = rnd.get("name", "")
+
+                    matchs.append({
+                        "joueur1": n1.strip(),
+                        "joueur2": n2.strip(),
+                        "heure":   h,
+                        "tournoi": f"{nom_trn} — {round_n}".strip(" —"),
+                        "surface": surface,
+                        "odd1":    m.get("odd1"),
+                        "odd2":    m.get("odd2"),
+                    })
+
+                if not has_next:
+                    break
+                page += 1
+
+            except requests.exceptions.HTTPError as e:
+                logging.warning(f"RapidAPI {tour.upper()} p{page} : {e}")
+                break
+            except Exception as e:
+                logging.warning(f"RapidAPI {tour.upper()} erreur : {e}")
+                break
+
+    logging.info(f"RapidAPI Tennis — {len(matchs)} match(s) singles.")
     return matchs
 
 # =====================================================================
