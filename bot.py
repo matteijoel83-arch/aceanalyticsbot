@@ -819,14 +819,31 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 
     try:
         logging.info(f"Gemini enrichit les données — {date} {heure}…")
-        rep   = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                temperature=0.1,
-            ),
-        )
+        
+        # Retry en cas de 503 (surcharge serveur Google)
+        derniere_erreur = None
+        for tentative in range(1, 4):
+            try:
+                rep = gemini_client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[types.Tool(google_search=types.GoogleSearch())],
+                        temperature=0.1,
+                    ),
+                )
+                break  # Succès → sortir de la boucle
+            except Exception as e:
+                derniere_erreur = e
+                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                    logging.warning(f"Gemini 503 tentative {tentative}/3 — retry dans {tentative * 15}s…")
+                    time.sleep(tentative * 15)
+                else:
+                    raise  # Autre erreur → pas de retry
+        if derniere_erreur and "503" in str(derniere_erreur):
+            logging.error(f"Gemini 503 après 3 tentatives : {derniere_erreur}")
+            return '{"matchs": [], "avertissements": "Gemini indisponible (503) — réessayer plus tard."}'
+
         texte = rep.text.strip()
         texte = re.sub(r"^```json\s*", "", texte)
         texte = re.sub(r"\s*```$", "", texte)
