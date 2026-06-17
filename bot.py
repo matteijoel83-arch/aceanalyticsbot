@@ -983,6 +983,19 @@ def run_bot_autonome():
             return
 
         tickets = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20][:MAX_TICKETS]
+
+        # Filtrer les tickets abandonnés — Claude les affiche pour transparence
+        # mais ils ne doivent pas être sauvegardés ni comptabilisés
+        mots_abandon = ["abandonné", "delta négatif", "pas de value", "ticket abandonné",
+                        "kelly 0%", "aucune value", "interdit"]
+        tickets_valides = []
+        for t in tickets:
+            t_lower = t.lower()
+            if any(mot in t_lower for mot in mots_abandon):
+                logging.info(f"Ticket abandonné détecté — non sauvegardé.")
+                continue
+            tickets_valides.append(t)
+        tickets = tickets_valides
         if not tickets:
             return
 
