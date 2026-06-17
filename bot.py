@@ -285,15 +285,21 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
     return False
 
 
-def _envoyer_notification_sans_ticket(raison):
-    stats = charger_stats()
-    msg   = (
-        f"📊 <b>ACEANALYTICS — Analyse du jour</b>\n\n{raison}\n\n"
-        f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']} | "
+def _envoyer_notification_sans_ticket(raison, session=""):
+    stats  = charger_stats()
+    emoji  = "🌅" if session == "MATIN" else "🌆"
+    label  = f"Session {session}" if session else "Analyse"
+    msg    = (
+        f"{emoji} <b>ACEANALYTICS — {label}</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔍 <b>Résultat :</b> Aucune value détectée\n\n"
+        f"{raison}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 Bilan : ✅ {stats['victoires']}V | ❌ {stats['defaites']}D | "
         f"📈 Win Rate : {calculer_winrate(stats):.1f}%"
     )
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Notification sans ticket")
+        logging.info(f"[DRY-RUN] Notification sans ticket — {label}")
         return
     try:
         requests.post(
@@ -301,7 +307,7 @@ def _envoyer_notification_sans_ticket(raison):
             json={"chat_id": TELEGRAM_CHANNEL_ID, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
-        logging.info("Notification 'sans ticket' envoyée.")
+        logging.info(f"Notification sans ticket envoyée — {label}.")
     except Exception as e:
         logging.warning(f"Échec notification : {e}")
 
@@ -962,13 +968,16 @@ La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 
 🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
+━━━━━━━━━━━━━━━━━━━━
 🏟 <b>MATCHS :</b> [A vs B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
 ⏰ <b>HEURE :</b> [Heure]
+━━━━━━━━━━━━━━━━━━━━
 ✅ <b>PRONO :</b> [Pronostic]
-📈 <b>COTE :</b> [Cote ou non vérifiée]
+📈 <b>COTE :</b> [Cote]
 💰 <b>MISE :</b> [% Kelly]
 🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE/BASSE]
+━━━━━━━━━━━━━━━━━━━━
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → delta +D.DD ✅ → Kelly W%]
 📌 <b>POURQUOI ?</b> [Max 60 mots]
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
@@ -1009,10 +1018,10 @@ def run_bot_autonome():
     try:
         donnees = json.loads(donnees_json)
         if not donnees.get("matchs"):
-            session = "matin" if heure < "14:00" else "après-midi"
             _envoyer_notification_sans_ticket(
-                f"🔍 Aucun match à venir pour la session {session}.\n"
-                f"Le bot reprendra à la prochaine session."
+                f"Aucun match disponible sur Winamax pour cette session.\n"
+                f"Le bot reprendra à la prochaine session.",
+                session=session
             )
             return
     except Exception:
@@ -1031,10 +1040,11 @@ def run_bot_autonome():
         logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
 
         if "AUCUN_MATCH" in texte:
-            session = "matin" if heure < "14:00" else "après-midi"
+            nb = len(json.loads(donnees_json).get("matchs", []))
             _envoyer_notification_sans_ticket(
-                f"🔎 Session {session} — {len(json.loads(donnees_json).get('matchs', []))} match(s) analysé(s).\n"
-                f"Aucune value suffisante. On passe notre chemin. 💼"
+                f"{nb} match(s) analysé(s) — aucune value suffisante détectée.\n"
+                f"On passe notre chemin. 💼",
+                session=session
             )
             return
         if len(texte) <= 20:
@@ -1055,6 +1065,11 @@ def run_bot_autonome():
             tickets_valides.append(t)
         tickets = tickets_valides
         if not tickets:
+            _envoyer_notification_sans_ticket(
+                f"Matchs analysés — aucune value retenue après validation stricte.\n"
+                f"On passe notre chemin. 💼",
+                session=session
+            )
             return
 
         historique, hist_sha = charger_historique()
