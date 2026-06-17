@@ -736,7 +736,7 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
 
 
 
-def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None):
+def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None, heure_fin="23:59"):
     # Enrichir le texte du calendrier avec les données RapidAPI déjà collectées
     if rapid_matchs and calendrier_injecte:
         lignes_enrichies = []
@@ -762,10 +762,11 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None)
     bloc = (
         f"{calendrier_injecte}\n\n"
         f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
-        f"→ Filtrer les matchs commençant APRÈS {heure} (heure France).\n"
+        f"→ FENÊTRE HORAIRE : retenir UNIQUEMENT les matchs commençant ENTRE {heure} et {heure_fin} (heure France).\n"
+        f"   Ignorer les matchs avant {heure} (déjà commencés) ET après {heure_fin} (session suivante).\n"
         f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
         if calendrier_injecte else
-        f"Cherche les matchs du {date} après {heure} sur flashscore.fr et atptour.com."
+        f"Cherche les matchs du {date} entre {heure} et {heure_fin} sur flashscore.fr et atptour.com."
     )
 
     prompt = f"""
@@ -986,13 +987,24 @@ def run_bot_autonome():
     if DRY_RUN:
         logging.info("MODE DRY-RUN")
 
-    heure_utc_min = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
+    # Fenêtre horaire selon la session
+    # Matin  (09h30) → matchs de 09h30 à 14h30
+    # Après-midi (14h30) → matchs de 14h30 à 00h00
+    if heure < "14:00":
+        session      = "MATIN"
+        heure_fin    = "14:30"
+        logging.info(f"Session MATIN — fenêtre {heure} → {heure_fin}")
+    else:
+        session      = "APRÈS-MIDI"
+        heure_fin    = "23:59"
+        logging.info(f"Session APRÈS-MIDI — fenêtre {heure} → {heure_fin}")
 
+    heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
-    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs)
+    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin)
 
     try:
         donnees = json.loads(donnees_json)
