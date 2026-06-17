@@ -875,6 +875,33 @@ CALIBRATION PROBABILITÉS :
 • 1.80-2.20    → MAX 58%
 • > 2.20       → MAX 52%
 
+NIVEAUX DE CONFIANCE ET MISES :
+⚠️ Le niveau est déterminé par la qualité des données ET la solidité de l'analyse :
+
+ÉLEVÉE (3%) — toutes les conditions réunies :
+  · Delta ≥ 0.10 ✅
+  · Analyse solide (forme, H2H par surface, contexte) ✅
+  · Données complètes ou quasi-complètes ✅
+  · Pas d'alerte physique majeure ✅
+
+MODÉRÉE (2%) — analyse correcte mais légères lacunes :
+  · Delta ≥ 0.10 ✅
+  · Analyse correcte mais quelques données manquantes
+  · H2H limité ou forme partielle acceptable
+  · Logique analytique convaincante malgré les lacunes
+
+BASSE (1%) — données insuffisantes ou cote très élevée :
+  · Delta ≥ 0.10 ✅ mais données importantes manquantes
+  · OU cote > 2.50 (variance élevée)
+  · OU première confrontation sans contexte suffisant
+  · OU alertes physiques présentes
+  · OU retour de blessure 3-8 semaines
+
+Plafonds absolus (quel que soit le niveau) :
+  · Alertes physiques → MAX 1%
+  · Retour 3-8 semaines → MAX 1%
+  · Combiné → MAX 2%
+
 ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
 ⚠️ Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH.
 
@@ -905,7 +932,8 @@ CONFIANCE MODÉRÉE — Moneyline INTERDIT :
   Surface lente → Under · +2.5 sets · 2-1
   Combiné MODÉRÉE → INTERDIT
 
-MISES : Simple ÉLEVÉE 2% · Modérée 1% · Combiné 1%
+MISES (Kelly quart plafonné par niveau) :
+Simple ÉLEVÉE 3% · Simple MODÉRÉE 2% · Simple BASSE 1% · Combiné MAX 2%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️ RÈGLE FONDAMENTALE : N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
@@ -922,7 +950,7 @@ HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 ✅ <b>PRONO :</b> [Pronostic]
 📈 <b>COTE :</b> [Cote ou non vérifiée]
 💰 <b>MISE :</b> [% Kelly]
-🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE]
+🛡 <b>CONFIANCE :</b> [ÉLEVÉE/MODÉRÉE/BASSE]
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → delta +D.DD ✅ → Kelly W%]
 📌 <b>POURQUOI ?</b> [Max 60 mots]
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
