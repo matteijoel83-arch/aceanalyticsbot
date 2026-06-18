@@ -61,8 +61,11 @@ if MISSING:
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
-CLAUDE_MODEL  = "claude-sonnet-4-6"
-GEMINI_MODEL  = "gemini-2.5-pro"
+CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 5 matchs
+CLAUDE_OPUS    = "claude-opus-4-6"     # Sessions riches ≥ 5 matchs
+CLAUDE_MODEL   = CLAUDE_SONNET         # Défaut — sera remplacé dynamiquement
+GEMINI_MODEL   = "gemini-2.5-pro"
+SEUIL_OPUS     = 5                     # Nb matchs minimum pour basculer sur Opus
 GITHUB_API    = "https://api.github.com"
 GITHUB_HEADERS = {
     "Authorization":        f"Bearer {GITHUB_TOKEN}",
@@ -340,7 +343,7 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
 
 def _envoyer_notification_sans_ticket(raison, session=""):
     stats  = charger_stats()
-    emoji  = "🌅" if session == "MATIN" else "🌆"
+    emoji  = "🌅" if session == "MATIN" else "🌆" if session == "APRÈS-MIDI" else "🌃"
     label  = f"Session {session}" if session else "Analyse"
     msg    = (
         f"{emoji} <b>ACEANALYTICS — {label}</b>\n\n"
@@ -1054,16 +1057,19 @@ def run_bot_autonome():
         logging.info("MODE DRY-RUN")
 
     # Fenêtre horaire selon la session
-    # Matin  (09h30) → matchs de 09h30 à 14h30
-    # Après-midi (14h30) → matchs de 14h30 à 00h00
+    # Matin      (09h30) → matchs 09h30 → 14h30
+    # Après-midi (14h30) → matchs 14h30 → 19h30
+    # Soir       (19h30) → matchs 19h30 → 00h00
     if heure < "14:00":
-        session      = "MATIN"
-        heure_fin    = "14:30"
-        logging.info(f"Session MATIN — fenêtre {heure} → {heure_fin}")
+        session   = "MATIN"
+        heure_fin = "14:30"
+    elif heure < "19:00":
+        session   = "APRÈS-MIDI"
+        heure_fin = "19:30"
     else:
-        session      = "APRÈS-MIDI"
-        heure_fin    = "23:59"
-        logging.info(f"Session APRÈS-MIDI — fenêtre {heure} → {heure_fin}")
+        session   = "SOIR"
+        heure_fin = "23:59"
+    logging.info(f"Session {session} — fenêtre {heure} → {heure_fin}")
 
     heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
     odds_matchs        = precollecte_odds_api(heure_utc_min)
@@ -1101,10 +1107,15 @@ def run_bot_autonome():
     except Exception as e:
         logging.warning(f"DEBUG log matchs : {e}")
 
+    # Bascule dynamique Sonnet → Opus selon richesse des données
+    nb_matchs_analyse = len(json.loads(donnees_json).get("matchs", []))
+    modele_choisi = CLAUDE_OPUS if nb_matchs_analyse >= SEUIL_OPUS else CLAUDE_SONNET
+    logging.info(f"Modèle Claude : {'Opus 🔥' if modele_choisi == CLAUDE_OPUS else 'Sonnet ⚡'} ({nb_matchs_analyse} matchs — seuil {SEUIL_OPUS})")
+
     try:
         logging.info(f"Claude analyse — {date} {heure}")
         rep = claude_client.messages.create(
-            model=CLAUDE_MODEL, max_tokens=4096, system=prompt,
+            model=modele_choisi, max_tokens=4096, system=prompt,
             messages=[{"role": "user", "content":
                 f"Analyse et propose les meilleurs paris (max {MAX_TICKETS}) — {date} {heure}."}],
         )
