@@ -1016,9 +1016,10 @@ FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️ RÈGLE FONDAMENTALE : N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
 Les tickets abandonnés (delta négatif, pas de value) → NE PAS les inclure dans la réponse.
 Si 0 ticket validé → répondre : AUCUN_MATCH suivi d'une explication courte (max 80 mots) :
-  · Les principales raisons (delta négatif, cotes trop basses, données insuffisantes)
-  · Le match le plus proche de la value et pourquoi il n'a pas passé
-  Exemple : "AUCUN_MATCH — Deltas tous négatifs sur les 5 matchs analysés. Le plus proche : Sinner vs Alcaraz (delta -0.02). Cotes trop basses vs probabilités estimées."
+  · Citer 1-2 matchs analysés avec le joueur favori et pourquoi pas de value
+  · Mentionner le delta et la raison principale (cote trop basse, données insuffisantes)
+  · Ton naturel et direct, comme un analyste qui explique à ses abonnés
+  Exemple : "AUCUN_MATCH — Sinner écrase Etcheverry sur gazon mais cote 1.19 trop basse (delta -0.14). Medvedev domine à Halle mais même problème (delta -0.08). Cotes trop compressées aujourd'hui, pas de value exploitable."
 La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
 1 ticket excellent vaut mieux que 5 tickets moyens.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
