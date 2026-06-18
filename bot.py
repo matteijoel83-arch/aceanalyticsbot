@@ -70,8 +70,26 @@ GITHUB_HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
-STATS_VERSION = 1
-STATS_DEFAUT  = {"version": STATS_VERSION, "victoires": 0, "defaites": 0}
+STATS_VERSION = 2
+STATS_DEFAUT  = {
+    "version":   STATS_VERSION,
+    "victoires": 0,
+    "defaites":  0,
+    "par_marche": {
+        "moneyline":   {"v": 0, "d": 0},
+        "score_exact": {"v": 0, "d": 0},
+        "over_under":  {"v": 0, "d": 0},
+        "handicap":    {"v": 0, "d": 0},
+        "tiebreak":    {"v": 0, "d": 0},
+        "combine":     {"v": 0, "d": 0},
+        "autre":       {"v": 0, "d": 0},
+    },
+    "par_niveau": {
+        "elevee":  {"v": 0, "d": 0},
+        "moderee": {"v": 0, "d": 0},
+        "basse":   {"v": 0, "d": 0},
+    }
+}
 TICKET_SEP    = "[SEPARATEUR]"
 MAX_TICKETS   = 5
 
@@ -139,8 +157,13 @@ def _gh_delete(path, message, sha):
 # =====================================================================
 
 def _migrer_stats(s):
-    if s.get("version", 0) < 1:
+    if s.get("version", 0) < 2:
         s["version"] = STATS_VERSION
+        # Migration v1 → v2 : ajouter les nouveaux champs
+        if "par_marche" not in s:
+            s["par_marche"] = dict(STATS_DEFAUT["par_marche"])
+        if "par_niveau" not in s:
+            s["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
     return s
 
 
@@ -175,6 +198,36 @@ def enregistrer_resultat(victoire, pari_termine=None):
             elif psha:
                 _gh_delete("pari_en_cours.json", "🗑️ File vide", sha=psha)
     logging.info(f"{'✅ VICTOIRE' if victoire else '❌ DÉFAITE'} — {s['victoires']}V / {s['defaites']}D")
+
+def _detecter_marche(ticket_texte):
+    """Détecte le type de marché depuis le texte du ticket."""
+    t = ticket_texte.lower()
+    if "combiné" in t or "combine" in t:
+        return "combine"
+    if "tiebreak" in t:
+        return "tiebreak"
+    if "handicap" in t:
+        return "handicap"
+    if "over" in t or "under" in t or "jeux" in t:
+        return "over_under"
+    if "2-0" in t or "2-1" in t or "score" in t:
+        return "score_exact"
+    if "moneyline" in t or "vainqueur" in t or "gagne" in t or "victoire" in t:
+        return "moneyline"
+    return "autre"
+
+
+def _detecter_niveau(ticket_texte):
+    """Détecte le niveau de confiance depuis le texte du ticket."""
+    t = ticket_texte.lower()
+    if "élevée" in t or "elevee" in t:
+        return "elevee"
+    if "modérée" in t or "moderee" in t:
+        return "moderee"
+    if "basse" in t:
+        return "basse"
+    return "autre"
+
 
 # =====================================================================
 # 4. DÉDUPLICATION PAR HASH SHA-256
@@ -1029,6 +1082,21 @@ def run_bot_autonome():
 
     prompt = construire_prompt_claude(date, heure, donnees_json)
 
+    # LOG DEBUG — affiche les matchs que Gemini a retournés
+    try:
+        donnees_debug = json.loads(donnees_json)
+        matchs_debug  = donnees_debug.get("matchs", [])
+        logging.info(f"DEBUG — {len(matchs_debug)} match(s) transmis à Claude :")
+        for i, m in enumerate(matchs_debug, 1):
+            logging.info(
+                f"  [{i}] {m.get('joueur1','?')} vs {m.get('joueur2','?')} "
+                f"| {m.get('heure_match','?')} | {m.get('surface','?')} "
+                f"| Cotes {m.get('cote_j1','?')} / {m.get('cote_j2','?')} "
+                f"| Hold J1: {m.get('hold_pct_j1','?')} / J2: {m.get('hold_pct_j2','?')}"
+            )
+    except Exception as e:
+        logging.warning(f"DEBUG log matchs : {e}")
+
     try:
         logging.info(f"Claude analyse — {date} {heure}")
         rep = claude_client.messages.create(
@@ -1038,6 +1106,9 @@ def run_bot_autonome():
         )
         texte = "\n".join(b.text for b in rep.content if hasattr(b, "text") and b.text).strip()
         logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
+
+        # LOG DEBUG — affiche la réponse brute de Claude (500 premiers chars)
+        logging.info(f"DEBUG Claude réponse : {texte[:500]}")
 
         if "AUCUN_MATCH" in texte:
             nb = len(json.loads(donnees_json).get("matchs", []))
@@ -1084,7 +1155,12 @@ def run_bot_autonome():
                 logging.warning(f"Ticket {i} : doublon.")
                 continue
             if envoyer_sur_telegram(ticket, stats=stats_cached):
-                sauvegarder_pari_pour_suivi({"pari": ticket, "date": date})
+                sauvegarder_pari_pour_suivi({
+                    "pari":   ticket,
+                    "date":   date,
+                    "marche": _detecter_marche(ticket),
+                    "niveau": _detecter_niveau(ticket),
+                })
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
                 paris_envoyes += 1
