@@ -1015,7 +1015,10 @@ Simple ÉLEVÉE 3% · Simple MODÉRÉE 2% · Simple BASSE 1% · Combiné MAX 2%
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️ RÈGLE FONDAMENTALE : N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
 Les tickets abandonnés (delta négatif, pas de value) → NE PAS les inclure dans la réponse.
-Si 0 ticket validé → répondre UNIQUEMENT : AUCUN_MATCH
+Si 0 ticket validé → répondre : AUCUN_MATCH suivi d'une explication courte (max 80 mots) :
+  · Les principales raisons (delta négatif, cotes trop basses, données insuffisantes)
+  · Le match le plus proche de la value et pourquoi il n'a pas passé
+  Exemple : "AUCUN_MATCH — Deltas tous négatifs sur les 5 matchs analysés. Le plus proche : Sinner vs Alcaraz (delta -0.02). Cotes trop basses vs probabilités estimées."
 La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
 1 ticket excellent vaut mieux que 5 tickets moyens.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
@@ -1112,8 +1115,17 @@ def run_bot_autonome():
 
         if "AUCUN_MATCH" in texte:
             nb = len(json.loads(donnees_json).get("matchs", []))
+            # Extraire l'explication de Claude (500 premiers chars après AUCUN_MATCH)
+            explication = ""
+            idx = texte.find("AUCUN_MATCH")
+            if idx != -1:
+                suite = texte[idx + len("AUCUN_MATCH"):].strip()
+                # Nettoyer et limiter à 200 chars
+                explication = re.sub(r'<[^>]+>', '', suite)[:200].strip()
+                if explication:
+                    explication = f"\n\n💬 <i>{explication}</i>"
             _envoyer_notification_sans_ticket(
-                f"{nb} match(s) analysé(s) — aucune value suffisante détectée.\n"
+                f"{nb} match(s) analysé(s) — aucune value suffisante détectée.{explication}\n\n"
                 f"On passe notre chemin. 💼",
                 session=session
             )
