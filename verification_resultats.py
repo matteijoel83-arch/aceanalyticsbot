@@ -49,7 +49,52 @@ GITHUB_HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
-STATS_DEFAUT = {"version": 1, "victoires": 0, "defaites": 0}
+STATS_DEFAUT = {
+    "version":   2,
+    "victoires": 0,
+    "defaites":  0,
+    "par_marche": {
+        "moneyline":   {"v": 0, "d": 0},
+        "score_exact": {"v": 0, "d": 0},
+        "over_under":  {"v": 0, "d": 0},
+        "handicap":    {"v": 0, "d": 0},
+        "tiebreak":    {"v": 0, "d": 0},
+        "combine":     {"v": 0, "d": 0},
+        "autre":       {"v": 0, "d": 0},
+    },
+    "par_niveau": {
+        "elevee":  {"v": 0, "d": 0},
+        "moderee": {"v": 0, "d": 0},
+        "basse":   {"v": 0, "d": 0},
+    }
+}
+
+
+def _migrer_stats(s):
+    if s.get("version", 0) < 2:
+        s["version"] = 2
+        if "par_marche" not in s:
+            s["par_marche"] = dict(STATS_DEFAUT["par_marche"])
+        if "par_niveau" not in s:
+            s["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
+    return s
+
+
+def _maj_stats_detail(stats, victoire, marche, niveau):
+    """Met à jour les stats par marché et par niveau."""
+    cle = "v" if victoire else "d"
+    # Par marché
+    if "par_marche" not in stats:
+        stats["par_marche"] = dict(STATS_DEFAUT["par_marche"])
+    marche_cle = marche if marche in stats["par_marche"] else "autre"
+    stats["par_marche"][marche_cle][cle] += 1
+    # Par niveau
+    if "par_niveau" not in stats:
+        stats["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
+    niveau_cle = niveau if niveau in stats["par_niveau"] else "autre"
+    if niveau_cle in stats["par_niveau"]:
+        stats["par_niveau"][niveau_cle][cle] += 1
+    return stats
 
 # =====================================================================
 # 2. COUCHE GITHUB
@@ -239,10 +284,12 @@ def main():
     if not isinstance(stats, dict) or "victoires" not in stats:
         stats     = dict(STATS_DEFAUT)
         stats_sha = None
+    else:
+        stats = _migrer_stats(stats)
 
     logging.info(f"Vérification de {len(paris)} pari(s)…")
 
-    restants       = []
+    restants        = []
     stats_modifiees = False
 
     for i, item in enumerate(paris, 1):
@@ -250,17 +297,23 @@ def main():
         if not pari_texte:
             continue
 
-        logging.info(f"─── Ticket {i}/{len(paris)} ───")
+        # Récupérer marché et niveau depuis pari_en_cours.json
+        marche = item.get("marche", "autre")
+        niveau = item.get("niveau", "autre")
+
+        logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
         statut = interroger_claude_statut(pari_texte)
         logging.info(f"Verdict : {statut}")
 
         if statut == "GAGNE":
             stats["victoires"] += 1
+            stats = _maj_stats_detail(stats, True, marche, niveau)
             stats_modifiees = True
             logging.info("🏆 Victoire enregistrée.")
             notifier_resultat("GAGNE", pari_texte, stats)
         elif statut == "PERDU":
             stats["defaites"] += 1
+            stats = _maj_stats_detail(stats, False, marche, niveau)
             stats_modifiees = True
             logging.info("❌ Défaite enregistrée.")
             notifier_resultat("PERDU", pari_texte, stats)
@@ -268,7 +321,6 @@ def main():
             restants.append(item)
             logging.info("⏳ En cours — maintenu dans la file.")
 
-        # Pause entre vérifications pour éviter les rate limits
         if i < len(paris):
             time.sleep(2)
 
