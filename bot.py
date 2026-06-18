@@ -1068,7 +1068,7 @@ def run_bot_autonome():
         heure_fin = "19:30"
     else:
         session   = "SOIR"
-        heure_fin = "23:59"
+        heure_fin = "05:00"
     logging.info(f"Session {session} — fenêtre {heure} → {heure_fin}")
 
     heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
