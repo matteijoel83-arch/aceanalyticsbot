@@ -824,8 +824,9 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
     bloc = (
         f"{calendrier_injecte}\n\n"
         f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
-        f"→ FENÊTRE HORAIRE : retenir UNIQUEMENT les matchs commençant ENTRE {heure} et {heure_fin} (heure France).\n"
-        f"   Ignorer les matchs avant {heure} (déjà commencés) ET après {heure_fin} (session suivante).\n"
+        f"→ IMPORTANT : Transmettre TOUS les matchs avec cotes disponibles — ne pas filtrer par heure.\n"
+        f"→ Indiquer l'heure exacte de chaque match dans le champ heure_match.\n"
+        f"→ Claude se chargera du filtrage par fenêtre horaire ({heure} → {heure_fin}).\n"
         f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
         if calendrier_injecte else
         f"Cherche les matchs du {date} entre {heure} et {heure_fin} sur flashscore.fr et atptour.com."
@@ -841,16 +842,18 @@ Tes 10 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
 {bloc}
 
 RECHERCHES (max 10 requêtes — H2H et forme déjà fournis ci-dessus) :
-1. Hold% service/retour via tennisratio.com — 1 requête par match avec cotes
-2. Charge physique — heures jouées 72h, titre récent, matchs enchaînés (flashscore.fr)
-3. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
-4. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j, public local
-5. Pour tout match SANS cote dans le calendrier — vérifier sur sportytrader.com/fr/cotes/tennis/
-   → Cote Winamax trouvée sur Sportytrader → l'inclure avec source_cote = "Sportytrader"
-   → Introuvable sur Sportytrader → source_cote = "non trouvée" (sera exclu par l'analyseur)
+1. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
+2. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j
+3. Hold% via tennisratio.com — pour les matchs avec cotes entre {heure} et {heure_fin}
+4. Charge physique — heures jouées 72h, titre récent (flashscore.fr)
+5. Pour tout match SANS cote dans le calendrier entre {heure} et {heure_fin} — vérifier sur sportytrader.com/fr/cotes/tennis/
+   → Cote Winamax trouvée → inclure avec source_cote = "Sportytrader"
+   → Introuvable → source_cote = "non trouvée"
 
+⚠️ IMPORTANT : Inclure TOUS les matchs du calendrier dans le JSON — même ceux hors fenêtre {heure}→{heure_fin}.
+   Claude filtrera par fenêtre horaire. Ton rôle est de collecter les stats, pas de filtrer.
 ⚠️ NE PAS re-chercher le H2H ni la forme récente — déjà fournis dans le calendrier.
-⚠️ Un match sans cote vérifiée (Odds API OU Sportytrader) = source_cote "non trouvée".
+⚠️ Un match sans cote vérifiée = source_cote "non trouvée".
 
 RÈGLES DE PRIORITÉ :
 - Retenir OBLIGATOIREMENT tous les matchs avec cotes disponibles (Odds API ou Sportytrader)
@@ -924,7 +927,7 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 # 11. PROMPT CLAUDE
 # =====================================================================
 
-def construire_prompt_claude(date, heure, donnees_json):
+def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
     session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
     try:
         avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
@@ -943,6 +946,7 @@ Tu n'as PAS accès à internet. Analyse uniquement les données fournies.
 
 FILTRES IMMÉDIATS :
 • Match commencé avant {heure} → skip
+• Match commençant après {heure_fin} → skip (hors fenêtre session)
 • absence_recente > 2 mois → skip
 • alertes_physiques → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs + mise 0.5%
@@ -1090,7 +1094,7 @@ def run_bot_autonome():
     except Exception:
         pass
 
-    prompt = construire_prompt_claude(date, heure, donnees_json)
+    prompt = construire_prompt_claude(date, heure, donnees_json, heure_fin)
 
     # LOG DEBUG — affiche les matchs que Gemini a retournés
     try:
