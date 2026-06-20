@@ -1,19 +1,49 @@
 {
   "version": 2,
-  "victoires": 2,
+  "victoires": 3,
   "defaites": 0,
   "par_marche": {
-    "moneyline":   {"v": 2, "d": 0},
-    "score_exact": {"v": 0, "d": 0},
-    "over_under":  {"v": 0, "d": 0},
-    "handicap":    {"v": 0, "d": 0},
-    "tiebreak":    {"v": 0, "d": 0},
-    "combine":     {"v": 0, "d": 0},
-    "autre":       {"v": 0, "d": 0}
+    "moneyline": {
+      "v": 3,
+      "d": 0
+    },
+    "score_exact": {
+      "v": 0,
+      "d": 0
+    },
+    "over_under": {
+      "v": 0,
+      "d": 0
+    },
+    "handicap": {
+      "v": 0,
+      "d": 0
+    },
+    "tiebreak": {
+      "v": 0,
+      "d": 0
+    },
+    "combine": {
+      "v": 0,
+      "d": 0
+    },
+    "autre": {
+      "v": 0,
+      "d": 0
+    }
   },
   "par_niveau": {
-    "elevee":  {"v": 0, "d": 0},
-    "moderee": {"v": 0, "d": 0},
-    "basse":   {"v": 2, "d": 0}
+    "elevee": {
+      "v": 0,
+      "d": 0
+    },
+    "moderee": {
+      "v": 0,
+      "d": 0
+    },
+    "basse": {
+      "v": 3,
+      "d": 0
+    }
   }
 }
