@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "victoires": 3,
+  "victoires": 4,
   "defaites": 0,
   "par_marche": {
     "moneyline": {
-      "v": 3,
+      "v": 4,
       "d": 0
     },
     "score_exact": {
@@ -42,7 +42,7 @@
       "d": 0
     },
     "basse": {
-      "v": 3,
+      "v": 4,
       "d": 0
     }
   }
