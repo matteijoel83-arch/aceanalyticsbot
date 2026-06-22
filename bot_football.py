@@ -44,6 +44,7 @@ GITHUB_TOKEN        = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO         = os.environ.get("GITHUB_REPO")
 ODDS_API_KEY        = os.environ.get("ODDS_API_KEY")
 RAPIDAPI_KEY        = os.environ.get("RAPIDAPI_KEY")
+FOOTBALL_API_KEY    = os.environ.get("FOOTBALL_API_KEY")  # football-data.org — gratuit
 
 MISSING = [k for k, v in {
     "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
@@ -437,88 +438,77 @@ def precollecte_odds_api(heure_utc_min):
     return matchs
 
 # =====================================================================
-# 8. MODULE B — PRÉ-COLLECTE API-FOOTBALL (RapidAPI)
+# 8. MODULE B — PRÉ-COLLECTE FOOTBALL-DATA.ORG v4
 # =====================================================================
 
 def precollecte_api_football(date_fr):
     """
-    Récupère le calendrier football via API-Football sur RapidAPI.
-    Endpoint : /fixtures?date={date}&timezone=Europe/Paris
+    Récupère le calendrier football via football-data.org v4.
+    Endpoint : GET /v4/matches?date={date}
+    Plan gratuit : 10 req/min · 12 compétitions incluses
+    Header : X-Auth-Token
     """
     matchs = []
-    if not RAPIDAPI_KEY:
-        logging.info("RAPIDAPI_KEY absente — pré-collecte API-Football ignorée.")
+    if not FOOTBALL_API_KEY:
+        logging.info("FOOTBALL_API_KEY absente — pré-collecte football-data.org ignorée.")
         return matchs
 
     date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
-    headers  = {
-        "x-rapidapi-key":  RAPIDAPI_KEY,
-        "x-rapidapi-host": "api-football-v1.p.rapidapi.com",
-    }
+    headers  = {"X-Auth-Token": FOOTBALL_API_KEY}
 
-    # Ligues prioritaires (IDs API-Football)
-    leagues = [
-        {"id": 61,  "name": "Ligue 1"},
-        {"id": 39,  "name": "Premier League"},
-        {"id": 140, "name": "La Liga"},
-        {"id": 78,  "name": "Bundesliga"},
-        {"id": 135, "name": "Serie A"},
-        {"id": 2,   "name": "Champions League"},
-        {"id": 3,   "name": "Europa League"},
-        {"id": 848, "name": "Conference League"},
-    ]
+    # Compétitions gratuites disponibles
+    competitions = ["PL", "PD", "BL1", "SA", "FL1", "CL", "EL"]
 
-    for league in leagues:
+    for comp in competitions:
         try:
             r = requests.get(
-                "https://api-football-v1.p.rapidapi.com/v3/fixtures",
+                f"https://api.football-data.org/v4/competitions/{comp}/matches",
                 headers=headers,
-                params={
-                    "date":     date_api,
-                    "league":   league["id"],
-                    "timezone": "Europe/Paris",
-                },
+                params={"dateFrom": date_api, "dateTo": date_api},
                 timeout=10,
             )
+            if r.status_code == 404:
+                continue
             r.raise_for_status()
             data = r.json()
 
-            for fixture in data.get("response", []):
-                f    = fixture.get("fixture", {})
-                teams = fixture.get("teams", {})
-                venue = fixture.get("venue", {})
+            comp_name = data.get("competition", {}).get("name", comp)
 
-                eq1 = teams.get("home", {}).get("name", "")
-                eq2 = teams.get("away", {}).get("name", "")
-                if not eq1 or not eq2:
+            for m in data.get("matches", []):
+                statut = m.get("status", "")
+                # Exclure matchs terminés ou en cours
+                if statut in ["FINISHED", "IN_PLAY", "PAUSED", "CANCELLED", "POSTPONED"]:
                     continue
 
-                # Heure
-                heure_utc = f.get("date", "")
-                if "T" in str(heure_utc):
-                    heure_utc = heure_utc[:16].replace("T", " ") + " UTC"
-
-                # Statut — exclure matchs en cours ou terminés
-                statut = f.get("status", {}).get("short", "")
-                if statut in ["1H", "2H", "HT", "ET", "BT", "FT", "AET", "PEN"]:
+                home = m.get("homeTeam", {}).get("name", "")
+                away = m.get("awayTeam", {}).get("name", "")
+                if not home or not away:
                     continue
+
+                # Heure UTC
+                utc_date = m.get("utcDate", "")
+                if "T" in utc_date:
+                    utc_date = utc_date[:16].replace("T", " ") + " UTC"
 
                 matchs.append({
-                    "equipe1":     eq1.strip(),
-                    "equipe2":     eq2.strip(),
-                    "fixture_id":  f.get("id"),
-                    "heure":       heure_utc,
-                    "competition": league["name"],
-                    "stade":       venue.get("name", ""),
-                    "ville":       venue.get("city", ""),
+                    "equipe1":     home.strip(),
+                    "equipe2":     away.strip(),
+                    "match_id":    m.get("id"),
+                    "heure":       utc_date,
+                    "competition": comp_name,
+                    "journee":     m.get("matchday", ""),
+                    "stade":       m.get("venue", ""),
                 })
 
-        except requests.exceptions.HTTPError as e:
-            logging.warning(f"API-Football {league['name']} : {e}")
-        except Exception as e:
-            logging.warning(f"API-Football {league['name']} erreur : {e}")
+            # Pause pour respecter la limite 10 req/min
+            time.sleep(6)
 
-    logging.info(f"API-Football — {len(matchs)} match(s) récupéré(s).")
+        except requests.exceptions.HTTPError as e:
+            logging.warning(f"football-data.org {comp} : {e}")
+        except Exception as e:
+            logging.warning(f"football-data.org {comp} erreur : {e}")
+
+    logging.info(f"football-data.org — {len(matchs)} match(s) récupéré(s).")
     return matchs
 
 # =====================================================================
