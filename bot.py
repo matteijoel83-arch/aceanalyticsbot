@@ -61,11 +61,11 @@ if MISSING:
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
-CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 5 matchs
-CLAUDE_OPUS    = "claude-opus-4-6"     # Sessions riches ≥ 5 matchs
+CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 3 matchs
+CLAUDE_OPUS    = "claude-opus-4-6"     # Sessions riches ≥ 3 matchs
 CLAUDE_MODEL   = CLAUDE_SONNET         # Défaut — sera remplacé dynamiquement
-GEMINI_MODEL   = "gemini-2.5-pro"
-SEUIL_OPUS     = 5                     # Nb matchs minimum pour basculer sur Opus
+GEMINI_MODEL   = "gemini-3.5-flash"   # Dernière version stable — meilleur que 2.5 Pro
+SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opus
 GITHUB_API    = "https://api.github.com"
 GITHUB_HEADERS = {
     "Authorization":        f"Bearer {GITHUB_TOKEN}",
@@ -837,11 +837,11 @@ Tu es un agent de collecte tennis. Date : {date}. Heure : {heure} France.
 
 MISSION : Enrichir les données avec stats, H2H et contexte.
 Tu NE cherches PAS le calendrier — il est fourni ci-dessous.
-Tes 10 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
+Tes 15 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
 
 {bloc}
 
-RECHERCHES (max 10 requêtes — H2H et forme déjà fournis si disponibles) :
+RECHERCHES (max 15 requêtes — H2H et forme déjà fournis si disponibles) :
 
 PRIORITÉ 1 — Données souvent manquantes (chercher en premier) :
 1. Hold% et stats service/retour (1 requête par match prioritaire) :
@@ -926,6 +926,7 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],
                         temperature=0.1,
+                        max_remote_calls=15,
                     ),
                 )
                 break  # Succès → sortir de la boucle
