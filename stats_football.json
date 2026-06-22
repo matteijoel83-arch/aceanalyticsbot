@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "victoires": 0,
+  "defaites": 0,
+  "par_marche": {
+    "1n2":         {"v": 0, "d": 0},
+    "score_exact": {"v": 0, "d": 0},
+    "over_under":  {"v": 0, "d": 0},
+    "handicap":    {"v": 0, "d": 0},
+    "btts":        {"v": 0, "d": 0},
+    "combine":     {"v": 0, "d": 0},
+    "autre":       {"v": 0, "d": 0}
+  },
+  "par_niveau": {
+    "elevee":  {"v": 0, "d": 0},
+    "moderee": {"v": 0, "d": 0},
+    "basse":   {"v": 0, "d": 0}
+  }
+}
