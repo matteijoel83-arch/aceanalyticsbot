@@ -841,18 +841,48 @@ Tes 10 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
 
 {bloc}
 
-RECHERCHES (max 10 requêtes — H2H et forme déjà fournis ci-dessus) :
-1. Blessures/forfaits — 1 requête globale sur eurosport.fr ou tennis.com
-2. Contexte psychologique — points ATP/WTA à défendre, Grand Chelem dans 7j
-3. Hold% via tennisratio.com — pour les matchs avec cotes entre {heure} et {heure_fin}
-4. Charge physique — heures jouées 72h, titre récent (flashscore.fr)
-5. Pour tout match SANS cote dans le calendrier entre {heure} et {heure_fin} — vérifier sur sportytrader.com/fr/cotes/tennis/
-   → Cote Winamax trouvée → inclure avec source_cote = "Sportytrader"
+RECHERCHES (max 10 requêtes — H2H et forme déjà fournis si disponibles) :
+
+PRIORITÉ 1 — Données souvent manquantes (chercher en premier) :
+1. Hold% et stats service/retour (1 requête par match prioritaire) :
+   → tennisabstract.com OU ultimatetennisstatistics.com OU tennisratio.com OU matchstat.com
+   → Combiner J1+J2 dans la même requête si possible
+   → Chercher : "Prénom Nom hold% tennisabstract" ou "Nom serve stats UTS"
+
+2. Forme récente détaillée — UNIQUEMENT si forme_j1_api ou forme_j2_api = "non disponible" :
+   → flashscore.fr OU sofascore.com OU matchstat.com
+   → 5 derniers matchs avec surface + score + adversaire
+   → Si déjà fourni dans le calendrier → NE PAS re-chercher
+
+3. Stats avancées par surface (Break%, Return%, Win% gazon/terre/dur) :
+   → ultimatetennisstatistics.com OU tennisabstract.com
+   → Particulièrement utile pour matchs sur surface spécifique
+
+PRIORITÉ 2 — Contexte :
+4. Blessures/forfaits (1 requête globale) :
+   → eurosport.fr OU tennis.com OU atptour.com
+5. Points ATP/WTA à défendre + classement actuel :
+   → atptour.com OU wtatennis.com
+6. Charge physique — heures jouées 72h, matchs enchaînés :
+   → flashscore.fr OU sofascore.com
+
+PRIORITÉ 3 — Vérification cotes matchs secondaires :
+7. Pour tout match SANS cote dans le calendrier :
+   → sportytrader.com/fr/cotes/tennis/
+   → Cote Winamax trouvée → source_cote = "Sportytrader"
    → Introuvable → source_cote = "non trouvée"
+
+SOURCES PAR TYPE :
+• Hold% / Break% / Return%  → tennisabstract.com · ultimatetennisstatistics.com · tennisratio.com · matchstat.com
+• Forme récente + scores    → flashscore.fr · sofascore.com · matchstat.com
+• Stats par surface         → ultimatetennisstatistics.com · tennisabstract.com
+• Classements + points      → atptour.com · wtatennis.com
+• Blessures + actualités    → eurosport.fr · tennis.com · atptour.com
+• Cotes                     → sportytrader.com
 
 ⚠️ IMPORTANT : Inclure TOUS les matchs du calendrier dans le JSON — même ceux hors fenêtre {heure}→{heure_fin}.
    Claude filtrera par fenêtre horaire. Ton rôle est de collecter les stats, pas de filtrer.
-⚠️ NE PAS re-chercher le H2H ni la forme récente — déjà fournis dans le calendrier.
+⚠️ NE PAS re-chercher le H2H ni la forme si déjà fournis dans le calendrier.
 ⚠️ Un match sans cote vérifiée = source_cote "non trouvée".
 
 RÈGLES DE PRIORITÉ :
@@ -985,6 +1015,17 @@ Plafonds absolus (quel que soit le niveau) :
   · Alertes physiques → MAX 1%
   · Retour 3-8 semaines → MAX 1%
   · Combiné → MAX 2%
+
+⚠️ RÈGLE ABSOLUE — FORMAT DE SORTIE :
+Ta réponse doit commencer DIRECTEMENT par 🔴 ou par AUCUN_MATCH.
+STRICTEMENT INTERDIT avant le 🔴 :
+  · Étapes d'analyse (ÉTAPE 1, ÉTAPE 2, FILTRAGE, etc.)
+  · Calculs Kelly intermédiaires
+  · Liste des matchs skippés ou abandonnés
+  · Tout texte introductif ou explicatif
+  · Titres de section
+L'analyse est INTERNE et ne doit JAMAIS apparaître dans ta réponse.
+Premier caractère de ta réponse = 🔴 ou A (de AUCUN_MATCH). Rien d'autre.
 
 ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
 ⚠️ Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH.
