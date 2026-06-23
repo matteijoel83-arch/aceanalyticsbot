@@ -370,25 +370,41 @@ def sauvegarder_pari_pour_suivi(pari_info):
 SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
 SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
 
-def _sportapi7_get(endpoint, params=None):
-    """Requête SportAPI7 avec la clé RapidAPI existante."""
+def _sportapi7_get(endpoint, params=None, retries=3):
+    """Requête SportAPI7 avec retry automatique sur 429."""
     if not RAPIDAPI_KEY:
         return None
-    try:
-        r = requests.get(
-            f"{SPORTAPI7_BASE}/{endpoint}",
-            headers={
-                "x-rapidapi-key":  RAPIDAPI_KEY,
-                "x-rapidapi-host": SPORTAPI7_HOST,
-            },
-            params=params,
-            timeout=8,
-        )
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        logging.warning(f"SportAPI7 {endpoint} : {e}")
-        return None
+    for tentative in range(1, retries + 1):
+        try:
+            r = requests.get(
+                f"{SPORTAPI7_BASE}/{endpoint}",
+                headers={
+                    "x-rapidapi-key":  RAPIDAPI_KEY,
+                    "x-rapidapi-host": SPORTAPI7_HOST,
+                },
+                params=params,
+                timeout=8,
+            )
+            if r.status_code == 429:
+                wait = int(r.headers.get("Retry-After", tentative * 10))
+                logging.warning(f"SportAPI7 429 — retry dans {wait}s… ({tentative}/{retries})")
+                time.sleep(wait)
+                continue
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return r.json()
+        except requests.exceptions.HTTPError as e:
+            if "429" in str(e):
+                time.sleep(tentative * 10)
+                continue
+            logging.warning(f"SportAPI7 {endpoint} : {e}")
+            return None
+        except Exception as e:
+            logging.warning(f"SportAPI7 {endpoint} : {e}")
+            return None
+    logging.warning(f"SportAPI7 {endpoint} — échec après {retries} tentatives.")
+    return None
 
 
 def enrichir_sportapi7_football(api_matchs: list) -> list:
