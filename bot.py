@@ -915,27 +915,43 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 
     try:
         logging.info(f"Gemini enrichit les données — {date} {heure}…")
-        
-        # Retry en cas de 503 (surcharge serveur Google)
+
         derniere_erreur = None
         for tentative in range(1, 4):
             try:
-                rep = gemini_client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                        temperature=0.1,
-                    ),
-                )
-                break  # Succès → sortir de la boucle
+                # Essayer avec max_remote_calls=15 — fallback sans si non supporté
+                try:
+                    rep = gemini_client.models.generate_content(
+                        model=GEMINI_MODEL,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())],
+                            temperature=0.1,
+                            max_remote_calls=15,
+                        ),
+                    )
+                    logging.info("Gemini — mode 15 requêtes activé ✅")
+                except Exception as e_max:
+                    if "extra inputs" in str(e_max) or "max_remote_calls" in str(e_max):
+                        logging.warning("max_remote_calls non supporté — fallback 10 requêtes.")
+                        rep = gemini_client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(
+                                tools=[types.Tool(google_search=types.GoogleSearch())],
+                                temperature=0.1,
+                            ),
+                        )
+                    else:
+                        raise
+                break
             except Exception as e:
                 derniere_erreur = e
                 if "503" in str(e) or "UNAVAILABLE" in str(e):
                     logging.warning(f"Gemini 503 tentative {tentative}/3 — retry dans {tentative * 15}s…")
                     time.sleep(tentative * 15)
                 else:
-                    raise  # Autre erreur → pas de retry
+                    raise
         if derniere_erreur and "503" in str(derniere_erreur):
             logging.error(f"Gemini 503 après 3 tentatives : {derniere_erreur}")
             return '{"matchs": [], "avertissements": "Gemini indisponible (503) — réessayer plus tard."}'
