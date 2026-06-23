@@ -1255,6 +1255,43 @@ HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
 """
 
+def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
+    """
+    Pré-filtre les matchs par fenêtre horaire AVANT l'envoi à Gemini.
+    Concentre les requêtes Gemini sur les matchs pertinents de la session.
+    Gère le passage minuit (session soir).
+    """
+    if not rapid_matchs:
+        return rapid_matchs
+
+    fenetre_nocturne = heure_fin < heure_debut  # ex: 19:30 → 05:00
+
+    def _heure_match(m):
+        h = m.get("heure", "")
+        # Extraire HH:MM depuis "2026-06-23 16:30 UTC" ou "16:30"
+        match = re.search(r"(\d{2}):(\d{2})", str(h))
+        return match.group(0) if match else None
+
+    matchs_filtres = []
+    for m in rapid_matchs:
+        hm = _heure_match(m)
+        if not hm:
+            # Heure inconnue → garder par sécurité (Claude filtrera)
+            matchs_filtres.append(m)
+            continue
+
+        if fenetre_nocturne:
+            # Match dans la fenêtre si après début OU avant fin (passe minuit)
+            if hm >= heure_debut or hm <= heure_fin:
+                matchs_filtres.append(m)
+        else:
+            if heure_debut <= hm <= heure_fin:
+                matchs_filtres.append(m)
+
+    logging.info(f"Filtrage horaire : {len(matchs_filtres)}/{len(rapid_matchs)} matchs dans la fenêtre {heure_debut}→{heure_fin}.")
+    return matchs_filtres
+
+
 # =====================================================================
 # 12. ORCHESTRATION
 # =====================================================================
@@ -1286,6 +1323,8 @@ def run_bot_autonome():
     heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     rapid_matchs       = precollecte_rapidapi_tennis(date)
+    # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
+    rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
     rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
