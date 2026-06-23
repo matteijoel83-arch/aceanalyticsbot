@@ -185,22 +185,21 @@ def notifier_resultat(statut: str, pari_texte: str, stats: dict):
     wr    = (stats["victoires"] / total * 100) if total > 0 else 0.0
 
     if statut == "GAGNE":
-        header = "🏆 <b>PRONOSTIC VALIDÉ !</b> ✅"
+        header = "🎾 🏆 <b>ACEANALYTICS TENNIS — PRONOSTIC VALIDÉ !</b> ✅"
         emoji  = "✅"
     else:
-        header = "❌ <b>PRONOSTIC PERDU</b>"
+        header = "🎾 ❌ <b>ACEANALYTICS TENNIS — PRONOSTIC PERDU</b>"
         emoji  = "❌"
 
-    # On extrait la ligne MATCHS comme résumé — plus informatif que la première ligne
     resume = next(
-        (re.sub(r"<[^>]+>", "", l).strip() for l in pari_texte.splitlines() if "MATCHS" in l.upper()),
-        pari_texte.strip().split("\n")[0]  # Fallback si ligne MATCHS absente
+        (re.sub(r"<[^>]+>", "", l).strip() for l in pari_texte.splitlines() if "MATCH" in l.upper()),
+        pari_texte.strip().split("\n")[0]
     )[:200]
 
     message = (
         f"{header}\n\n"
         f"📌 {resume}\n\n"
-        f"📊 <b>BILAN MIS À JOUR</b>\n"
+        f"📊 <b>BILAN ACEANALYTICS 🎾 TENNIS</b>\n"
         f"{emoji} V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
         f"📈 <b>Win Rate : {wr:.1f}%</b>"
     )
