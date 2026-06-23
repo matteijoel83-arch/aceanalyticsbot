@@ -551,6 +551,9 @@ def precollecte_odds_api(heure_utc_min):
         "soccer_italy_serie_a",
         "soccer_uefa_champs_league",
         "soccer_uefa_europa_league",
+        "soccer_fifa_world_cup",          # Coupe du Monde 2026 ⭐
+        "soccer_conmebol_copa_america",   # Copa América
+        "soccer_uefa_european_championship",  # Euro
     ]
     for sport in sports:
         try:
@@ -1192,9 +1195,17 @@ def run_bot_autonome():
 
         tickets = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20][:MAX_TICKETS]
 
-        # Filtrer tickets abandonnés
+        # Filtrer tickets abandonnés — uniquement si le ticket ne commence pas par ⚽ ou 🔴
         mots_abandon = ["abandonné", "delta négatif", "pas de value", "kelly 0%", "aucune value"]
-        tickets = [t for t in tickets if not any(m in t.lower() for m in mots_abandon)]
+        tickets_valides = []
+        for t in tickets:
+            if t.startswith("⚽") or t.startswith("🔴"):
+                tickets_valides.append(t)  # Ticket propre — on garde toujours
+            elif not any(m in t.lower() for m in mots_abandon):
+                tickets_valides.append(t)
+            else:
+                logging.info(f"Ticket abandonné détecté — non sauvegardé.")
+        tickets = tickets_valides
 
         if not tickets:
             _envoyer_notification_sans_ticket(
