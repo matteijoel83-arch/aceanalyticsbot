@@ -926,7 +926,6 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],
                         temperature=0.1,
-                        max_remote_calls=15,
                     ),
                 )
                 break  # Succès → sortir de la boucle
