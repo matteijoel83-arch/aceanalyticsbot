@@ -1373,11 +1373,17 @@ def run_bot_autonome():
                 logging.warning(f"Ticket {i} : doublon.")
                 continue
             if envoyer_sur_telegram(ticket, stats=stats_cached):
+                # Nettoyer le ticket — garder uniquement la partie 🔴 ou AUCUN_MATCH
+                ticket_propre = ticket
+                if not ticket_propre.startswith("🔴"):
+                    idx = ticket_propre.find("🔴")
+                    if idx != -1:
+                        ticket_propre = ticket_propre[idx:]
                 sauvegarder_pari_pour_suivi({
-                    "pari":   ticket,
+                    "pari":   ticket_propre,
                     "date":   date,
-                    "marche": _detecter_marche(ticket),
-                    "niveau": _detecter_niveau(ticket),
+                    "marche": _detecter_marche(ticket_propre),
+                    "niveau": _detecter_niveau(ticket_propre),
                 })
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
