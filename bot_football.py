@@ -1119,11 +1119,28 @@ def run_bot_autonome():
         rep = claude_client.messages.create(
             model=modele_choisi, max_tokens=4096, system=prompt,
             messages=[{"role": "user", "content":
-                f"Analyse et propose les meilleurs paris football (max {MAX_TICKETS}) — {date} {heure}."}],
+                f"Analyse et propose les meilleurs paris football (max {MAX_TICKETS}) — {date} {heure}.\n"
+                f"RAPPEL CRITIQUE : Ta réponse commence OBLIGATOIREMENT par ⚽ ou AUCUN_MATCH. "
+                f"Zéro texte avant. Premier caractère = ⚽ ou A. Sinon c'est un échec."}],
         )
         texte = "\n".join(b.text for b in rep.content if hasattr(b, "text") and b.text).strip()
         logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
         logging.info(f"DEBUG Claude : {texte[:300]}")
+
+        # Filtre sécurité — extrait la partie valide si Claude ajoute du texte parasite
+        if not texte.startswith("⚽") and not texte.startswith("AUCUN_MATCH"):
+            idx_foot  = texte.find("⚽")
+            idx_aucun = texte.find("AUCUN_MATCH")
+            idx_valide = -1
+            if idx_foot != -1 and idx_aucun != -1:
+                idx_valide = min(idx_foot, idx_aucun)
+            elif idx_foot != -1:
+                idx_valide = idx_foot
+            elif idx_aucun != -1:
+                idx_valide = idx_aucun
+            if idx_valide != -1:
+                logging.warning(f"Claude Football — texte parasite nettoyé ({idx_valide} chars).")
+                texte = texte[idx_valide:]
 
         if "AUCUN_MATCH" in texte:
             explication = ""
@@ -1169,11 +1186,18 @@ def run_bot_autonome():
                 logging.warning(f"Ticket {i} : doublon.")
                 continue
             if envoyer_sur_telegram(ticket, stats=stats_cached):
+                # Nettoyer le ticket — garder uniquement la partie ⚽ ou 🔴
+                ticket_propre = ticket
+                for marqueur in ["⚽", "🔴"]:
+                    idx = ticket_propre.find(marqueur)
+                    if idx != -1 and not ticket_propre.startswith(marqueur):
+                        ticket_propre = ticket_propre[idx:]
+                        break
                 sauvegarder_pari_pour_suivi({
-                    "pari":   ticket,
+                    "pari":   ticket_propre,
                     "date":   date,
-                    "marche": _detecter_marche(ticket),
-                    "niveau": _detecter_niveau(ticket),
+                    "marche": _detecter_marche(ticket_propre),
+                    "niveau": _detecter_niveau(ticket_propre),
                 })
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
