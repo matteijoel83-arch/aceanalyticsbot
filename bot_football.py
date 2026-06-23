@@ -312,7 +312,7 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
 
 def _envoyer_notification_sans_ticket(raison, session=""):
     stats  = charger_stats()
-    emoji  = "🌅" if session == "MATIN" else "🌆" if session == "APRÈS-MIDI" else "🌃"
+    emoji  = "⚽🌆" if session == "APRÈS-MIDI" else "⚽🌃"
     label  = f"Session {session}" if session else "Analyse"
     msg    = (
         f"{emoji} <b>⚽ ACEANALYTICS FOOTBALL — {label}</b>\n\n"
@@ -456,8 +456,9 @@ def precollecte_api_football(date_fr):
     date_api = datetime.strptime(date_fr, "%d/%m/%Y").strftime("%Y-%m-%d")
     headers  = {"X-Auth-Token": FOOTBALL_API_KEY}
 
-    # Compétitions gratuites disponibles
-    competitions = ["PL", "PD", "BL1", "SA", "FL1", "CL", "EL"]
+    # Compétitions gratuites disponibles (EL retiré — accès 403 plan gratuit)
+    # WC = FIFA World Cup 2026 (en cours !)
+    competitions = ["PL", "PD", "BL1", "SA", "FL1", "CL", "WC", "EC"]
 
     for comp in competitions:
         try:
@@ -658,8 +659,14 @@ SOURCES PAR TYPE :
 • xG / xGA                 → understat.com · fbref.com
 • Stats avancées           → whoscored.com · fbref.com
 • Blessures/absences       → transfermarkt.fr · premierinjuries.com
-• Classements/contexte     → flashscore.fr · atptour.com
+• Classements/contexte     → flashscore.fr · fifa.com (pour CdM)
 • Cotes                    → sportytrader.com
+
+⚠️ COUPE DU MONDE 2026 EN COURS — contexte spécial :
+   → Pression maximale sur chaque match (élimination directe en phases finales)
+   → Fatigue accumulée si équipe a joué 3+ matchs en 10 jours
+   → Absences sur cartons jaunes/rouges particulièrement importantes
+   → Public neutre sauf matchs sur sol américain (avantage USA/Canada/Mexique)
 
 ⚠️ Inclure TOUS les matchs du calendrier dans le JSON — Claude filtrera par heure.
 ⚠️ Un match sans cote vérifiée = source_cote "non trouvée".
@@ -716,7 +723,6 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],
                         temperature=0.1,
-                        max_remote_calls=15,
                     ),
                 )
                 break
@@ -772,6 +778,12 @@ FILTRES IMMÉDIATS :
 • Derby local → variance élevée → BASSE systématique
 • Équipe déjà qualifiée/reléguée → motivation douteuse → skip si enjeux nuls
 • Absences clés (buteur principal, gardien titulaire) → BASSE
+
+FILTRES COUPE DU MONDE (si applicable) :
+• Phase de groupes → 3ème match + équipe déjà qualifiée → skip (rotation massive)
+• Suspensions sur cartons jaunes → impact majeur → vérifier obligatoirement
+• Équipe jouant son 3ème match en 8 jours → fatigue → BASSE systématique
+• Favoris mondiaux (France/Brésil/Angleterre) sur petite équipe → cotes trop basses → delta souvent négatif
 
 CALIBRATION PROBABILITÉS (football plus aléatoire que tennis) :
 • Favori clair  (cote < 1.50)  → MAX 70%
@@ -885,10 +897,7 @@ def run_bot_autonome():
     if DRY_RUN:
         logging.info("MODE DRY-RUN")
 
-    if heure < "14:00":
-        session   = "MATIN"
-        heure_fin = "14:30"
-    elif heure < "19:00":
+    if heure < "19:00":
         session   = "APRÈS-MIDI"
         heure_fin = "19:30"
     else:
