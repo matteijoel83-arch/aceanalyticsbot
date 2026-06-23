@@ -247,18 +247,19 @@ def _extraire_resume_ticket(pari_texte: str) -> str:
     return "\n".join(lignes) if lignes else "\n".join(pari_texte.splitlines()[:5])
 
 
-def interroger_claude_statut(pari_texte: str) -> str:
+def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
     # On n'envoie que le résumé minimal — pas le ticket complet
     resume = _extraire_resume_ticket(pari_texte)
+    contexte_date = f"\nDate du match : {date_pari}" if date_pari else ""
     try:
         reponse = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=256,         # Absorbe les blocs tool_use/result + le mot final
+            max_tokens=256,
             system=INSTRUCTIONS_VERIFICATION,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": f"Résultat de ce pari ?\n{resume}",
+                "content": f"Résultat de ce pari ?{contexte_date}\n{resume}",
             }],
         )
         verdict = "\n".join(
@@ -312,7 +313,7 @@ def main():
         niveau = item.get("niveau", "autre")
 
         logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
-        statut = interroger_claude_statut(pari_texte)
+        statut = interroger_claude_statut(pari_texte, item.get("date", ""))
         logging.info(f"Verdict : {statut}")
 
         if statut == "GAGNE":
