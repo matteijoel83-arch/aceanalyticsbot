@@ -40,7 +40,7 @@ if MISSING:
     sys.exit(1)
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"  # Tâche simple → Haiku (10x moins cher que Sonnet)
+CLAUDE_MODEL = "claude-sonnet-4-6"  # Sonnet pour fiabilité — vérification critique
 
 GITHUB_API     = "https://api.github.com"
 GITHUB_HEADERS = {
@@ -211,30 +211,41 @@ def notifier_resultat(statut: str, pari_texte: str, stats: dict):
 # =====================================================================
 
 INSTRUCTIONS_VERIFICATION = (
-    "Vérificateur de scores tennis. "
-    "Cherche le résultat via web_search (Flashscore / Sofascore). "
-    "Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS. "
-    "Aucun autre texte. Doute = EN_COURS."
+    "Tu es un vérificateur de résultats de paris sportifs. "
+    "Cherche le résultat via web_search sur Flashscore, Sofascore ou BBC Sport. "
+    "\n\nRÈGLE ABSOLUE : Tu dois vérifier le PRONOSTIC EXACT, pas seulement le vainqueur."
+    "\n- Si le prono est 'Victoire Moneyline' → vérifier qui a gagné le match"
+    "\n- Si le prono est 'Score 2-1' → vérifier le score exact des sets"
+    "\n- Si le prono est 'Over X jeux' → vérifier le nombre total de jeux"
+    "\n- Si le prono est 'BTTS' → vérifier si les deux équipes ont marqué"
+    "\n- Si le prono est 'Over 2.5 buts' → vérifier le nombre de buts"
+    "\n- Si le prono est un combiné → TOUS les pronostics doivent être validés"
+    "\n\nPROCÉDURE :"
+    "\n1. Cherche le score final du match"
+    "\n2. Compare avec le pronostic exact indiqué"
+    "\n3. Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS"
+    "\n\nRÈGLES STRICTES :"
+    "\n- Match pas encore terminé → EN_COURS"
+    "\n- Match terminé + pronostic validé → GAGNE"
+    "\n- Match terminé + pronostic non validé → PERDU"
+    "\n- Doute sur le résultat → EN_COURS (jamais GAGNE si incertain)"
+    "\nAucun autre texte que GAGNE, PERDU ou EN_COURS."
 )
 
 
 def _extraire_resume_ticket(pari_texte: str) -> str:
     """
-    Extrait uniquement les infos nécessaires à la vérification du score :
-    joueurs, tournoi, heure, pronostic. On retire tout le reste (analyse,
-    cotes, mise, confiance) pour minimiser les tokens envoyés à Claude.
+    Extrait les infos nécessaires à la vérification :
+    match, tournoi, heure ET pronostic exact.
     """
-    champs_utiles = ("MATCHS", "COMPÉTITION", "HEURE", "PRONO")
+    champs_utiles = ("MATCH", "COMPÉTITION", "HEURE", "PRONO", "COTE")
     lignes = []
     for ligne in pari_texte.splitlines():
         ligne_clean = ligne.strip()
-        # Garde uniquement les lignes contenant un champ utile
         if any(c in ligne_clean.upper() for c in champs_utiles):
-            # Retire les balises HTML pour économiser encore des tokens
             ligne_clean = re.sub(r"<[^>]+>", "", ligne_clean)
             lignes.append(ligne_clean)
-    # Fallback : si l'extraction échoue, on prend les 3 premières lignes
-    return "\n".join(lignes) if lignes else "\n".join(pari_texte.splitlines()[:3])
+    return "\n".join(lignes) if lignes else "\n".join(pari_texte.splitlines()[:5])
 
 
 def interroger_claude_statut(pari_texte: str) -> str:
