@@ -401,25 +401,41 @@ def sauvegarder_pari_pour_suivi(pari_info):
 SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
 SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
 
-def _sportapi7_get(endpoint, params=None):
-    """Requête SportAPI7 avec la clé RapidAPI existante."""
+def _sportapi7_get(endpoint, params=None, retries=3):
+    """Requête SportAPI7 avec retry automatique sur 429."""
     if not RAPIDAPI_KEY:
         return None
-    try:
-        r = requests.get(
-            f"{SPORTAPI7_BASE}/{endpoint}",
-            headers={
-                "x-rapidapi-key":  RAPIDAPI_KEY,
-                "x-rapidapi-host": SPORTAPI7_HOST,
-            },
-            params=params,
-            timeout=8,
-        )
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        logging.warning(f"SportAPI7 {endpoint} : {e}")
-        return None
+    for tentative in range(1, retries + 1):
+        try:
+            r = requests.get(
+                f"{SPORTAPI7_BASE}/{endpoint}",
+                headers={
+                    "x-rapidapi-key":  RAPIDAPI_KEY,
+                    "x-rapidapi-host": SPORTAPI7_HOST,
+                },
+                params=params,
+                timeout=8,
+            )
+            if r.status_code == 429:
+                wait = int(r.headers.get("Retry-After", tentative * 10))
+                logging.warning(f"SportAPI7 429 — retry dans {wait}s… ({tentative}/{retries})")
+                time.sleep(wait)
+                continue
+            if r.status_code == 404:
+                return None  # Pas de données pour cet event — normal
+            r.raise_for_status()
+            return r.json()
+        except requests.exceptions.HTTPError as e:
+            if "429" in str(e):
+                time.sleep(tentative * 10)
+                continue
+            logging.warning(f"SportAPI7 {endpoint} : {e}")
+            return None
+        except Exception as e:
+            logging.warning(f"SportAPI7 {endpoint} : {e}")
+            return None
+    logging.warning(f"SportAPI7 {endpoint} — échec après {retries} tentatives.")
+    return None
 
 
 def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
@@ -434,8 +450,15 @@ def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
     date_today = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
 
     try:
-        # Récupérer tous les matchs tennis du jour
-        data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
+        # Récupérer tous les matchs tennis du jour — retry si 429
+        data = None
+        for tentative in range(1, 4):
+            data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
+            if data:
+                break
+            logging.warning(f"SportAPI7 Tennis — tentative {tentative}/3, retry dans 5s…")
+            time.sleep(5)
+
         if not data:
             logging.info("SportAPI7 Tennis — pas de données disponibles.")
             return rapid_matchs
@@ -672,16 +695,27 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
         odds_index[m["joueur1"].lower()] = m
         odds_index[m["joueur2"].lower()] = m
 
-    matchs_winamax   = []  # Matchs RapidAPI avec cote Winamax confirmée
-    matchs_sans_cote = []  # Matchs RapidAPI sans cote Winamax
-    affiches         = set()
+    matchs_winamax        = []
+    matchs_sans_cote      = []
+    affiches              = set()
+    noms_famille_affiches = set()  # Pour détecter doublons avec noms légèrement différents
 
     for m in rapid_matchs:
         j1, j2 = m["joueur1"], m["joueur2"]
         cle = f"{j1}|{j2}"
         if cle in affiches:
             continue
+
+        # Déduplication par nom de famille (ex: "Andreescu" == "Bianca Andreescu")
+        nom1 = j1.split()[-1].lower() if j1 else ""
+        nom2 = j2.split()[-1].lower() if j2 else ""
+        cle_famille = f"{nom1}|{nom2}"
+        if cle_famille in noms_famille_affiches:
+            logging.info(f"Doublon ignoré : {j1} vs {j2}")
+            continue
+
         affiches.add(cle)
+        noms_famille_affiches.add(cle_famille)
 
         # Chercher cote Winamax correspondante dans Odds API
         cote_trouvee = None
@@ -1106,7 +1140,8 @@ FILTRES IMMÉDIATS :
 • alertes_physiques → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs + mise 0.5%
 • Qualifications ou hors tableau principal → skip
-• Cote "non trouvée" → skip automatique (pas de marché = impossible à jouer sur Winamax)
+• Cote "non trouvée" → skip automatique
+• Match en doublon (même joueurs, heure différente) → garder uniquement le plus récent dans la fenêtre (pas de marché = impossible à jouer sur Winamax)
 
 CALIBRATION PROBABILITÉS :
 • Cote < 1.50  → MAX 75%
