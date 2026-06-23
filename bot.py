@@ -475,19 +475,23 @@ def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
                 if tournament:
                     m["tournoi_sportapi7"] = tournament.get("name", "")
 
-                # Cotes via SportAPI7
+                # Cotes via SportAPI7 — avec gestion 404/429
                 if event_id:
-                    odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
-                    if odds_data:
-                        markets = odds_data.get("markets", [])
-                        for market in markets:
-                            if market.get("marketName", "").lower() in ["winner", "match winner"]:
-                                choices = market.get("choices", [])
-                                for c in choices:
-                                    if c.get("name", "").lower() in ["1", "home"]:
-                                        m["sportapi7_cote_j1"] = c.get("fractionalValue") or c.get("initialFractionalValue")
-                                    elif c.get("name", "").lower() in ["2", "away"]:
-                                        m["sportapi7_cote_j2"] = c.get("fractionalValue") or c.get("initialFractionalValue")
+                    try:
+                        odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
+                        if odds_data:
+                            markets = odds_data.get("markets", [])
+                            for market in markets:
+                                if market.get("marketName", "").lower() in ["winner", "match winner"]:
+                                    choices = market.get("choices", [])
+                                    for c in choices:
+                                        if c.get("name", "").lower() in ["1", "home"]:
+                                            m["sportapi7_cote_j1"] = c.get("fractionalValue") or c.get("initialFractionalValue")
+                                        elif c.get("name", "").lower() in ["2", "away"]:
+                                            m["sportapi7_cote_j2"] = c.get("fractionalValue") or c.get("initialFractionalValue")
+                        time.sleep(0.5)  # Éviter le 429
+                    except Exception:
+                        pass  # 404/429 → ignorer silencieusement
 
                 m["sportapi7_id"] = event_id
                 enrichis += 1
@@ -1319,7 +1323,8 @@ def run_bot_autonome():
         # LOG DEBUG — après nettoyage
         logging.info(f"DEBUG Claude réponse (après nettoyage) : {texte[:300]}")
 
-        if "AUCUN_MATCH" in texte:
+        # Vérifier AUCUN_MATCH uniquement si le texte commence par AUCUN_MATCH
+        if texte.startswith("AUCUN_MATCH"):
             nb = len(json.loads(donnees_json).get("matchs", []))
             # Extraire l'explication de Claude (500 premiers chars après AUCUN_MATCH)
             explication = ""
