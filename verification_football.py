@@ -137,15 +137,23 @@ def _envoyer_telegram(texte, parse_mode="HTML"):
 def notifier_resultat(statut, pari_texte, stats):
     total = stats["victoires"] + stats["defaites"]
     wr    = (stats["victoires"] / total * 100) if total > 0 else 0.0
-    header = "🏆 <b>PRONOSTIC FOOTBALL VALIDÉ !</b> ✅" if statut == "GAGNE" else "❌ <b>PRONOSTIC FOOTBALL PERDU</b>"
-    emoji  = "✅" if statut == "GAGNE" else "❌"
+
+    if statut == "GAGNE":
+        header = "⚽ 🏆 <b>ACEANALYTICS FOOTBALL — PRONOSTIC VALIDÉ !</b> ✅"
+        emoji  = "✅"
+    else:
+        header = "⚽ ❌ <b>ACEANALYTICS FOOTBALL — PRONOSTIC PERDU</b>"
+        emoji  = "❌"
+
     resume = next(
         (re.sub(r"<[^>]+>", "", l).strip() for l in pari_texte.splitlines() if "MATCH" in l.upper()),
         pari_texte.strip().split("\n")[0]
     )[:200]
+
     message = (
-        f"{header}\n\n📌 {resume}\n\n"
-        f"📊 <b>BILAN FOOTBALL MIS À JOUR</b>\n"
+        f"{header}\n\n"
+        f"📌 {resume}\n\n"
+        f"📊 <b>BILAN ACEANALYTICS ⚽ FOOTBALL</b>\n"
         f"{emoji} V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
         f"📈 <b>Win Rate : {wr:.1f}%</b>"
     )
