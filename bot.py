@@ -1137,19 +1137,26 @@ Plafonds absolus (quel que soit le niveau) :
   · Retour 3-8 semaines → MAX 1%
   · Combiné → MAX 2%
 
-⚠️ RÈGLE ABSOLUE — FORMAT DE SORTIE :
+⚠️⚠️⚠️ RÈGLE ABSOLUE — FORMAT DE SORTIE — VIOLATION = ÉCHEC ⚠️⚠️⚠️
 Ta réponse doit commencer DIRECTEMENT par 🔴 ou par AUCUN_MATCH.
-STRICTEMENT INTERDIT avant le 🔴 :
-  · Étapes d'analyse (ÉTAPE 1, ÉTAPE 2, FILTRAGE, etc.)
-  · Calculs Kelly intermédiaires
-  · Liste des matchs skippés ou abandonnés
-  · Tout texte introductif ou explicatif
-  · Titres de section
-L'analyse est INTERNE et ne doit JAMAIS apparaître dans ta réponse.
-Premier caractère de ta réponse = 🔴 ou A (de AUCUN_MATCH). Rien d'autre.
+ZÉRO tolérance pour tout texte avant le 🔴 ou AUCUN_MATCH.
+
+EXEMPLES DE CE QUI EST INTERDIT (ne JAMAIS écrire) :
+❌ "Let me analyze..." 
+❌ "**FILTERING:**"
+❌ "ÉTAPE 1..."
+❌ "Voici mon analyse..."
+❌ "Remaining matches..."
+❌ Tout texte, titre, bullet point AVANT le 🔴
+
+SEULES RÉPONSES VALIDES :
+✅ 🔴 <b>PRONOSTIC...</b>  (si value trouvée)
+✅ AUCUN_MATCH — [explication courte]  (si aucune value)
+
+L'analyse est STRICTEMENT INTERNE — invisible — jamais dans la réponse.
+Si tu commences par autre chose que 🔴 ou AUCUN_MATCH → tu as échoué.
 
 ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
-⚠️ Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH.
 
 [1] FACTEURS BRUTS :
   Surface + forme 5 matchs + charge 72h + Hold% + H2H par surface
@@ -1284,13 +1291,33 @@ def run_bot_autonome():
         rep = claude_client.messages.create(
             model=modele_choisi, max_tokens=4096, system=prompt,
             messages=[{"role": "user", "content":
-                f"Analyse et propose les meilleurs paris (max {MAX_TICKETS}) — {date} {heure}."}],
+                f"Analyse et propose les meilleurs paris (max {MAX_TICKETS}) — {date} {heure}.\n"
+                f"RAPPEL CRITIQUE : Ta réponse commence OBLIGATOIREMENT par 🔴 ou AUCUN_MATCH. "
+                f"Zéro texte avant. Pas de 'Let me analyze', pas de 'FILTERING', pas de markdown. "
+                f"Premier caractère = 🔴 ou A (AUCUN_MATCH). Sinon c'est un échec."}],
         )
         texte = "\n".join(b.text for b in rep.content if hasattr(b, "text") and b.text).strip()
         logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
 
-        # LOG DEBUG — affiche la réponse brute de Claude (500 premiers chars)
-        logging.info(f"DEBUG Claude réponse : {texte[:500]}")
+        # Filtre sécurité — si Claude commence par du texte parasite, on extrait la partie valide
+        if not texte.startswith("🔴") and not texte.startswith("AUCUN_MATCH"):
+            idx_rouge   = texte.find("🔴")
+            idx_aucun   = texte.find("AUCUN_MATCH")
+            idx_valide  = -1
+            if idx_rouge != -1 and idx_aucun != -1:
+                idx_valide = min(idx_rouge, idx_aucun)
+            elif idx_rouge != -1:
+                idx_valide = idx_rouge
+            elif idx_aucun != -1:
+                idx_valide = idx_aucun
+            if idx_valide != -1:
+                logging.warning(f"Claude texte parasite ({idx_valide} chars) — nettoyage automatique.")
+                texte = texte[idx_valide:]
+            else:
+                logging.warning("Réponse Claude invalide — aucun 🔴 ni AUCUN_MATCH trouvé.")
+
+        # LOG DEBUG — après nettoyage
+        logging.info(f"DEBUG Claude réponse (après nettoyage) : {texte[:300]}")
 
         if "AUCUN_MATCH" in texte:
             nb = len(json.loads(donnees_json).get("matchs", []))
