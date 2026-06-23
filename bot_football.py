@@ -960,7 +960,7 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 # 11. PROMPT CLAUDE FOOTBALL
 # =====================================================================
 
-def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
+def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59", fenetre_nocturne=False):
     session = "MATIN" if heure < "14:00" else "APRÈS-MIDI" if heure < "19:00" else "SOIR"
     try:
         avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
@@ -979,12 +979,20 @@ Tu n'as PAS accès à internet. Analyse uniquement les données fournies.
 FILTRES IMMÉDIATS :
 • Match commencé avant {heure} → skip
 • Match commençant après {heure_fin} → skip (hors fenêtre session)
-• Match prévu après le {date} (demain ou plus tard) → skip absolument
 • Cote "non trouvée" → skip automatique
 • Équipe en Europa/CL dans 3 jours → rotation probable → BASSE systématique
 • Derby local → variance élevée → BASSE systématique
 • Équipe déjà qualifiée/reléguée → motivation douteuse → skip si enjeux nuls
 • Absences clés (buteur principal, gardien titulaire) → BASSE
+
+⚠️ FENÊTRE HORAIRE SPÉCIALE — ÉVÉNEMENTS INTERNATIONAUX :
+• Les matchs de Coupe du Monde / Copa América aux USA peuvent se jouer
+  tard le soir ou après minuit heure française (jusqu'à {heure_fin}).
+• Un match à 01:00, 02:00, 03:00 du matin fait partie de la SESSION SOIR en cours
+  s'il se joue dans la nuit suivant le {date}.
+• NE PAS skip un match nocturne international sous prétexte qu'il est "le lendemain" —
+  il appartient à la session du soir actuelle si avant {heure_fin}.
+• Pour les matchs en journée normale : skip si prévu un autre jour que {date}.
 
 FILTRES COUPE DU MONDE (si applicable) :
 • Phase de groupes → 3ème match + équipe déjà qualifiée → skip (rotation massive)
@@ -1091,6 +1099,39 @@ HTML uniquement <b>texte</b>. POURQUOI max 60 mots.
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
 """
 
+def filtrer_matchs_par_fenetre(api_matchs, heure_debut, heure_fin):
+    """
+    Pré-filtre les matchs football par fenêtre horaire AVANT Gemini.
+    Gère le passage minuit (session soir CdM jusqu'à 06:00).
+    """
+    if not api_matchs:
+        return api_matchs
+
+    fenetre_nocturne = heure_fin < heure_debut
+
+    def _heure_match(m):
+        h = m.get("heure", "")
+        match = re.search(r"(\d{2}):(\d{2})", str(h))
+        return match.group(0) if match else None
+
+    matchs_filtres = []
+    for m in api_matchs:
+        hm = _heure_match(m)
+        if not hm:
+            matchs_filtres.append(m)
+            continue
+
+        if fenetre_nocturne:
+            if hm >= heure_debut or hm <= heure_fin:
+                matchs_filtres.append(m)
+        else:
+            if heure_debut <= hm <= heure_fin:
+                matchs_filtres.append(m)
+
+    logging.info(f"Filtrage horaire : {len(matchs_filtres)}/{len(api_matchs)} matchs dans la fenêtre {heure_debut}→{heure_fin}.")
+    return matchs_filtres
+
+
 # =====================================================================
 # 12. ORCHESTRATION
 # =====================================================================
@@ -1107,15 +1148,20 @@ def run_bot_autonome():
     if heure < "19:00":
         session   = "APRÈS-MIDI"
         heure_fin = "19:30"
+        fenetre_nocturne = False
     else:
         session   = "SOIR"
-        heure_fin = "23:59"
-    logging.info(f"⚽ Session FOOTBALL {session} — fenêtre {heure} → {heure_fin}")
+        heure_fin = "06:00"  # CdM USA → matchs jusqu'à 6h00 heure France
+        fenetre_nocturne = True  # La fenêtre passe minuit
+    logging.info(f"⚽ Session FOOTBALL {session} — fenêtre {heure} → {heure_fin}"
+                 f"{' (passe minuit — matchs nocturnes CdM inclus)' if fenetre_nocturne else ''}")
 
     heure_utc_min = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
 
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     api_matchs         = precollecte_api_football(date)
+    # Pré-filtrage horaire AVANT enrichissement SportAPI7 — économise les requêtes
+    api_matchs         = filtrer_matchs_par_fenetre(api_matchs, heure, heure_fin)
     api_matchs         = enrichir_sportapi7_football(api_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, api_matchs)
     donnees_json       = collecter_donnees_football(date, heure, calendrier_injecte, heure_fin)
@@ -1132,7 +1178,7 @@ def run_bot_autonome():
     except Exception:
         pass
 
-    prompt = construire_prompt_claude(date, heure, donnees_json, heure_fin)
+    prompt = construire_prompt_claude(date, heure, donnees_json, heure_fin, fenetre_nocturne)
 
     # Debug matchs
     try:
