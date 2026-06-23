@@ -1,14 +1,14 @@
 {
   "version": 2,
-  "victoires": 6,
-  "defaites": 0,
+  "victoires": 5,
+  "defaites": 1,
   "par_marche": {
     "moneyline": {
       "v": 5,
-      "d": 0
+      "d": 1
     },
     "score_exact": {
-      "v": 1,
+      "v": 0,
       "d": 0
     },
     "over_under": {
@@ -42,8 +42,8 @@
       "d": 0
     },
     "basse": {
-      "v": 5,
-      "d": 0
+      "v": 4,
+      "d": 1
     }
   }
 }
