@@ -717,14 +717,31 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
         derniere_erreur = None
         for tentative in range(1, 4):
             try:
-                rep = gemini_client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                        temperature=0.1,
-                    ),
-                )
+                # Essayer avec max_remote_calls=15 — fallback sans si non supporté
+                try:
+                    rep = gemini_client.models.generate_content(
+                        model=GEMINI_MODEL,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())],
+                            temperature=0.1,
+                            max_remote_calls=15,
+                        ),
+                    )
+                    logging.info("Gemini Football — mode 15 requêtes activé ✅")
+                except Exception as e_max:
+                    if "extra inputs" in str(e_max) or "max_remote_calls" in str(e_max):
+                        logging.warning("max_remote_calls non supporté — fallback 10 requêtes.")
+                        rep = gemini_client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(
+                                tools=[types.Tool(google_search=types.GoogleSearch())],
+                                temperature=0.1,
+                            ),
+                        )
+                    else:
+                        raise
                 break
             except Exception as e:
                 derniere_erreur = e
