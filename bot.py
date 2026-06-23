@@ -289,7 +289,7 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
         stats = charger_stats()
     message = _nettoyer_html_telegram(message)
     sig = (
-        f"\n\n📊 <b>BILAN ACEANALYTICS</b>\n"
+        f"\n\n📊 <b>BILAN ACEANALYTICS 🎾 TENNIS</b>\n"
         f"✅ V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
         f"📈 <b>Win Rate : {calculer_winrate(stats):.1f}%</b>"
     )
@@ -346,7 +346,7 @@ def _envoyer_notification_sans_ticket(raison, session=""):
     emoji  = "🌅" if session == "MATIN" else "🌆" if session == "APRÈS-MIDI" else "🌃"
     label  = f"Session {session}" if session else "Analyse"
     msg    = (
-        f"{emoji} <b>ACEANALYTICS — {label}</b>\n\n"
+        f"{emoji} <b>ACEANALYTICS 🎾 TENNIS — {label}</b>\n\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🔍 <b>Résultat :</b> Aucune value détectée\n\n"
         f"{raison}\n\n"
@@ -1189,7 +1189,7 @@ EXEMPLES DE CE QUI EST INTERDIT (ne JAMAIS écrire) :
 ❌ Tout texte, titre, bullet point AVANT le 🔴
 
 SEULES RÉPONSES VALIDES :
-✅ 🔴 <b>PRONOSTIC...</b>  (si value trouvée)
+✅ 🎾 <b>ACEANALYTICS TENNIS...</b>  (si value trouvée)
 ✅ AUCUN_MATCH — [explication courte]  (si aucune value)
 
 L'analyse est STRICTEMENT INTERNE — invisible — jamais dans la réponse.
@@ -1239,7 +1239,7 @@ La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
 1 ticket excellent vaut mieux que 5 tickets moyens.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 
-🔴 <b>PRONOSTIC [SIMPLE/COMBINÉ]</b> 🔴
+🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC [SIMPLE/COMBINÉ]</b> 🎾
 ━━━━━━━━━━━━━━━━━━━━
 🏟 <b>MATCHS :</b> [A vs B]
 🏆 <b>COMPÉTITION :</b> [Tournoi]
@@ -1331,29 +1331,23 @@ def run_bot_autonome():
             model=modele_choisi, max_tokens=4096, system=prompt,
             messages=[{"role": "user", "content":
                 f"Analyse et propose les meilleurs paris (max {MAX_TICKETS}) — {date} {heure}.\n"
-                f"RAPPEL CRITIQUE : Ta réponse commence OBLIGATOIREMENT par 🔴 ou AUCUN_MATCH. "
+                f"RAPPEL CRITIQUE : Ta réponse commence OBLIGATOIREMENT par 🎾 ou AUCUN_MATCH. "
                 f"Zéro texte avant. Pas de 'Let me analyze', pas de 'FILTERING', pas de markdown. "
-                f"Premier caractère = 🔴 ou A (AUCUN_MATCH). Sinon c'est un échec."}],
+                f"Premier caractère = 🎾 ou A (AUCUN_MATCH). Sinon c'est un échec."}],
         )
         texte = "\n".join(b.text for b in rep.content if hasattr(b, "text") and b.text).strip()
         logging.info(f"Claude OK ({len(texte)} chars) — {rep.usage.input_tokens} in / {rep.usage.output_tokens} out")
 
         # Filtre sécurité — si Claude commence par du texte parasite, on extrait la partie valide
-        if not texte.startswith("🔴") and not texte.startswith("AUCUN_MATCH"):
-            idx_rouge   = texte.find("🔴")
-            idx_aucun   = texte.find("AUCUN_MATCH")
-            idx_valide  = -1
-            if idx_rouge != -1 and idx_aucun != -1:
-                idx_valide = min(idx_rouge, idx_aucun)
-            elif idx_rouge != -1:
-                idx_valide = idx_rouge
-            elif idx_aucun != -1:
-                idx_valide = idx_aucun
-            if idx_valide != -1:
-                logging.warning(f"Claude texte parasite ({idx_valide} chars) — nettoyage automatique.")
-                texte = texte[idx_valide:]
+        if not texte.startswith("🎾") and not texte.startswith("🔴") and not texte.startswith("AUCUN_MATCH"):
+            for marqueur in ["🎾", "🔴", "AUCUN_MATCH"]:
+                idx = texte.find(marqueur)
+                if idx != -1:
+                    logging.warning(f"Claude texte parasite ({idx} chars) — nettoyage automatique.")
+                    texte = texte[idx:]
+                    break
             else:
-                logging.warning("Réponse Claude invalide — aucun 🔴 ni AUCUN_MATCH trouvé.")
+                logging.warning("Réponse Claude invalide — aucun marqueur trouvé.")
 
         # LOG DEBUG — après nettoyage
         logging.info(f"DEBUG Claude réponse (après nettoyage) : {texte[:300]}")
@@ -1413,12 +1407,13 @@ def run_bot_autonome():
                 logging.warning(f"Ticket {i} : doublon.")
                 continue
             if envoyer_sur_telegram(ticket, stats=stats_cached):
-                # Nettoyer le ticket — garder uniquement la partie 🔴 ou AUCUN_MATCH
+                # Nettoyer le ticket — garder uniquement la partie 🎾 ou 🔴
                 ticket_propre = ticket
-                if not ticket_propre.startswith("🔴"):
-                    idx = ticket_propre.find("🔴")
-                    if idx != -1:
+                for marqueur in ["🎾", "🔴"]:
+                    idx = ticket_propre.find(marqueur)
+                    if idx != -1 and not ticket_propre.startswith(marqueur):
                         ticket_propre = ticket_propre[idx:]
+                        break
                 sauvegarder_pari_pour_suivi({
                     "pari":   ticket_propre,
                     "date":   date,
