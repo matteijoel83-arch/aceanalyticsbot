@@ -395,6 +395,111 @@ def sauvegarder_pari_pour_suivi(pari_info):
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
 # =====================================================================
+# 6B. MODULE SPORTAPI7 — DONNÉES COMPLÉMENTAIRES TENNIS
+# =====================================================================
+
+SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
+SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
+
+def _sportapi7_get(endpoint, params=None):
+    """Requête SportAPI7 avec la clé RapidAPI existante."""
+    if not RAPIDAPI_KEY:
+        return None
+    try:
+        r = requests.get(
+            f"{SPORTAPI7_BASE}/{endpoint}",
+            headers={
+                "x-rapidapi-key":  RAPIDAPI_KEY,
+                "x-rapidapi-host": SPORTAPI7_HOST,
+            },
+            params=params,
+            timeout=8,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logging.warning(f"SportAPI7 {endpoint} : {e}")
+        return None
+
+
+def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
+    """
+    Enrichit les matchs tennis avec SportAPI7 en complément de RapidAPI Tennis.
+    Endpoints : /sport/tennis/scheduled-events/{date} + /event/{id}/odds/1/all
+    Utilise la même clé RAPIDAPI_KEY — pas de quota supplémentaire.
+    """
+    if not RAPIDAPI_KEY or not rapid_matchs:
+        return rapid_matchs
+
+    date_today = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+
+    try:
+        # Récupérer tous les matchs tennis du jour
+        data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
+        if not data:
+            logging.info("SportAPI7 Tennis — pas de données disponibles.")
+            return rapid_matchs
+
+        events   = data.get("events", [])
+        enrichis = 0
+        logging.info(f"SportAPI7 Tennis — {len(events)} événement(s) disponible(s).")
+
+        # Index par noms de joueurs
+        sportapi7_index = {}
+        for ev in events:
+            home = ev.get("homeTeam", {}).get("name", "").lower()
+            away = ev.get("awayTeam", {}).get("name", "").lower()
+            if home and away:
+                sportapi7_index[f"{home}|{away}"] = ev
+
+        for m in rapid_matchs:
+            j1  = m.get("joueur1", "").lower()
+            j2  = m.get("joueur2", "").lower()
+            ev  = sportapi7_index.get(f"{j1}|{j2}") or sportapi7_index.get(f"{j2}|{j1}")
+
+            # Recherche partielle par nom de famille
+            if not ev:
+                for k, v in sportapi7_index.items():
+                    k1, k2 = k.split("|")
+                    nom1 = j1.split()[-1] if j1 else ""
+                    nom2 = j2.split()[-1] if j2 else ""
+                    if nom1 and nom2 and nom1 in k1 and nom2 in k2:
+                        ev = v
+                        break
+
+            if ev:
+                event_id = ev.get("id")
+
+                # Tournoi confirmé
+                tournament = ev.get("tournament", {})
+                if tournament:
+                    m["tournoi_sportapi7"] = tournament.get("name", "")
+
+                # Cotes via SportAPI7
+                if event_id:
+                    odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
+                    if odds_data:
+                        markets = odds_data.get("markets", [])
+                        for market in markets:
+                            if market.get("marketName", "").lower() in ["winner", "match winner"]:
+                                choices = market.get("choices", [])
+                                for c in choices:
+                                    if c.get("name", "").lower() in ["1", "home"]:
+                                        m["sportapi7_cote_j1"] = c.get("fractionalValue") or c.get("initialFractionalValue")
+                                    elif c.get("name", "").lower() in ["2", "away"]:
+                                        m["sportapi7_cote_j2"] = c.get("fractionalValue") or c.get("initialFractionalValue")
+
+                m["sportapi7_id"] = event_id
+                enrichis += 1
+
+        logging.info(f"SportAPI7 Tennis — {enrichis} match(s) enrichi(s).")
+
+    except Exception as e:
+        logging.warning(f"SportAPI7 Tennis erreur : {e}")
+
+    return rapid_matchs
+
+# =====================================================================
 # 7. MODULE A — PRÉ-COLLECTE ODDS API
 # =====================================================================
 
@@ -1136,6 +1241,7 @@ def run_bot_autonome():
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
+    rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
     donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin)
 
