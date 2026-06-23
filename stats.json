@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "victoires": 5,
-  "defaites": 1,
+  "victoires": 7,
+  "defaites": 2,
   "par_marche": {
     "moneyline": {
-      "v": 5,
+      "v": 7,
       "d": 1
     },
     "score_exact": {
@@ -29,12 +29,12 @@
     },
     "autre": {
       "v": 0,
-      "d": 0
+      "d": 1
     }
   },
   "par_niveau": {
     "elevee": {
-      "v": 0,
+      "v": 1,
       "d": 0
     },
     "moderee": {
@@ -42,8 +42,8 @@
       "d": 0
     },
     "basse": {
-      "v": 4,
-      "d": 1
+      "v": 5,
+      "d": 2
     }
   }
 }
