@@ -364,6 +364,145 @@ def sauvegarder_pari_pour_suivi(pari_info):
     _gh_put("pari_en_cours_football.json", paris, "📌 Ajout pari football", sha=sha)
 
 # =====================================================================
+# 6B. MODULE SPORTAPI7 — DONNÉES COMPLÉMENTAIRES FOOTBALL
+# =====================================================================
+
+SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
+SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
+
+def _sportapi7_get(endpoint, params=None):
+    """Requête SportAPI7 avec la clé RapidAPI existante."""
+    if not RAPIDAPI_KEY:
+        return None
+    try:
+        r = requests.get(
+            f"{SPORTAPI7_BASE}/{endpoint}",
+            headers={
+                "x-rapidapi-key":  RAPIDAPI_KEY,
+                "x-rapidapi-host": SPORTAPI7_HOST,
+            },
+            params=params,
+            timeout=8,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logging.warning(f"SportAPI7 {endpoint} : {e}")
+        return None
+
+
+def enrichir_sportapi7_football(api_matchs: list) -> list:
+    """
+    Enrichit les matchs football avec SportAPI7.
+    Endpoints utilisés :
+    - /sport/football/scheduled-events/{date} → matchs du jour
+    - /event/{id}/odds/1/all                  → cotes
+    - /event/{id}/lineups                     → compositions
+    - /event/{id}/statistics                  → possession, tirs, passes
+    - /unique-tournament/{id}/season/{id}/standings/total → classement
+    Utilise la même clé RAPIDAPI_KEY.
+    """
+    if not RAPIDAPI_KEY or not api_matchs:
+        return api_matchs
+
+    date_today = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+
+    try:
+        # Récupérer tous les matchs football du jour
+        data = _sportapi7_get(f"sport/football/scheduled-events/{date_today}")
+        if not data:
+            logging.info("SportAPI7 Football — pas de données disponibles.")
+            return api_matchs
+
+        events   = data.get("events", [])
+        enrichis = 0
+        logging.info(f"SportAPI7 Football — {len(events)} événement(s) disponible(s).")
+
+        # Index par noms d'équipes
+        sportapi7_index = {}
+        for ev in events:
+            home = ev.get("homeTeam", {}).get("name", "").lower()
+            away = ev.get("awayTeam", {}).get("name", "").lower()
+            if home and away:
+                sportapi7_index[f"{home}|{away}"] = ev
+
+        for m in api_matchs:
+            eq1 = m.get("equipe1", "").lower()
+            eq2 = m.get("equipe2", "").lower()
+            ev  = sportapi7_index.get(f"{eq1}|{eq2}") or sportapi7_index.get(f"{eq2}|{eq1}")
+
+            # Recherche partielle (4 premiers caractères)
+            if not ev:
+                for k, v in sportapi7_index.items():
+                    k1, k2 = k.split("|")
+                    if (eq1[:4] in k1 or k1[:4] in eq1) and \
+                       (eq2[:4] in k2 or k2[:4] in eq2):
+                        ev = v
+                        break
+
+            if ev:
+                event_id      = ev.get("id")
+                tournament_id = ev.get("tournament", {}).get("uniqueTournament", {}).get("id")
+                season_id     = ev.get("season", {}).get("id")
+
+                # --- Cotes ---
+                if event_id:
+                    odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
+                    if odds_data:
+                        for market in odds_data.get("markets", []):
+                            if "winner" in market.get("marketName", "").lower():
+                                for c in market.get("choices", []):
+                                    nom = c.get("name", "").lower()
+                                    val = c.get("fractionalValue") or c.get("initialFractionalValue")
+                                    if nom in ["1", "home"]:
+                                        m["sportapi7_cote_1"] = val
+                                    elif nom in ["x", "draw"]:
+                                        m["sportapi7_cote_nul"] = val
+                                    elif nom in ["2", "away"]:
+                                        m["sportapi7_cote_2"] = val
+
+                # --- Lineups (compositions) ---
+                if event_id:
+                    lineup_data = _sportapi7_get(f"event/{event_id}/lineups")
+                    if lineup_data:
+                        confirmed = lineup_data.get("confirmed", False)
+                        m["lineups_confirmes"] = confirmed
+                        if confirmed:
+                            # Joueurs absents / blessés via titulaires
+                            home_lineup = lineup_data.get("home", {})
+                            away_lineup = lineup_data.get("away", {})
+                            m["formation_eq1"] = home_lineup.get("formation", "non disponible")
+                            m["formation_eq2"] = away_lineup.get("formation", "non disponible")
+
+                # --- Classement pour contexte enjeux ---
+                if tournament_id and season_id:
+                    standings_data = _sportapi7_get(
+                        f"unique-tournament/{tournament_id}/season/{season_id}/standings/total"
+                    )
+                    if standings_data:
+                        standings = standings_data.get("standings", [])
+                        if standings:
+                            rows = standings[0].get("rows", [])
+                            for row in rows:
+                                team_name = row.get("team", {}).get("name", "").lower()
+                                pos       = row.get("position", "?")
+                                pts       = row.get("points", "?")
+                                if eq1 in team_name or team_name in eq1:
+                                    m["classement_eq1"] = f"#{pos} ({pts} pts)"
+                                elif eq2 in team_name or team_name in eq2:
+                                    m["classement_eq2"] = f"#{pos} ({pts} pts)"
+
+                m["sportapi7_id"] = event_id
+                enrichis += 1
+
+        logging.info(f"SportAPI7 Football — {enrichis} match(s) enrichi(s).")
+
+    except Exception as e:
+        logging.warning(f"SportAPI7 Football erreur : {e}")
+
+    return api_matchs
+
+# =====================================================================
 # 7. MODULE A — PRÉ-COLLECTE ODDS API FOOTBALL
 # =====================================================================
 
@@ -543,9 +682,9 @@ def fusionner_calendrier(odds_matchs, api_matchs):
                     break
 
         if cote_trouvee:
-            m["cote_1"]    = cote_trouvee["cote_1"]
-            m["cote_nul"]  = cote_trouvee.get("cote_nul")
-            m["cote_2"]    = cote_trouvee["cote_2"]
+            m["cote_1"]      = cote_trouvee["cote_1"]
+            m["cote_nul"]    = cote_trouvee.get("cote_nul")
+            m["cote_2"]      = cote_trouvee["cote_2"]
             m["source_cote"] = cote_trouvee["source_cote"]
             matchs_winamax.append(m)
             cotes_str = (
@@ -553,10 +692,23 @@ def fusionner_calendrier(odds_matchs, api_matchs):
                 f"Nul {cote_trouvee.get('cote_nul', '?')} / "
                 f"{eq2} {cote_trouvee['cote_2']:.2f}"
             )
-            lignes.append(
+            ligne = (
                 f"• {m['heure']} | {eq1} vs {eq2} | {m['competition']}"
                 f" | Cotes {cote_trouvee['source_cote']}: {cotes_str}"
             )
+            # Enrichissements SportAPI7
+            extras = []
+            if m.get("classement_eq1"):
+                extras.append(f"{eq1} {m['classement_eq1']}")
+            if m.get("classement_eq2"):
+                extras.append(f"{eq2} {m['classement_eq2']}")
+            if m.get("formation_eq1") and m.get("lineups_confirmes"):
+                extras.append(f"Formation {eq1}: {m['formation_eq1']} | {eq2}: {m.get('formation_eq2','?')}")
+            if m.get("sportapi7_cote_1"):
+                extras.append(f"Cotes SportAPI7: {m['sportapi7_cote_1']}/{m.get('sportapi7_cote_nul','?')}/{m.get('sportapi7_cote_2','?')}")
+            if extras:
+                ligne += " | " + " | ".join(extras)
+            lignes.append(ligne)
         else:
             matchs_sans_cote.append(m)
 
@@ -926,6 +1078,7 @@ def run_bot_autonome():
 
     odds_matchs        = precollecte_odds_api(heure_utc_min)
     api_matchs         = precollecte_api_football(date)
+    api_matchs         = enrichir_sportapi7_football(api_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, api_matchs)
     donnees_json       = collecter_donnees_football(date, heure, calendrier_injecte, heure_fin)
 
