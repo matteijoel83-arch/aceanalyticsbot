@@ -447,50 +447,61 @@ def enrichir_sportapi7_football(api_matchs: list) -> list:
 
                 # --- Cotes ---
                 if event_id:
-                    odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
-                    if odds_data:
-                        for market in odds_data.get("markets", []):
-                            if "winner" in market.get("marketName", "").lower():
-                                for c in market.get("choices", []):
-                                    nom = c.get("name", "").lower()
-                                    val = c.get("fractionalValue") or c.get("initialFractionalValue")
-                                    if nom in ["1", "home"]:
-                                        m["sportapi7_cote_1"] = val
-                                    elif nom in ["x", "draw"]:
-                                        m["sportapi7_cote_nul"] = val
-                                    elif nom in ["2", "away"]:
-                                        m["sportapi7_cote_2"] = val
+                    try:
+                        odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
+                        if odds_data:
+                            for market in odds_data.get("markets", []):
+                                if "winner" in market.get("marketName", "").lower():
+                                    for c in market.get("choices", []):
+                                        nom = c.get("name", "").lower()
+                                        val = c.get("fractionalValue") or c.get("initialFractionalValue")
+                                        if nom in ["1", "home"]:
+                                            m["sportapi7_cote_1"] = val
+                                        elif nom in ["x", "draw"]:
+                                            m["sportapi7_cote_nul"] = val
+                                        elif nom in ["2", "away"]:
+                                            m["sportapi7_cote_2"] = val
+                        time.sleep(0.5)
+                    except Exception:
+                        pass  # 404/429 → ignorer silencieusement
 
                 # --- Lineups (compositions) ---
                 if event_id:
-                    lineup_data = _sportapi7_get(f"event/{event_id}/lineups")
-                    if lineup_data:
-                        confirmed = lineup_data.get("confirmed", False)
-                        m["lineups_confirmes"] = confirmed
-                        if confirmed:
-                            # Joueurs absents / blessés via titulaires
-                            home_lineup = lineup_data.get("home", {})
-                            away_lineup = lineup_data.get("away", {})
-                            m["formation_eq1"] = home_lineup.get("formation", "non disponible")
-                            m["formation_eq2"] = away_lineup.get("formation", "non disponible")
+                    try:
+                        lineup_data = _sportapi7_get(f"event/{event_id}/lineups")
+                        if lineup_data:
+                            confirmed = lineup_data.get("confirmed", False)
+                            m["lineups_confirmes"] = confirmed
+                            if confirmed:
+                                home_lineup = lineup_data.get("home", {})
+                                away_lineup = lineup_data.get("away", {})
+                                m["formation_eq1"] = home_lineup.get("formation", "non disponible")
+                                m["formation_eq2"] = away_lineup.get("formation", "non disponible")
+                        time.sleep(0.5)
+                    except Exception:
+                        pass
 
                 # --- Classement pour contexte enjeux ---
                 if tournament_id and season_id:
-                    standings_data = _sportapi7_get(
-                        f"unique-tournament/{tournament_id}/season/{season_id}/standings/total"
-                    )
-                    if standings_data:
-                        standings = standings_data.get("standings", [])
-                        if standings:
-                            rows = standings[0].get("rows", [])
-                            for row in rows:
-                                team_name = row.get("team", {}).get("name", "").lower()
-                                pos       = row.get("position", "?")
-                                pts       = row.get("points", "?")
-                                if eq1 in team_name or team_name in eq1:
-                                    m["classement_eq1"] = f"#{pos} ({pts} pts)"
-                                elif eq2 in team_name or team_name in eq2:
-                                    m["classement_eq2"] = f"#{pos} ({pts} pts)"
+                    try:
+                        standings_data = _sportapi7_get(
+                            f"unique-tournament/{tournament_id}/season/{season_id}/standings/total"
+                        )
+                        if standings_data:
+                            standings = standings_data.get("standings", [])
+                            if standings:
+                                rows = standings[0].get("rows", [])
+                                for row in rows:
+                                    team_name = row.get("team", {}).get("name", "").lower()
+                                    pos       = row.get("position", "?")
+                                    pts       = row.get("points", "?")
+                                    if eq1 in team_name or team_name in eq1:
+                                        m["classement_eq1"] = f"#{pos} ({pts} pts)"
+                                    elif eq2 in team_name or team_name in eq2:
+                                        m["classement_eq2"] = f"#{pos} ({pts} pts)"
+                        time.sleep(0.5)
+                    except Exception:
+                        pass
 
                 m["sportapi7_id"] = event_id
                 enrichis += 1
