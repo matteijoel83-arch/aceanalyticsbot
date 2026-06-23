@@ -511,6 +511,10 @@ def precollecte_odds_api(heure_utc_min):
     if not ODDS_API_KEY:
         logging.info("ODDS_API_KEY absente.")
         return matchs
+
+    # Limite : matchs du jour uniquement (max 24h après maintenant)
+    maintenant_utc = datetime.now(timezone.utc)
+    heure_utc_max  = (maintenant_utc + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M")
     # Ligues couvertes par Odds API
     sports = [
         "soccer_france_ligue_one",
@@ -542,6 +546,9 @@ def precollecte_odds_api(heure_utc_min):
             for m in data:
                 commence = m.get("commence_time", "")
                 if commence < heure_utc_min:
+                    continue
+                # Exclure matchs au-delà de 24h (matchs futurs semaines/mois)
+                if commence > heure_utc_max:
                     continue
                 eq1 = m.get("home_team", "?")
                 eq2 = m.get("away_team", "?")
@@ -942,6 +949,7 @@ Tu n'as PAS accès à internet. Analyse uniquement les données fournies.
 FILTRES IMMÉDIATS :
 • Match commencé avant {heure} → skip
 • Match commençant après {heure_fin} → skip (hors fenêtre session)
+• Match prévu après le {date} (demain ou plus tard) → skip absolument
 • Cote "non trouvée" → skip automatique
 • Équipe en Europa/CL dans 3 jours → rotation probable → BASSE systématique
 • Derby local → variance élevée → BASSE systématique
@@ -1128,21 +1136,16 @@ def run_bot_autonome():
         logging.info(f"DEBUG Claude : {texte[:300]}")
 
         # Filtre sécurité — extrait la partie valide si Claude ajoute du texte parasite
-        if not texte.startswith("⚽") and not texte.startswith("AUCUN_MATCH"):
-            idx_foot  = texte.find("⚽")
-            idx_aucun = texte.find("AUCUN_MATCH")
-            idx_valide = -1
-            if idx_foot != -1 and idx_aucun != -1:
-                idx_valide = min(idx_foot, idx_aucun)
-            elif idx_foot != -1:
-                idx_valide = idx_foot
-            elif idx_aucun != -1:
-                idx_valide = idx_aucun
-            if idx_valide != -1:
-                logging.warning(f"Claude Football — texte parasite nettoyé ({idx_valide} chars).")
-                texte = texte[idx_valide:]
+        if not texte.startswith("⚽") and not texte.startswith("🔴") and not texte.startswith("AUCUN_MATCH"):
+            for marqueur in ["⚽", "🔴", "AUCUN_MATCH"]:
+                idx = texte.find(marqueur)
+                if idx != -1:
+                    logging.warning(f"Claude Football — texte parasite nettoyé ({idx} chars).")
+                    texte = texte[idx:]
+                    break
 
-        if "AUCUN_MATCH" in texte:
+        # Vérifier AUCUN_MATCH uniquement si le texte commence par AUCUN_MATCH
+        if texte.startswith("AUCUN_MATCH"):
             explication = ""
             idx = texte.find("AUCUN_MATCH")
             if idx != -1:
