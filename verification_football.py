@@ -188,13 +188,14 @@ def _extraire_resume(pari_texte):
             lignes.append(re.sub(r"<[^>]+>", "", ligne).strip())
     return "\n".join(lignes) if lignes else "\n".join(pari_texte.splitlines()[:3])
 
-def interroger_claude_statut(pari_texte):
+def interroger_claude_statut(pari_texte, date_pari=""):
     resume = _extraire_resume(pari_texte)
+    contexte_date = f"\nDate du match : {date_pari}" if date_pari else ""
     try:
         reponse = client.messages.create(
             model=CLAUDE_MODEL, max_tokens=256, system=INSTRUCTIONS,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": f"Résultat de ce pari football ?\n{resume}"}],
+            messages=[{"role": "user", "content": f"Résultat de ce pari football ?{contexte_date}\n{resume}"}],
         )
         verdict = "\n".join(
             b.text for b in reponse.content if hasattr(b, "text") and b.text
@@ -236,7 +237,7 @@ def main():
         marche = item.get("marche", "autre")
         niveau = item.get("niveau", "autre")
         logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
-        statut = interroger_claude_statut(pari_texte)
+        statut = interroger_claude_statut(pari_texte, item.get("date", ""))
         if statut == "GAGNE":
             stats["victoires"] += 1
             stats = _maj_stats_detail(stats, True, marche, niveau)
