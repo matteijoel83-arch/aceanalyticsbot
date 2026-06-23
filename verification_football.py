@@ -35,7 +35,7 @@ if MISSING:
     sys.exit(1)
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_MODEL = "claude-sonnet-4-6"  # Sonnet pour fiabilité — vérification critique
 
 GITHUB_API     = "https://api.github.com"
 GITHUB_HEADERS = {
@@ -152,10 +152,24 @@ def notifier_resultat(statut, pari_texte, stats):
     _envoyer_telegram(message)
 
 INSTRUCTIONS = (
-    "Vérificateur de scores football. "
-    "Cherche le résultat via web_search (Flashscore / Sofascore / BBC Sport). "
-    "Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS. "
-    "Aucun autre texte. Doute = EN_COURS."
+    "Tu es un vérificateur de résultats de paris football. "
+    "Cherche le résultat via web_search sur Flashscore, Sofascore ou BBC Sport. "
+    "\n\nRÈGLE ABSOLUE : Tu dois vérifier le PRONOSTIC EXACT, pas seulement le vainqueur."
+    "\n- Si le prono est '1N2' → vérifier le résultat exact (victoire dom/nul/ext)"
+    "\n- Si le prono est 'Over 2.5 buts' → vérifier le nombre total de buts"
+    "\n- Si le prono est 'BTTS' → vérifier si les deux équipes ont marqué"
+    "\n- Si le prono est 'Handicap -1' → vérifier l'écart de buts"
+    "\n- Si le prono est un combiné → TOUS les pronostics doivent être validés"
+    "\n\nPROCÉDURE :"
+    "\n1. Cherche le score final du match"
+    "\n2. Compare avec le pronostic exact indiqué"
+    "\n3. Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS"
+    "\n\nRÈGLES STRICTES :"
+    "\n- Match pas encore terminé → EN_COURS"
+    "\n- Match terminé + pronostic validé → GAGNE"
+    "\n- Match terminé + pronostic non validé → PERDU"
+    "\n- Doute sur le résultat → EN_COURS (jamais GAGNE si incertain)"
+    "\nAucun autre texte que GAGNE, PERDU ou EN_COURS."
 )
 
 def _extraire_resume(pari_texte):
