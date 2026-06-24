@@ -765,7 +765,11 @@ def precollecte_rapidapi_tennis(date_fr):
         "x-rapidapi-key":  RAPIDAPI_KEY,
         "x-rapidapi-host": "tennis-api-atp-wta-itf.p.rapidapi.com",
     }
+    quota_epuise = False
     for tour in ["atp", "wta"]:
+        if quota_epuise:
+            logging.info(f"RapidAPI {tour.upper()} — skip (quota déjà épuisé ce run).")
+            break
         page = 1
         while True:
             try:
@@ -833,6 +837,8 @@ def precollecte_rapidapi_tennis(date_fr):
 
             except requests.exceptions.HTTPError as e:
                 logging.warning(f"RapidAPI {tour.upper()} p{page} : {e}")
+                if "429" in str(e):
+                    quota_epuise = True  # quota épuisé → inutile de tenter l'autre tour
                 break
             except Exception as e:
                 logging.warning(f"RapidAPI {tour.upper()} erreur : {e}")
