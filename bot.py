@@ -567,7 +567,7 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
     """
     Complète les cotes Winamax via OddsPapi.
     IMPORTANT (confirmé via données réelles) :
-      - sportId tennis Winamax = 13 (Winamax availableSports = [12,13,23])
+      - sportId tennis = 12 (10=Soccer, 11=Basket, 12=Tennis, 13=Baseball)
       - slug bookmaker = "winamax.fr" (recherche tolérante "winamax")
       - /fixtures/today retourne bookmakers:{} VIDE → appeler /fixtures/odds
       - endpoint cotes = /fixtures/odds (doc officielle /odds), fallback /fixtures/odds/main
@@ -583,8 +583,8 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
     WINA_SLUG = "winamax.fr"
 
     try:
-        # 1) Lister les matchs tennis du jour (sportId 13 pour Winamax tennis)
-        data = _oddspapi_get("fixtures/today", {"sportId": 13})
+        # 1) Lister les matchs tennis du jour (sportId 12 = Tennis ; 13 = Baseball !)
+        data = _oddspapi_get("fixtures/today", {"sportId": 12})
         if not data:
             logging.info("OddsPapi Tennis — pas de fixtures.")
             return odds_matchs
@@ -643,13 +643,14 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             # DIAGNOSTIC (1 seule fois) : voir la structure réelle et les bookmakers dispo
             if not diag_fait:
                 diag_fait = True
-                odds_section = od.get("odds", {})
+                odds_section = od.get("odds", od.get("bookmakerOdds", {}))
                 book_keys = list(odds_section.keys()) if isinstance(odds_section, dict) else "non-dict"
-                logging.info(f"OddsPapi DIAG — odds keys: {book_keys} | bookmakers: {od.get('bookmakers')}")
+                logging.info(f"OddsPapi DIAG — slugs avec cotes: {book_keys[:30]}")
 
-            # La structure réelle via RapidAPI : clé 'odds' (pas 'bookmakerOdds')
-            # od['odds'] = { '{slug}': { 'markets': {...} } } OU { '{slug}': {...} }
+            # Cotes sous 'odds' (RapidAPI) OU 'bookmakerOdds' (doc officielle)
             book_odds = od.get("odds", {})
+            if not isinstance(book_odds, dict) or not book_odds:
+                book_odds = od.get("bookmakerOdds", {})
             if not isinstance(book_odds, dict) or not book_odds:
                 continue
             wina = {}
