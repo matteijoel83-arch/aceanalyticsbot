@@ -370,8 +370,8 @@ def sauvegarder_pari_pour_suivi(pari_info):
 SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
 SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
 
-def _sportapi7_get(endpoint, params=None, retries=3):
-    """Requête SportAPI7 avec retry automatique sur 429."""
+def _sportapi7_get(endpoint, params=None, retries=2):
+    """Requête SportAPI7 avec retry rapide sur 429 (délais courts)."""
     if not RAPIDAPI_KEY:
         return None
     for tentative in range(1, retries + 1):
@@ -386,24 +386,23 @@ def _sportapi7_get(endpoint, params=None, retries=3):
                 timeout=8,
             )
             if r.status_code == 429:
-                wait = int(r.headers.get("Retry-After", tentative * 10))
-                logging.warning(f"SportAPI7 429 — retry dans {wait}s… ({tentative}/{retries})")
-                time.sleep(wait)
-                continue
+                if tentative < retries:
+                    time.sleep(3)
+                    continue
+                return None
             if r.status_code == 404:
                 return None
             r.raise_for_status()
             return r.json()
         except requests.exceptions.HTTPError as e:
             if "429" in str(e):
-                time.sleep(tentative * 10)
-                continue
-            logging.warning(f"SportAPI7 {endpoint} : {e}")
+                if tentative < retries:
+                    time.sleep(3)
+                    continue
+                return None
             return None
-        except Exception as e:
-            logging.warning(f"SportAPI7 {endpoint} : {e}")
+        except Exception:
             return None
-    logging.warning(f"SportAPI7 {endpoint} — échec après {retries} tentatives.")
     return None
 
 
