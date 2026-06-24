@@ -561,132 +561,100 @@ def _oddspapi_get(endpoint, params=None, retries=2):
 
 def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
     """
-    Complète les cotes Winamax manquantes via OddsPapi (300+ bookmakers).
-    Endpoint /fixtures/today (sportId tennis = 13) puis croisement par nom.
-    Ne remplace JAMAIS une cote existante.
+    Complète les cotes Winamax via OddsPapi.
+    IMPORTANT (confirmé via données réelles) :
+      - sportId tennis Winamax = 13 (Winamax availableSports = [12,13,23])
+      - slug bookmaker = "winamax.fr" (PAS "winamax")
+      - /fixtures/today retourne bookmakers:{} VIDE → il FAUT /fixtures/odds/main
+      - /fixtures/odds/main prend fixtureId (SINGULIER)
+      - structure : bookmakerOdds.{slug}.markets.{marketId}.outcomes.{outId}.players.0.price
+      - startTime en epoch SECONDES
+    Ne remplace JAMAIS une cote existante (Odds API prioritaire).
     """
     if not RAPIDAPI_KEY or not rapid_matchs:
         return odds_matchs
 
+    WINA_SLUG = "winamax.fr"
+
     try:
-        # sportId tennis = 12 sur OddsPapi
-        data = _oddspapi_get("fixtures/today", {
-            "sportId":    12,
-            "bookmakers": "winamax",
-        })
+        # 1) Lister les matchs tennis du jour (sportId 13 pour Winamax tennis)
+        data = _oddspapi_get("fixtures/today", {"sportId": 13})
         if not data:
-            logging.info("OddsPapi Tennis — pas de données disponibles.")
+            logging.info("OddsPapi Tennis — pas de fixtures.")
             return odds_matchs
 
         fixtures = data if isinstance(data, list) else data.get("fixtures", [])
-        ajouts   = 0
 
+        # Ne garder que les matchs à venir (Pre-Game) non déjà couverts
+        a_traiter = []
         for fx in fixtures:
+            statut = fx.get("status", {}).get("statusName", "")
+            if statut not in ("Pre-Game", "", None):
+                continue
             participants = fx.get("participants", {})
             p1 = participants.get("participant1Name", "")
             p2 = participants.get("participant2Name", "")
-            if not p1 or not p2:
-                continue
-
-            cle = f"{p1}|{p2}"
-            if cle in odds_matchs:
-                continue  # Déjà couvert
-
-            # Vérifier que Winamax a des cotes pour ce match
-            bm_meta = fx.get("bookmakers", {}).get("winamax", {})
-            if not bm_meta.get("hasOdds", False):
-                continue
-
-            # Récupérer les cotes via /fixtures/odds/main
             fixture_id = fx.get("fixtureId")
-            if not fixture_id:
+            if not (p1 and p2 and fixture_id):
                 continue
+            if f"{p1}|{p2}" in odds_matchs:
+                continue
+            a_traiter.append((fixture_id, p1, p2, fx.get("startTime", 0)))
 
+        a_traiter = a_traiter[:25]  # plafond quota
+        ajouts = 0
+
+        def _prix_outcomes(outcomes):
+            prices = []
+            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
+                players = outcomes[out_id].get("players", {})
+                pr = players.get("0", {}).get("price")
+                if pr:
+                    prices.append(pr)
+            return prices
+
+        for fixture_id, p1, p2, start in a_traiter:
             odds_data = _oddspapi_get("fixtures/odds/main", {
-                "fixtureIds": fixture_id,
-                "bookmakers": "winamax",
+                "fixtureId":  fixture_id,
+                "bookmakers": WINA_SLUG,
             })
-            time.sleep(0.3)
+            time.sleep(0.15)
             if not odds_data:
                 continue
 
-            odds_list = odds_data if isinstance(odds_data, list) else [odds_data]
-            for od in odds_list:
-                wina = od.get("odds", {}).get("winamax", {})
-                c1 = c2 = None
-                marches_alt = {}  # Handicaps jeux + totaux avec vraies cotes
+            od = odds_data[0] if isinstance(odds_data, list) and odds_data else odds_data
+            if not isinstance(od, dict):
+                continue
 
-                if wina:
-                    market_ids = sorted(wina.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999)
+            wina = od.get("bookmakerOdds", {}).get(WINA_SLUG, {})
+            markets = wina.get("markets", {}) if isinstance(wina, dict) else {}
+            if not markets:
+                continue
 
-                    # 1) Match winner = premier marché avec exactement 2 outcomes
-                    for mkt_id in market_ids:
-                        mkt = wina[mkt_id]
-                        if not isinstance(mkt, dict):
-                            continue
-                        mkt_name = mkt.get("marketName", "").lower()
-                        outcomes = mkt.get("outcomes", {})
-                        handicap = mkt.get("handicap", 0)
+            c1 = c2 = None
+            market_ids = sorted(markets.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999)
+            for mkt_id in market_ids:
+                mkt = markets[mkt_id]
+                if not isinstance(mkt, dict):
+                    continue
+                outcomes = mkt.get("outcomes", {})
+                if len(outcomes) == 2 and not mkt.get("handicap"):
+                    prices = _prix_outcomes(outcomes)
+                    if len(prices) >= 2:
+                        c1, c2 = prices[0], prices[1]
+                        break
 
-                        # Match winner (2 outcomes, pas de handicap)
-                        if c1 is None and len(outcomes) == 2 and ("winner" in mkt_name or "match" in mkt_name or handicap == 0):
-                            prices = []
-                            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
-                                out = outcomes[out_id]
-                                players = out.get("players", {}) if isinstance(out, dict) else {}
-                                for p_id, p_data in players.items():
-                                    pr = p_data.get("price")
-                                    if pr:
-                                        prices.append(pr)
-                                    break
-                            if len(prices) >= 2:
-                                c1, c2 = prices[0], prices[1]
+            if c1 and c2:
+                heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
+                odds_matchs[f"{p1}|{p2}"] = {
+                    "joueur1": p1, "joueur2": p2,
+                    "heure_utc": heure_str,
+                    "cote_j1": c1, "cote_j2": c2,
+                    "source_cote": "Winamax (OddsPapi)",
+                }
+                ajouts += 1
 
-                        # Game Handicap (handicap jeux, ex: +3.5 / -3.5)
-                        elif "handicap" in mkt_name and "game" in mkt_name and handicap:
-                            prices = []
-                            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
-                                out = outcomes[out_id]
-                                players = out.get("players", {}) if isinstance(out, dict) else {}
-                                for p_id, p_data in players.items():
-                                    pr = p_data.get("price")
-                                    if pr:
-                                        prices.append(pr)
-                                    break
-                            if len(prices) >= 2:
-                                marches_alt[f"hcap_j1_{handicap}"] = prices[0]
-                                marches_alt[f"hcap_j2_{handicap}"] = prices[1]
-
-                        # Total Games (over/under jeux, ex: 21.5)
-                        elif ("total" in mkt_name and "game" in mkt_name) and handicap:
-                            for out_id, out in outcomes.items():
-                                out_name = out.get("outcomeName", "").lower()
-                                players = out.get("players", {}) if isinstance(out, dict) else {}
-                                pr = None
-                                for p_id, p_data in players.items():
-                                    pr = p_data.get("price")
-                                    break
-                                if pr and "over" in out_name:
-                                    marches_alt[f"over_{handicap}"] = pr
-                                elif pr and "under" in out_name:
-                                    marches_alt[f"under_{handicap}"] = pr
-
-                if c1 and c2:
-                    start = fx.get("startTime", 0)
-                    heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
-                    entry = {
-                        "joueur1": p1, "joueur2": p2,
-                        "heure_utc": heure_str,
-                        "cote_j1": c1, "cote_j2": c2,
-                        "source_cote": "Winamax (OddsPapi)",
-                    }
-                    if marches_alt:
-                        entry["marches_alternatifs"] = marches_alt
-                    odds_matchs[cle] = entry
-                    ajouts += 1
-                    break
-
-        logging.info(f"OddsPapi Tennis — {ajouts} cote(s) Winamax ajoutée(s).")
+        logging.info(f"OddsPapi Tennis — {ajouts} cote(s) Winamax ajoutée(s) ({len(a_traiter)} matchs testés).")
 
     except Exception as e:
         logging.warning(f"OddsPapi Tennis erreur : {e}")
