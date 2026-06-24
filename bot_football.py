@@ -616,34 +616,69 @@ def enrichir_oddspapi_football(api_matchs, odds_matchs):
             for od in odds_list:
                 wina = od.get("odds", {}).get("winamax", {})
                 c1 = cnul = c2 = None
-                # Marché 1X2 (marketId 101) : outcomeId 101=1, 102=X, 103=2
+                marches_alt = {}  # Marchés alternatifs avec vraies cotes
+
                 for mkt_id, mkt in wina.items():
-                    if str(mkt_id) != "101":
+                    if not isinstance(mkt, dict):
                         continue
-                    outcomes = mkt.get("outcomes", {}) if isinstance(mkt, dict) else {}
-                    for out_id, out in outcomes.items():
-                        players = out.get("players", {}) if isinstance(out, dict) else {}
-                        price = None
-                        for p_id, p_data in players.items():
-                            price = p_data.get("price")
-                            break
-                        if str(out_id) == "101" and price:
-                            c1 = price
-                        elif str(out_id) == "102" and price:
-                            cnul = price
-                        elif str(out_id) == "103" and price:
-                            c2 = price
+                    handicap = mkt.get("handicap", 0)
+                    outcomes = mkt.get("outcomes", {})
+
+                    # Marché 101 = Full Time Result (1X2)
+                    if str(mkt_id) == "101":
+                        for out_id, out in outcomes.items():
+                            players = out.get("players", {}) if isinstance(out, dict) else {}
+                            price = None
+                            for p_id, p_data in players.items():
+                                price = p_data.get("price")
+                                break
+                            if str(out_id) == "101" and price:
+                                c1 = price
+                            elif str(out_id) == "102" and price:
+                                cnul = price
+                            elif str(out_id) == "103" and price:
+                                c2 = price
+
+                    # Marché 104 = BTTS (Both Teams To Score)
+                    elif str(mkt_id) == "104":
+                        for out_id, out in outcomes.items():
+                            players = out.get("players", {}) if isinstance(out, dict) else {}
+                            price = None
+                            for p_id, p_data in players.items():
+                                price = p_data.get("price")
+                                break
+                            if str(out_id) == "104" and price:
+                                marches_alt["btts_oui"] = price
+                            elif str(out_id) == "105" and price:
+                                marches_alt["btts_non"] = price
+
+                    # Marché 106 = Over/Under (handicap = ligne, ex 2.5)
+                    elif str(mkt_id) == "106":
+                        for out_id, out in outcomes.items():
+                            players = out.get("players", {}) if isinstance(out, dict) else {}
+                            price = None
+                            for p_id, p_data in players.items():
+                                price = p_data.get("price")
+                                break
+                            if str(out_id) == "106" and price:
+                                marches_alt[f"over_{handicap}"] = price
+                            elif str(out_id) == "107" and price:
+                                marches_alt[f"under_{handicap}"] = price
+
                 if c1 and c2:
                     start = fx.get("startTime", 0)
                     heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
                     comp = fx.get("tournament", {}).get("tournamentName", "Football")
-                    odds_matchs[cle] = {
+                    entry = {
                         "equipe1": eq1, "equipe2": eq2,
                         "heure_utc": heure_str,
                         "competition": comp,
                         "cote_1": c1, "cote_nul": cnul, "cote_2": c2,
                         "source_cote": "Winamax (OddsPapi)",
                     }
+                    if marches_alt:
+                        entry["marches_alternatifs"] = marches_alt
+                    odds_matchs[cle] = entry
                     ajouts += 1
                     break
 
@@ -868,6 +903,20 @@ def fusionner_calendrier(odds_matchs, api_matchs):
                 extras.append(f"Formation {eq1}: {m['formation_eq1']} | {eq2}: {m.get('formation_eq2','?')}")
             if m.get("sportapi7_cote_1"):
                 extras.append(f"Cotes SportAPI7: {m['sportapi7_cote_1']}/{m.get('sportapi7_cote_nul','?')}/{m.get('sportapi7_cote_2','?')}")
+            # Marchés alternatifs avec VRAIES cotes Winamax (OddsPapi)
+            marches_alt = cote_trouvee.get("marches_alternatifs", {})
+            if marches_alt:
+                m["marches_alternatifs"] = marches_alt
+                alt_parts = []
+                if "btts_oui" in marches_alt:
+                    alt_parts.append(f"BTTS Oui {marches_alt['btts_oui']}/Non {marches_alt.get('btts_non','?')}")
+                for k, v in sorted(marches_alt.items()):
+                    if k.startswith("over_"):
+                        ligne_ou = k.replace("over_", "")
+                        under_key = f"under_{ligne_ou}"
+                        alt_parts.append(f"O/U {ligne_ou}: Over {v}/Under {marches_alt.get(under_key,'?')}")
+                if alt_parts:
+                    extras.append("Marchés Winamax réels → " + " | ".join(alt_parts))
             if extras:
                 ligne += " | " + " | ".join(extras)
             lignes.append(ligne)
@@ -1109,6 +1158,20 @@ FILTRES IMMÉDIATS :
 • Derby local → variance élevée → BASSE systématique
 • Équipe déjà qualifiée/reléguée → motivation douteuse → skip si enjeux nuls
 • Absences clés (buteur principal, gardien titulaire) → BASSE
+
+⛔ INTERDICTION ABSOLUE — COTES INVENTÉES :
+• Tu n'as le DROIT d'utiliser QUE les cotes EXACTES fournies (cote_1, cote_nul, cote_2).
+• INTERDIT d'estimer, deviner ou inventer une cote.
+• Si une cote n'est PAS fournie pour un marché → tu NE PEUX PAS jouer ce marché.
+• Si tu écris "cote estimée" ou "non disponible précisément" → VIOLATION. Ne génère PAS ce ticket.
+• Marchés Over/Under, BTTS, Handicap : UNIQUEMENT si leur cote exacte est dans les données.
+  Sinon → reste sur le 1N2 avec sa cote réelle, ou passe au match suivant.
+
+✅ MARCHÉS ALTERNATIFS AUTORISÉS (si cote réelle fournie) :
+• Quand un match affiche "Marchés Winamax réels → BTTS / O/U", ces cotes sont EXACTES et JOUABLES.
+• Tu PEUX jouer BTTS Oui/Non ou Over/Under SI leur cote est explicitement listée.
+• Exemple : "O/U 2.5: Over 1.85/Under 1.95" → tu peux jouer Over 2.5 à 1.85 (cote réelle).
+• Ces marchés offrent souvent plus de value que le 1N2 — exploite-les quand la cote réelle est là.
 
 ⚠️ FENÊTRE HORAIRE SPÉCIALE — ÉVÉNEMENTS INTERNATIONAUX :
 • Les matchs de Coupe du Monde / Copa América aux USA peuvent se jouer
@@ -1372,6 +1435,12 @@ def run_bot_autonome():
             t_lower = t.lower()
             if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
                                                "kelly 0%", "mise : 0%", "mise 0%"]):
+                return False
+            # Rejeter les cotes inventées/estimées
+            if any(sig in t_lower for sig in ["cote estimée", "estimée", "non disponible précisément",
+                                               "cote approximative", "estimation de cote",
+                                               "cote non disponible"]):
+                logging.info("Ticket rejeté — cote estimée/inventée détectée.")
                 return False
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
             if m:
