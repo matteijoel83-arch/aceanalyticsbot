@@ -80,13 +80,14 @@ STATS_DEFAUT  = {
     "victoires": 0,
     "defaites":  0,
     "par_marche": {
-        "1n2":         {"v": 0, "d": 0},
-        "score_exact": {"v": 0, "d": 0},
-        "over_under":  {"v": 0, "d": 0},
-        "handicap":    {"v": 0, "d": 0},
-        "btts":        {"v": 0, "d": 0},
-        "combine":     {"v": 0, "d": 0},
-        "autre":       {"v": 0, "d": 0},
+        "1n2":          {"v": 0, "d": 0},
+        "mi_temps_nul": {"v": 0, "d": 0},
+        "score_exact":  {"v": 0, "d": 0},
+        "over_under":   {"v": 0, "d": 0},
+        "handicap":     {"v": 0, "d": 0},
+        "btts":         {"v": 0, "d": 0},
+        "combine":      {"v": 0, "d": 0},
+        "autre":        {"v": 0, "d": 0},
     },
     "par_niveau": {
         "elevee":  {"v": 0, "d": 0},
@@ -187,6 +188,10 @@ def _detecter_marche(ticket_texte):
     t = ticket_texte.lower()
     if "combiné" in t or "combine" in t:
         return "combine"
+    # Nul à la mi-temps : détecter AVANT "nul"→1n2 (sinon mal classé)
+    if ("mi-temps" in t or "mi temps" in t or "mt " in t or "half" in t or "ht ") and \
+       ("nul" in t or "draw" in t or "égalité" in t or "egalite" in t):
+        return "mi_temps_nul"
     if "btts" in t or "les deux" in t:
         return "btts"
     if "handicap" in t:
@@ -364,6 +369,36 @@ def sauvegarder_pari_pour_suivi(pari_info):
     _gh_put("pari_en_cours_football.json", paris, "📌 Ajout pari football", sha=sha)
 
 # =====================================================================
+# 6A-BIS. COMPTEUR DE QUOTA RAPIDAPI
+# =====================================================================
+# SportAPI7 + OddsPapi partagent la MÊME clé RAPIDAPI_KEY = même quota.
+# (football-data.org a sa propre clé FOOTBALL_API_KEY, non comptée ici.)
+# Trace la conso RapidAPI par run, cumul mensuel. N'affecte PAS l'analyse.
+
+_QUOTA_RUN = {"rapidapi": 0}
+
+def _quota_inc(n=1):
+    _QUOTA_RUN["rapidapi"] += n
+
+def _quota_persister():
+    """Cumule la conso du run dans quota_rapidapi_football.json (reset mensuel)."""
+    if DRY_RUN or _QUOTA_RUN["rapidapi"] == 0:
+        return
+    mois_actuel = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m")
+    data, sha = _gh_get("quota_rapidapi_football.json")
+    if not isinstance(data, dict) or data.get("mois") != mois_actuel:
+        data = {"mois": mois_actuel, "rapidapi_utilise": 0}
+    data["rapidapi_utilise"] = data.get("rapidapi_utilise", 0) + _QUOTA_RUN["rapidapi"]
+    try:
+        _gh_put("quota_rapidapi_football.json", data, "📊 Maj quota RapidAPI football", sha=sha)
+        logging.info(
+            f"Quota RapidAPI — {_QUOTA_RUN['rapidapi']} req ce run / "
+            f"{data['rapidapi_utilise']} cumulées en {mois_actuel}."
+        )
+    except Exception as e:
+        logging.warning(f"Quota persist échoué : {e}")
+
+# =====================================================================
 # 6B. MODULE SPORTAPI7 — DONNÉES COMPLÉMENTAIRES FOOTBALL
 # =====================================================================
 
@@ -376,6 +411,7 @@ def _sportapi7_get(endpoint, params=None, retries=2):
         return None
     for tentative in range(1, retries + 1):
         try:
+            _quota_inc()
             r = requests.get(
                 f"{SPORTAPI7_BASE}/{endpoint}",
                 headers={
@@ -541,6 +577,7 @@ def _oddspapi_get(endpoint, params=None, retries=2):
         return None
     for tentative in range(1, retries + 1):
         try:
+            _quota_inc()
             r = requests.get(
                 f"{ODDSPAPI_BASE}/{endpoint}",
                 headers={
@@ -1223,7 +1260,16 @@ CALIBRATION PROBABILITÉS (football plus aléatoire que tennis) :
 • Favori modéré (1.50-1.80)    → MAX 62%
 • Match serré   (1.80-2.20)    → MAX 55%
 • Outsider      (> 2.20)       → MAX 48%
-• Nul           (cote 3.00-4.00) → MAX 35%
+• Nul mi-temps  (cote 1.90-2.40) → MAX 50%
+
+⛔ INTERDICTION — NUL TEMPS PLEIN (résultat sec X) :
+Le pari "Match Nul" sur le résultat final (90 min) est INTERDIT.
+Trop aléatoire, historiquement perdant. Ne JAMAIS proposer un ticket dont
+le pronostic est "Nul" / "Match nul" / "X" sur le résultat à temps plein.
+→ Si tu vois de la value sur un nul, joue plutôt le "Nul à la mi-temps"
+  (très fréquent : ~45% des mi-temps finissent à égalité, souvent 0-0).
+→ Le 1N2 temps plein reste autorisé UNIQUEMENT pour les victoires (1 ou 2),
+  jamais pour le nul.
 
 ⚠️ RÈGLE ABSOLUE — FORMAT DE SORTIE :
 Ta réponse commence DIRECTEMENT par 🔴 ou AUCUN_MATCH. Rien avant.
@@ -1278,18 +1324,21 @@ Plafonds absolus :
 MARCHÉS DISPONIBLES :
 
 CONFIANCE ÉLEVÉE :
-  • 1N2 (si supériorité claire + données solides)
+  • 1N2 victoire (1 ou 2 — JAMAIS le nul sec) si supériorité claire + données solides
   • Over 2.5 buts (si xG élevés des deux équipes)
   • Under 1.5 buts (si défenses solides + xGA bas)
   • BTTS Oui (si BTTS% > 65% et formes offensives)
   • Handicap asiatique (-1 / -1.5)
   • Combiné max 2 (compétitions différentes) — mise 1%
 
-CONFIANCE MODÉRÉE — 1N2 INTERDIT si cote < 1.40 :
+CONFIANCE MODÉRÉE — 1N2 victoire INTERDIT si cote < 1.40 :
   • Over/Under buts (1.5 / 2.5 / 3.5)
   • BTTS Oui/Non
   • Victoire + Over 1.5 buts
-  • Mi-temps / Match (1N2 mi-temps)
+  • Nul à la mi-temps (HT Draw) — privilégié : ~45% des MT finissent à égalité.
+    Pertinent quand : 2 équipes prudentes, gros enjeu, débuts lents fréquents,
+    H2H avec MT serrées, ou favori qui démarre doucement. Cote typique 1.90-2.40.
+  • Mi-temps/Match (double résultat) si data le justifie
   • Combiné MODÉRÉE → INTERDIT
 
 MISES :
@@ -1472,6 +1521,15 @@ def run_bot_autonome():
                                                "cote non disponible"]):
                 logging.info("Ticket rejeté — cote estimée/inventée détectée.")
                 return False
+            # Rejeter le Nul TEMPS PLEIN (résultat sec X) — interdit par stratégie.
+            # On extrait la ligne PRONO et on vérifie qu'un "nul" n'y est pas SANS "mi-temps".
+            mp = re.search(r"prono\s*:?\s*</b>?\s*([^\n<]+)", t_lower)
+            prono_txt = mp.group(1) if mp else t_lower
+            a_nul = "nul" in prono_txt or "match nul" in prono_txt or prono_txt.strip() in ("x", "= x")
+            a_mitemps = "mi-temps" in prono_txt or "mi temps" in prono_txt or "mt" in prono_txt or "ht" in prono_txt
+            if a_nul and not a_mitemps:
+                logging.info("Ticket rejeté — Nul temps plein interdit par stratégie (jouer Nul mi-temps).")
+                return False
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
             if m:
                 delta = float(m.group(1).replace(",", "."))
@@ -1536,16 +1594,84 @@ def run_bot_autonome():
         logging.error(f"Erreur critique : {e}", exc_info=True)
         _alerter_telegram_erreur(f"bot_football.py a planté : {e}")
     finally:
+        _quota_persister()
         logging.info(f"Terminé en {time.time() - debut:.1f}s.")
 
 # =====================================================================
 # 13. POINT D'ENTRÉE CLI
 # =====================================================================
 
+def envoyer_recap_hebdo():
+    """
+    Bilan football sur Telegram (1×/semaine via cron). Lecture seule de
+    stats_football.json + quota — n'affecte PAS l'analyse.
+    """
+    s = charger_stats()
+    total = s["victoires"] + s["defaites"]
+    wr = calculer_winrate(s)
+
+    lignes = [
+        "📊 <b>ACEANALYTICS ⚽ FOOTBALL — BILAN HEBDO</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"✅ Victoires : {s['victoires']} | ❌ Défaites : {s['defaites']}",
+        f"📈 <b>Win Rate global : {wr:.1f}%</b> ({total} paris)",
+    ]
+
+    par_marche = s.get("par_marche", {})
+    if par_marche:
+        détails = []
+        for marche, vd in par_marche.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                détails.append(f"  • {marche} : {v}V/{d}D ({v/(v+d)*100:.0f}%)")
+        if détails:
+            lignes.append("\n🎯 <b>Par marché :</b>")
+            lignes.extend(détails)
+
+    par_niveau = s.get("par_niveau", {})
+    if par_niveau:
+        détails_n = []
+        for niveau, vd in par_niveau.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                détails_n.append(f"  • {niveau} : {v}V/{d}D ({v/(v+d)*100:.0f}%)")
+        if détails_n:
+            lignes.append("\n🛡 <b>Par confiance :</b>")
+            lignes.extend(détails_n)
+
+    quota, _ = _gh_get("quota_rapidapi_football.json")
+    if isinstance(quota, dict):
+        lignes.append(
+            f"\n⚙️ Quota RapidAPI {quota.get('mois','?')} : "
+            f"{quota.get('rapidapi_utilise', 0)} requêtes utilisées."
+        )
+
+    if total < 50:
+        lignes.append(f"\n💡 Phase bêta : {total}/50 paris pour valider la calibration.")
+    else:
+        lignes.append(f"\n🔬 {total} paris — calibration mesurable.")
+
+    message = "\n".join(lignes)
+    if DRY_RUN:
+        logging.info(f"[DRY-RUN] Récap hebdo football :\n{message}")
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        logging.info("✅ Récap hebdo football envoyé.")
+    except Exception as e:
+        logging.warning(f"Échec récap hebdo : {e}")
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--dry-run"]
     if not args:
         run_bot_autonome()
+    elif args[0] == "recap":
+        envoyer_recap_hebdo()
     elif args[0] in ("--help", "-h"):
         print(__doc__)
     else:
