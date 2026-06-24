@@ -219,16 +219,39 @@ INSTRUCTIONS_VERIFICATION = (
     "\n- Si le prono est 'BTTS' → vérifier si les deux équipes ont marqué"
     "\n- Si le prono est 'Over 2.5 buts' → vérifier le nombre de buts"
     "\n- Si le prono est un combiné → TOUS les pronostics doivent être validés"
+    "\n\n⛔ RÈGLE DE FIN DE MATCH — LA PLUS IMPORTANTE :"
+    "\nUn match n'est TERMINÉ que si tu as une PREUVE EXPLICITE :"
+    "\n  • mention 'Terminé' / 'Finished' / 'Final' / 'FT' / score final officiel"
+    "\n  • un score complet de tennis (ex: 6-3 6-4, soit 2 sets gagnés par un joueur)"
+    "\nSi tu vois un score PARTIEL (1 set joué, match en cours, 'Live', 'en direct',"
+    "\nset en cours, ou AUCUNE mention claire de fin) → c'est EN_COURS, JAMAIS PERDU."
+    "\nNe conclus JAMAIS PERDU sur la base d'un score intermédiaire où le joueur est mené."
+    "\nUn joueur mené 6-3 4-3 peut encore gagner : ce match est EN_COURS, pas PERDU."
+    "\nSi tu ne trouves PAS le score final explicite → EN_COURS."
+    "\n\n⛔ AVANT TOUT VERDICT GAGNE OU PERDU — CITATION OBLIGATOIRE :"
+    "\nTu DOIS d'abord écrire une ligne 'PREUVE DE FIN: ...' citant la preuve exacte"
+    "\ntrouvée (ex: 'PREUVE DE FIN: Flashscore affiche Terminé, score final 4-6 6-3 6-4')."
+    "\nSi tu ne peux PAS citer une preuve de fin explicite (mot Terminé/FT/Final + score"
+    "\ncomplet) → tu écris 'PREUVE DE FIN: aucune' et le verdict est OBLIGATOIREMENT EN_COURS."
+    "\nUn verdict GAGNE ou PERDU SANS ligne 'PREUVE DE FIN' valide est INTERDIT."
+    "\n\n⚠️ VÉRIFICATION DU BON MATCH :"
+    "\nAttention aux homonymes. Vérifie que le tournoi, la date et l'adversaire correspondent"
+    "\nEXACTEMENT au ticket. Un autre joueur du même nom dans un autre tournoi ≠ ton match."
+    "\nSi tu n'es pas certain que c'est le bon match → EN_COURS."
     "\n\nPROCÉDURE :"
-    "\n1. Cherche le score final du match"
-    "\n2. Compare avec le pronostic exact indiqué"
-    "\n3. Réponds UNIQUEMENT par : GAGNE · PERDU · EN_COURS"
+    "\n1. Cherche le score FINAL du match (avec preuve de fin : Terminé/FT/score complet)"
+    "\n2. Si pas de preuve de fin claire → EN_COURS immédiatement"
+    "\n3. Si match terminé : compare avec le pronostic exact indiqué"
+    "\n\nFORMAT DE RÉPONSE OBLIGATOIRE :"
+    "\nTermine ta réponse par EXACTEMENT une de ces lignes, seule sur la dernière ligne :"
+    "\nVERDICT: GAGNE"
+    "\nVERDICT: PERDU"
+    "\nVERDICT: EN_COURS"
     "\n\nRÈGLES STRICTES :"
-    "\n- Match pas encore terminé → EN_COURS"
-    "\n- Match terminé + pronostic validé → GAGNE"
-    "\n- Match terminé + pronostic non validé → PERDU"
-    "\n- Doute sur le résultat → EN_COURS (jamais GAGNE si incertain)"
-    "\nAucun autre texte que GAGNE, PERDU ou EN_COURS."
+    "\n- Match pas encore terminé OU score partiel OU doute → VERDICT: EN_COURS"
+    "\n- Match terminé (preuve explicite) + pronostic validé → VERDICT: GAGNE"
+    "\n- Match terminé (preuve explicite) + pronostic non validé → VERDICT: PERDU"
+    "\n- Le moindre doute sur la fin du match → VERDICT: EN_COURS"
 )
 
 
@@ -265,11 +288,36 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
         verdict = "\n".join(
             b.text for b in reponse.content if hasattr(b, "text") and b.text
         ).strip().upper()
-        logging.info(f"Verdict : '{verdict}'")
-        if "GAGNE" in verdict:
-            return "GAGNE"
-        if "PERDU" in verdict:
-            return "PERDU"
+        logging.info(f"Verdict brut : '{verdict[-200:]}'")
+
+        # Parser UNIQUEMENT la ligne 'VERDICT:' (évite les faux positifs
+        # quand 'PERDU'/'GAGNE' apparaît dans le raisonnement de Claude)
+        m = re.search(r"VERDICT\s*:\s*(GAGNE|PERDU|EN_COURS)", verdict)
+        if m:
+            resultat = m.group(1)
+
+            # Protection anti-faux-positif : un verdict GAGNE/PERDU exige une
+            # ligne 'PREUVE DE FIN' qui n'est PAS 'aucune'. Sinon → EN_COURS.
+            if resultat in ("GAGNE", "PERDU"):
+                preuve = re.search(r"PREUVE DE FIN\s*:\s*(.+)", verdict)
+                preuve_txt = preuve.group(1).strip() if preuve else ""
+                preuve_valide = bool(preuve_txt) and "AUCUNE" not in preuve_txt[:20]
+                # La preuve doit mentionner un indicateur de fin réel
+                indices_fin = any(mot in preuve_txt for mot in
+                                  ["TERMIN", "FINISHED", "FINAL", "FT", "6-", "7-", "7/", "6/"])
+                if not (preuve_valide and indices_fin):
+                    logging.warning(
+                        f"Verdict {resultat} SANS preuve de fin valide "
+                        f"('{preuve_txt[:60]}') → forcé EN_COURS par sécurité."
+                    )
+                    return "EN_COURS"
+
+            logging.info(f"Verdict extrait : {resultat}")
+            return resultat
+
+        # Pas de ligne VERDICT trouvée → sécurité maximale : EN_COURS
+        # (on ne devine PAS à partir du texte libre, pour ne pas clôturer à tort)
+        logging.warning("Aucune ligne VERDICT trouvée → EN_COURS par sécurité.")
         return "EN_COURS"
     except Exception as e:
         logging.error(f"Erreur Claude : {e}")
