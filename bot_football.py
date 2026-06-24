@@ -1367,16 +1367,27 @@ def run_bot_autonome():
 
         tickets = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20][:MAX_TICKETS]
 
-        # Filtrer tickets abandonnés — uniquement si le ticket ne commence pas par ⚽ ou 🔴
-        mots_abandon = ["abandonné", "delta négatif", "pas de value", "kelly 0%", "aucune value"]
+        # Filtrer les tickets abandonnés en analysant le DELTA réel dans la ligne VALUE
+        def _ticket_valide(t):
+            t_lower = t.lower()
+            if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
+                                               "kelly 0%", "mise : 0%", "mise 0%"]):
+                return False
+            m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
+            if m:
+                delta = float(m.group(1).replace(",", "."))
+                if delta < 0.10:
+                    return False
+            return True
+
         tickets_valides = []
         for t in tickets:
-            if t.startswith("⚽") or t.startswith("🔴"):
-                tickets_valides.append(t)  # Ticket propre — on garde toujours
-            elif not any(m in t.lower() for m in mots_abandon):
-                tickets_valides.append(t)
-            else:
-                logging.info(f"Ticket abandonné détecté — non sauvegardé.")
+            if not (t.startswith("⚽") or t.startswith("🔴")):
+                continue
+            if not _ticket_valide(t):
+                logging.info("Ticket rejeté (delta < 0.10 ou abandon) — non envoyé.")
+                continue
+            tickets_valides.append(t)
         tickets = tickets_valides
 
         if not tickets:
