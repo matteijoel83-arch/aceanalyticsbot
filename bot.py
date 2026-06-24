@@ -915,7 +915,7 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
                         h = k.replace("hcap_j2_", "")
                         hcaps.setdefault(h, {})["j2"] = v
                 for h, vals in sorted(hcaps.items()):
-                    alt_parts.append(f"Hcap {h} jeux: {j1} {vals.get('j1','?')}/{j2} {vals.get('j2','?')}")
+                    alt_parts.append(f"Écart de jeux {h}: {j1} {vals.get('j1','?')}/{j2} {vals.get('j2','?')}")
                 # Totaux jeux
                 for k, v in sorted(marches_alt.items()):
                     if k.startswith("over_"):
@@ -1341,12 +1341,15 @@ FILTRES IMMÉDIATS :
 • Le calcul de value DOIT se baser sur la cote réelle Winamax, jamais sur une estimation.
 
 ✅ MARCHÉS ALTERNATIFS AUTORISÉS (si cote réelle fournie) :
-• Quand un match affiche "Marchés Winamax réels → Hcap X jeux / Total X jeux", ces cotes sont EXACTES et JOUABLES.
-• Tu PEUX jouer un handicap jeux ou un total de jeux SI sa cote est explicitement listée.
-• Exemple : "Hcap +3.5 jeux: Alexandrova 1.84/Andreeva 1.96" → tu peux jouer Alexandrova +3.5 jeux à 1.84 (cote réelle).
+• Quand un match affiche "Marchés Winamax réels → Écart de jeux X / Total X jeux", ces cotes sont EXACTES et JOUABLES.
+• Tu PEUX jouer un écart de jeux ou un total de jeux SI sa cote est explicitement listée.
+• ⚠️ NOM EXACT WINAMAX : le marché s'appelle "ÉCART DE JEUX" (PAS "handicap de jeux" qui n'existe pas).
+  Format : Outsider +X.5 jeux / Favori -X.5 jeux.
+• Exemple : "Écart de jeux 3.5: Alexandrova 1.84/Andreeva 1.96" → tu écris "Alexandrova +3.5 jeux (écart de jeux)" à 1.84.
 • Exemple : "Total 21.5 jeux: Over 1.90/Under 1.92" → tu peux jouer Over 21.5 jeux à 1.90.
 • Ces marchés offrent souvent plus de value que le Moneyline — exploite-les quand la cote réelle est fournie.
 • ⚠️ Respecte EXACTEMENT la ligne indiquée : si c'est +3.5, écris +3.5 (jamais +4.5).
+• ⚠️ Le handicap de SETS existe sur Winamax, mais le handicap de JEUX s'appelle "écart de jeux". Ne confonds pas.
 
 CALIBRATION PROBABILITÉS :
 • Cote < 1.50  → MAX 75%
