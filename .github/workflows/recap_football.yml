@@ -1,0 +1,46 @@
+name: AceAnalytics — Récap Hebdo Football
+
+on:
+  schedule:
+    # Dimanche 20h15 UTC = 22h15 Paris (15 min après le récap tennis).
+    - cron: '15 20 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  recap-hebdo-football:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPO:         ${{ github.repository }}
+      ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
+      RAPIDAPI_KEY:        ${{ secrets.RAPIDAPI_KEY }}
+      FOOTBALL_API_KEY:    ${{ secrets.FOOTBALL_API_KEY }}
+
+    steps:
+      - name: "Checkout du dépôt"
+        uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: "Configuration de Python 3.12"
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: "Installation des dépendances"
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: "Envoi du récap hebdomadaire football Telegram"
+        run: python bot_football.py recap
