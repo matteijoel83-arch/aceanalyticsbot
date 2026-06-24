@@ -842,10 +842,6 @@ def precollecte_rapidapi_tennis(date_fr):
 # 9. FUSION DES DEUX SOURCES
 # =====================================================================
 
-# =====================================================================
-# 9. FUSION DES DEUX SOURCES
-# =====================================================================
-
 def fusionner_calendrier(odds_matchs, rapid_matchs):
     """
     Logique de fusion en 3 étapes :
@@ -1291,9 +1287,8 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
             return '{"matchs": [], "avertissements": "Gemini indisponible (503) — réessayer plus tard."}'
 
         texte = rep.text.strip()
-        texte = re.sub(r"^```json\s*", "", texte)
-        texte = re.sub(r"\s*
-```$", "", texte)
+        texte = re.sub("^```json\\s*", "", texte)
+        texte = re.sub("\\s*```$", "", texte)
         data  = json.loads(texte)
         logging.info(f"Gemini OK — {len(data.get('matchs', []))} match(s).")
         return json.dumps(data, ensure_ascii=False, indent=2)
