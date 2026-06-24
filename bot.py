@@ -551,6 +551,10 @@ def _oddspapi_get(endpoint, params=None, retries=2):
                 continue
             if r.status_code == 404:
                 return None
+            if r.status_code == 400:
+                # Logger le corps de l'erreur pour comprendre ce que l'API attend
+                logging.warning(f"OddsPapi {endpoint} 400 — réponse: {r.text[:200]}")
+                return None
             r.raise_for_status()
             return r.json()
         except Exception as e:
@@ -614,10 +618,16 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             return prices
 
         for fixture_id, p1, p2, start in a_traiter:
-            odds_data = _oddspapi_get("fixtures/odds/main", {
+            # Essayer /fixtures/odds (= /odds doc officielle) puis /fixtures/odds/main en fallback
+            odds_data = _oddspapi_get("fixtures/odds", {
                 "fixtureId":  fixture_id,
                 "bookmakers": WINA_SLUG,
             })
+            if not odds_data:
+                odds_data = _oddspapi_get("fixtures/odds/main", {
+                    "fixtureId":  fixture_id,
+                    "bookmakers": WINA_SLUG,
+                })
             time.sleep(0.15)
             if not odds_data:
                 continue
@@ -626,7 +636,15 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             if not isinstance(od, dict):
                 continue
 
-            wina = od.get("bookmakerOdds", {}).get(WINA_SLUG, {})
+            # Chercher la clé Winamax (winamax.fr, winamax, Winamax FR...) de façon robuste
+            book_odds = od.get("bookmakerOdds", {})
+            if not isinstance(book_odds, dict):
+                continue
+            wina = {}
+            for slug_key, slug_val in book_odds.items():
+                if "winamax" in slug_key.lower():
+                    wina = slug_val
+                    break
             markets = wina.get("markets", {}) if isinstance(wina, dict) else {}
             if not markets:
                 continue
