@@ -852,6 +852,21 @@ def precollecte_api_football(date_fr):
 # 9. FUSION DES DEUX SOURCES
 # =====================================================================
 
+def _normaliser_equipe(nom):
+    """Normalise un nom d'équipe pour détecter les doublons.
+    'Bosnia & Herzegovina' == 'Bosnia-Herzegovina' == 'Bosnia and Herzegovina'."""
+    n = nom.lower().strip()
+    # Uniformiser les séparateurs
+    n = n.replace(" & ", " ").replace("&", " ")
+    n = n.replace(" and ", " ").replace("-", " ").replace("_", " ")
+    # Retirer les espaces multiples
+    n = " ".join(n.split())
+    # Retirer les mots courants non distinctifs
+    for mot in ["republic", "rep", "fc", "national", "team"]:
+        n = n.replace(f" {mot}", "").replace(f"{mot} ", "")
+    return n.strip()
+
+
 def fusionner_calendrier(odds_matchs, api_matchs):
     lignes = ["📋 MATCHS FOOTBALL DISPONIBLES SUR WINAMAX :\n"]
 
@@ -860,16 +875,25 @@ def fusionner_calendrier(odds_matchs, api_matchs):
         odds_index[m["equipe1"].lower()] = m
         odds_index[m["equipe2"].lower()] = m
 
-    matchs_winamax   = []
-    matchs_sans_cote = []
-    affiches         = set()
+    matchs_winamax        = []
+    matchs_sans_cote      = []
+    affiches              = set()
+    noms_normalises       = set()  # Détection doublons par noms normalisés
 
     for m in api_matchs:
         eq1, eq2 = m["equipe1"], m["equipe2"]
         cle = f"{eq1}|{eq2}"
         if cle in affiches:
             continue
+
+        # Déduplication par noms normalisés (Bosnia & Herzegovina == Bosnia-Herzegovina)
+        cle_norm = f"{_normaliser_equipe(eq1)}|{_normaliser_equipe(eq2)}"
+        if cle_norm in noms_normalises:
+            logging.info(f"Doublon football ignoré : {eq1} vs {eq2}")
+            continue
+
         affiches.add(cle)
+        noms_normalises.add(cle_norm)
 
         cote_trouvee = None
         for nom, data in odds_index.items():
