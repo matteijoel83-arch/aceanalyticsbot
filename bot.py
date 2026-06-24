@@ -398,6 +398,40 @@ def sauvegarder_pari_pour_suivi(pari_info):
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
 # =====================================================================
+# 6A-BIS. COMPTEUR DE QUOTA RAPIDAPI
+# =====================================================================
+# Toutes les sources tennis complémentaires (RapidAPI Tennis, SportAPI7,
+# OddsPapi) partagent la MÊME clé RAPIDAPI_KEY = le même quota mensuel.
+# Ce compteur trace la conso réelle par run et cumule sur le mois pour
+# éviter les 429 surprise. N'affecte PAS l'analyse ni la stratégie.
+
+_QUOTA_RUN = {"rapidapi": 0}  # compteur en mémoire pour ce run
+
+def _quota_inc(n=1):
+    """Incrémente le compteur de requêtes RapidAPI de ce run."""
+    _QUOTA_RUN["rapidapi"] += n
+
+def _quota_persister():
+    """Cumule la conso du run dans quota_rapidapi.json (reset auto chaque mois)."""
+    if DRY_RUN or _QUOTA_RUN["rapidapi"] == 0:
+        return
+    mois_actuel = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m")
+    data, sha = _gh_get("quota_rapidapi.json")
+    if not isinstance(data, dict) or data.get("mois") != mois_actuel:
+        # Nouveau mois (ou première fois) → reset
+        data = {"mois": mois_actuel, "rapidapi_utilise": 0}
+        sha = sha  # garder le sha pour écraser l'ancien mois
+    data["rapidapi_utilise"] = data.get("rapidapi_utilise", 0) + _QUOTA_RUN["rapidapi"]
+    try:
+        _gh_put("quota_rapidapi.json", data, "📊 Maj quota RapidAPI", sha=sha)
+        logging.info(
+            f"Quota RapidAPI — {_QUOTA_RUN['rapidapi']} req ce run / "
+            f"{data['rapidapi_utilise']} cumulées en {mois_actuel}."
+        )
+    except Exception as e:
+        logging.warning(f"Quota persist échoué : {e}")
+
+# =====================================================================
 # 6B. MODULE SPORTAPI7 — DONNÉES COMPLÉMENTAIRES TENNIS
 # =====================================================================
 
@@ -410,6 +444,7 @@ def _sportapi7_get(endpoint, params=None, retries=2):
         return None
     for tentative in range(1, retries + 1):
         try:
+            _quota_inc()
             r = requests.get(
                 f"{SPORTAPI7_BASE}/{endpoint}",
                 headers={
@@ -537,6 +572,7 @@ def _oddspapi_get(endpoint, params=None, retries=2):
         return None
     for tentative in range(1, retries + 1):
         try:
+            _quota_inc()
             r = requests.get(
                 f"{ODDSPAPI_BASE}/{endpoint}",
                 headers={
@@ -774,6 +810,7 @@ def precollecte_rapidapi_tennis(date_fr):
         while True:
             try:
                 url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
+                _quota_inc()
                 r   = requests.get(url, headers=headers, timeout=10, params={
                     "include":  "tournament,round",
                     "filter":   "PlayerGroup:singles",
@@ -995,6 +1032,7 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
 
     def _get(url, params=None):
         try:
+            _quota_inc()
             r = requests.get(url, headers=headers, params=params, timeout=8)
             r.raise_for_status()
             return r.json()
@@ -1788,16 +1826,90 @@ def run_bot_autonome():
         logging.error(f"Erreur critique : {e}", exc_info=True)
         _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
+        _quota_persister()
         logging.info(f"Terminé en {time.time() - debut:.1f}s.")
 
 # =====================================================================
 # 13. POINT D'ENTRÉE CLI
 # =====================================================================
 
+def envoyer_recap_hebdo():
+    """
+    Envoie un bilan de performance sur Telegram (à déclencher 1×/semaine via cron).
+    Lecture seule de stats.json + quota_rapidapi.json — n'affecte PAS l'analyse.
+    """
+    s = charger_stats()
+    total = s["victoires"] + s["defaites"]
+    wr = calculer_winrate(s)
+
+    lignes = [
+        "📊 <b>ACEANALYTICS 🎾 TENNIS — BILAN HEBDO</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"✅ Victoires : {s['victoires']} | ❌ Défaites : {s['defaites']}",
+        f"📈 <b>Win Rate global : {wr:.1f}%</b> ({total} paris)",
+    ]
+
+    # Détail par marché (si v2 disponible)
+    par_marche = s.get("par_marche", {})
+    if par_marche:
+        détails = []
+        for marche, vd in par_marche.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                wr_m = v / (v + d) * 100
+                détails.append(f"  • {marche} : {v}V/{d}D ({wr_m:.0f}%)")
+        if détails:
+            lignes.append("\n🎯 <b>Par marché :</b>")
+            lignes.extend(détails)
+
+    # Détail par niveau de confiance
+    par_niveau = s.get("par_niveau", {})
+    if par_niveau:
+        détails_n = []
+        for niveau, vd in par_niveau.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                wr_n = v / (v + d) * 100
+                détails_n.append(f"  • {niveau} : {v}V/{d}D ({wr_n:.0f}%)")
+        if détails_n:
+            lignes.append("\n🛡 <b>Par confiance :</b>")
+            lignes.extend(détails_n)
+
+    # Quota RapidAPI du mois
+    quota, _ = _gh_get("quota_rapidapi.json")
+    if isinstance(quota, dict):
+        lignes.append(
+            f"\n⚙️ Quota RapidAPI {quota.get('mois','?')} : "
+            f"{quota.get('rapidapi_utilise', 0)} requêtes utilisées."
+        )
+
+    # Note de calibration : combien de paris avant validation
+    if total < 50:
+        lignes.append(f"\n💡 Phase bêta : {total}/50 paris pour valider la calibration.")
+    else:
+        lignes.append(f"\n🔬 {total} paris — calibration mesurable.")
+
+    message = "\n".join(lignes)
+    if DRY_RUN:
+        logging.info(f"[DRY-RUN] Récap hebdo :\n{message}")
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        logging.info("✅ Récap hebdo envoyé.")
+    except Exception as e:
+        logging.warning(f"Échec récap hebdo : {e}")
+
+
 if __name__ == "__main__":
     args         = [a for a in sys.argv[1:] if a != "--dry-run"]
     if not args:
         run_bot_autonome()
+    elif args[0] == "recap":
+        envoyer_recap_hebdo()
     elif args[0] == "resultat" and len(args) == 2:
         flag = args[1].lower()
         if flag in ("v", "victoire", "win", "1"):
