@@ -568,14 +568,16 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
     Complète les cotes Winamax via OddsPapi.
     IMPORTANT (confirmé via données réelles) :
       - sportId tennis Winamax = 13 (Winamax availableSports = [12,13,23])
-      - slug bookmaker = "winamax.fr" (PAS "winamax")
-      - /fixtures/today retourne bookmakers:{} VIDE → il FAUT /fixtures/odds/main
-      - /fixtures/odds/main prend fixtureId (SINGULIER)
+      - slug bookmaker = "winamax.fr" (recherche tolérante "winamax")
+      - /fixtures/today retourne bookmakers:{} VIDE → appeler /fixtures/odds
+      - endpoint cotes = /fixtures/odds (doc officielle /odds), fallback /fixtures/odds/main
+      - fixtureId au format complet "id1000..." (SINGULIER)
       - structure : bookmakerOdds.{slug}.markets.{marketId}.outcomes.{outId}.players.0.price
       - startTime en epoch SECONDES
+      - INDÉPENDANT de RapidAPI Tennis : fonctionne même si rapid_matchs vide
     Ne remplace JAMAIS une cote existante (Odds API prioritaire).
     """
-    if not RAPIDAPI_KEY or not rapid_matchs:
+    if not RAPIDAPI_KEY:
         return odds_matchs
 
     WINA_SLUG = "winamax.fr"
