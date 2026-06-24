@@ -619,17 +619,13 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
                     prices.append(pr)
             return prices
 
+        diag_fait = False
         for fixture_id, p1, p2, start in a_traiter:
             # Essayer /fixtures/odds (= /odds doc officielle) puis /fixtures/odds/main en fallback
-            odds_data = _oddspapi_get("fixtures/odds", {
-                "fixtureId":  fixture_id,
-                "bookmakers": WINA_SLUG,
-            })
+            # NE PAS filtrer par bookmaker dans la requête : on récupère tout puis on cherche Winamax
+            odds_data = _oddspapi_get("fixtures/odds", {"fixtureId": fixture_id})
             if not odds_data:
-                odds_data = _oddspapi_get("fixtures/odds/main", {
-                    "fixtureId":  fixture_id,
-                    "bookmakers": WINA_SLUG,
-                })
+                odds_data = _oddspapi_get("fixtures/odds/main", {"fixtureId": fixture_id})
             time.sleep(0.15)
             if not odds_data:
                 continue
@@ -637,6 +633,13 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             od = odds_data[0] if isinstance(odds_data, list) and odds_data else odds_data
             if not isinstance(od, dict):
                 continue
+
+            # DIAGNOSTIC (1 seule fois) : voir la structure réelle et les bookmakers dispo
+            if not diag_fait:
+                diag_fait = True
+                cles_top = list(od.keys())
+                book_dispo = list(od.get("bookmakerOdds", {}).keys())
+                logging.info(f"OddsPapi DIAG — clés top: {cles_top} | bookmakers: {book_dispo}")
 
             # Chercher la clé Winamax (winamax.fr, winamax, Winamax FR...) de façon robuste
             book_odds = od.get("bookmakerOdds", {})
