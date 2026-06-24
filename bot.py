@@ -591,7 +591,8 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
 
         fixtures = data if isinstance(data, list) else data.get("fixtures", [])
 
-        # Ne garder que les matchs à venir (Pre-Game) non déjà couverts
+        # Ne garder que les matchs à venir (Pre-Game) non déjà couverts.
+        # PRIORISER hasOdds=true (vrais tournois cotés, pas les M15/qualifs obscurs).
         a_traiter = []
         for fx in fixtures:
             statut = fx.get("status", {}).get("statusName", "")
@@ -605,9 +606,14 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
                 continue
             if f"{p1}|{p2}" in odds_matchs:
                 continue
-            a_traiter.append((fixture_id, p1, p2, fx.get("startTime", 0)))
+            has_odds = fx.get("hasOdds", False)
+            a_traiter.append((has_odds, fixture_id, p1, p2, fx.get("startTime", 0)))
 
-        a_traiter = a_traiter[:25]  # plafond quota
+        # Trier : fixtures avec cotes en premier, puis limiter
+        a_traiter.sort(key=lambda x: not x[0])  # hasOdds=True d'abord
+        nb_avec_odds = sum(1 for x in a_traiter if x[0])
+        logging.info(f"OddsPapi — {nb_avec_odds} fixture(s) avec cotes sur {len(a_traiter)} à venir.")
+        a_traiter = [x[1:] for x in a_traiter[:25]]  # retirer le flag has_odds, plafond 25
         ajouts = 0
 
         def _prix_outcomes(outcomes):
@@ -637,21 +643,26 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             # DIAGNOSTIC (1 seule fois) : voir la structure réelle et les bookmakers dispo
             if not diag_fait:
                 diag_fait = True
-                cles_top = list(od.keys())
-                book_dispo = list(od.get("bookmakerOdds", {}).keys())
-                logging.info(f"OddsPapi DIAG — clés top: {cles_top} | bookmakers: {book_dispo}")
+                odds_section = od.get("odds", {})
+                book_keys = list(odds_section.keys()) if isinstance(odds_section, dict) else "non-dict"
+                logging.info(f"OddsPapi DIAG — odds keys: {book_keys} | bookmakers: {od.get('bookmakers')}")
 
-            # Chercher la clé Winamax (winamax.fr, winamax, Winamax FR...) de façon robuste
-            book_odds = od.get("bookmakerOdds", {})
-            if not isinstance(book_odds, dict):
+            # La structure réelle via RapidAPI : clé 'odds' (pas 'bookmakerOdds')
+            # od['odds'] = { '{slug}': { 'markets': {...} } } OU { '{slug}': {...} }
+            book_odds = od.get("odds", {})
+            if not isinstance(book_odds, dict) or not book_odds:
                 continue
             wina = {}
             for slug_key, slug_val in book_odds.items():
                 if "winamax" in slug_key.lower():
                     wina = slug_val
                     break
-            markets = wina.get("markets", {}) if isinstance(wina, dict) else {}
-            if not markets:
+            # markets peut être directement sous wina, ou wina['markets']
+            if isinstance(wina, dict):
+                markets = wina.get("markets", wina)
+            else:
+                markets = {}
+            if not isinstance(markets, dict) or not markets:
                 continue
 
             c1 = c2 = None
