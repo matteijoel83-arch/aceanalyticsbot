@@ -565,10 +565,16 @@ def _oddspapi_get(endpoint, params=None, retries=2):
 
 def enrichir_oddspapi_football(api_matchs, odds_matchs):
     """
-    Complète les cotes Winamax manquantes via OddsPapi (300+ bookmakers).
-    Endpoint /fixtures/today (sportId soccer = 1) puis cotes 1/N/2.
-    Ne remplace jamais une cote existante.
+    DÉSACTIVÉ : Winamax FR n'est PAS disponible sur OddsPapi pour le football.
+    Données confirmées : Winamax availableSports = [12, 13, 23] → tennis uniquement.
+    Le football (sportId 10) n'a donc aucune cote Winamax sur OddsPapi.
+    Les cotes football viennent d'Odds API + Gemini (Sportytrader). Fonction no-op.
     """
+    return odds_matchs
+
+
+def _enrichir_oddspapi_football_DESACTIVE(api_matchs, odds_matchs):
+    """Ancienne implémentation conservée pour référence (non appelée)."""
     if not RAPIDAPI_KEY or not api_matchs:
         return odds_matchs
 
