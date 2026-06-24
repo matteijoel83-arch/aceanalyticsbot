@@ -611,37 +611,75 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
             for od in odds_list:
                 wina = od.get("odds", {}).get("winamax", {})
                 c1 = c2 = None
-                # Marché winner tennis : le marketId le plus bas = match winner
-                # outcomes triés : premier = joueur1, deuxième = joueur2
+                marches_alt = {}  # Handicaps jeux + totaux avec vraies cotes
+
                 if wina:
-                    # Trouver le marché winner (marketId numérique le plus petit)
                     market_ids = sorted(wina.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999)
+
+                    # 1) Match winner = premier marché avec exactement 2 outcomes
                     for mkt_id in market_ids:
                         mkt = wina[mkt_id]
-                        outcomes = mkt.get("outcomes", {}) if isinstance(mkt, dict) else {}
-                        if len(outcomes) < 2:
+                        if not isinstance(mkt, dict):
                             continue
-                        prices = []
-                        for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
-                            out = outcomes[out_id]
-                            players = out.get("players", {}) if isinstance(out, dict) else {}
-                            for p_id, p_data in players.items():
-                                pr = p_data.get("price")
-                                if pr:
-                                    prices.append(pr)
-                                break
-                        if len(prices) >= 2:
-                            c1, c2 = prices[0], prices[1]
-                            break
+                        mkt_name = mkt.get("marketName", "").lower()
+                        outcomes = mkt.get("outcomes", {})
+                        handicap = mkt.get("handicap", 0)
+
+                        # Match winner (2 outcomes, pas de handicap)
+                        if c1 is None and len(outcomes) == 2 and ("winner" in mkt_name or "match" in mkt_name or handicap == 0):
+                            prices = []
+                            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
+                                out = outcomes[out_id]
+                                players = out.get("players", {}) if isinstance(out, dict) else {}
+                                for p_id, p_data in players.items():
+                                    pr = p_data.get("price")
+                                    if pr:
+                                        prices.append(pr)
+                                    break
+                            if len(prices) >= 2:
+                                c1, c2 = prices[0], prices[1]
+
+                        # Game Handicap (handicap jeux, ex: +3.5 / -3.5)
+                        elif "handicap" in mkt_name and "game" in mkt_name and handicap:
+                            prices = []
+                            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
+                                out = outcomes[out_id]
+                                players = out.get("players", {}) if isinstance(out, dict) else {}
+                                for p_id, p_data in players.items():
+                                    pr = p_data.get("price")
+                                    if pr:
+                                        prices.append(pr)
+                                    break
+                            if len(prices) >= 2:
+                                marches_alt[f"hcap_j1_{handicap}"] = prices[0]
+                                marches_alt[f"hcap_j2_{handicap}"] = prices[1]
+
+                        # Total Games (over/under jeux, ex: 21.5)
+                        elif ("total" in mkt_name and "game" in mkt_name) and handicap:
+                            for out_id, out in outcomes.items():
+                                out_name = out.get("outcomeName", "").lower()
+                                players = out.get("players", {}) if isinstance(out, dict) else {}
+                                pr = None
+                                for p_id, p_data in players.items():
+                                    pr = p_data.get("price")
+                                    break
+                                if pr and "over" in out_name:
+                                    marches_alt[f"over_{handicap}"] = pr
+                                elif pr and "under" in out_name:
+                                    marches_alt[f"under_{handicap}"] = pr
+
                 if c1 and c2:
                     start = fx.get("startTime", 0)
                     heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
-                    odds_matchs[cle] = {
+                    entry = {
                         "joueur1": p1, "joueur2": p2,
                         "heure_utc": heure_str,
                         "cote_j1": c1, "cote_j2": c2,
                         "source_cote": "Winamax (OddsPapi)",
                     }
+                    if marches_alt:
+                        entry["marches_alternatifs"] = marches_alt
+                    odds_matchs[cle] = entry
                     ajouts += 1
                     break
 
@@ -857,11 +895,35 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
             m["cote_j2"]    = cote_trouvee["cote_j2"]
             m["source_cote"] = cote_trouvee["source_cote"]
             matchs_winamax.append(m)
-            lignes.append(
+            ligne = (
                 f"• {m['heure']} | {j1} vs {j2} | {m['tournoi']} | {m['surface']}"
                 f" | Cotes {cote_trouvee['source_cote']}: {j1} {cote_trouvee['cote_j1']:.2f}"
                 f" / {j2} {cote_trouvee['cote_j2']:.2f}"
             )
+            # Marchés alternatifs avec VRAIES cotes Winamax (OddsPapi)
+            marches_alt = cote_trouvee.get("marches_alternatifs", {})
+            if marches_alt:
+                m["marches_alternatifs"] = marches_alt
+                alt_parts = []
+                # Handicaps jeux
+                hcaps = {}
+                for k, v in marches_alt.items():
+                    if k.startswith("hcap_j1_"):
+                        h = k.replace("hcap_j1_", "")
+                        hcaps.setdefault(h, {})["j1"] = v
+                    elif k.startswith("hcap_j2_"):
+                        h = k.replace("hcap_j2_", "")
+                        hcaps.setdefault(h, {})["j2"] = v
+                for h, vals in sorted(hcaps.items()):
+                    alt_parts.append(f"Hcap {h} jeux: {j1} {vals.get('j1','?')}/{j2} {vals.get('j2','?')}")
+                # Totaux jeux
+                for k, v in sorted(marches_alt.items()):
+                    if k.startswith("over_"):
+                        ligne_ou = k.replace("over_", "")
+                        alt_parts.append(f"Total {ligne_ou} jeux: Over {v}/Under {marches_alt.get(f'under_{ligne_ou}','?')}")
+                if alt_parts:
+                    ligne += " | Marchés Winamax réels → " + " | ".join(alt_parts)
+            lignes.append(ligne)
         else:
             # ❌ Pas de cote Winamax — Gemini vérifiera sur Sportytrader
             matchs_sans_cote.append(m)
@@ -1269,6 +1331,23 @@ FILTRES IMMÉDIATS :
 • Cote "non trouvée" → skip automatique
 • Match en doublon (même joueurs, heure différente) → garder uniquement le plus récent dans la fenêtre (pas de marché = impossible à jouer sur Winamax)
 
+⛔ INTERDICTION ABSOLUE — COTES INVENTÉES :
+• Tu n'as le DROIT d'utiliser QUE les cotes EXACTES fournies dans les données (cote_j1, cote_j2).
+• Il est STRICTEMENT INTERDIT d'estimer, deviner ou inventer une cote.
+• Si une cote n'est PAS fournie pour un marché → tu NE PEUX PAS jouer ce marché. Point final.
+• Si tu écris "cote estimée" ou "non disponible précisément sur Winamax" → c'est une VIOLATION. Ne génère PAS ce ticket.
+• Marchés handicap/over-under/score : utilise-les UNIQUEMENT si leur cote exacte est dans les données.
+  Sinon → reste sur le Moneyline avec sa cote réelle, ou passe au match suivant.
+• Le calcul de value DOIT se baser sur la cote réelle Winamax, jamais sur une estimation.
+
+✅ MARCHÉS ALTERNATIFS AUTORISÉS (si cote réelle fournie) :
+• Quand un match affiche "Marchés Winamax réels → Hcap X jeux / Total X jeux", ces cotes sont EXACTES et JOUABLES.
+• Tu PEUX jouer un handicap jeux ou un total de jeux SI sa cote est explicitement listée.
+• Exemple : "Hcap +3.5 jeux: Alexandrova 1.84/Andreeva 1.96" → tu peux jouer Alexandrova +3.5 jeux à 1.84 (cote réelle).
+• Exemple : "Total 21.5 jeux: Over 1.90/Under 1.92" → tu peux jouer Over 21.5 jeux à 1.90.
+• Ces marchés offrent souvent plus de value que le Moneyline — exploite-les quand la cote réelle est fournie.
+• ⚠️ Respecte EXACTEMENT la ligne indiquée : si c'est +3.5, écris +3.5 (jamais +4.5).
+
 CALIBRATION PROBABILITÉS :
 • Cote < 1.50  → MAX 75%
 • 1.50-1.80    → MAX 68%
@@ -1558,6 +1637,12 @@ def run_bot_autonome():
             # Signaux d'abandon explicites dans le texte
             if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
                                                "kelly 0%", "mise : 0%", "mise 0%"]):
+                return False
+            # Rejeter les cotes inventées/estimées
+            if any(sig in t_lower for sig in ["cote estimée", "estimée", "non disponible précisément",
+                                               "cote approximative", "estimation de cote",
+                                               "cote non disponible", "cote handicap estimée"]):
+                logging.info("Ticket rejeté — cote estimée/inventée détectée.")
                 return False
             # Extraire le delta de la ligne VALUE : "delta +0.07" ou "delta -0.05"
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
