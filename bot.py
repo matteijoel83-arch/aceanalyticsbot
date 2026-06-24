@@ -401,8 +401,8 @@ def sauvegarder_pari_pour_suivi(pari_info):
 SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
 SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
 
-def _sportapi7_get(endpoint, params=None, retries=3):
-    """Requête SportAPI7 avec retry automatique sur 429."""
+def _sportapi7_get(endpoint, params=None, retries=2):
+    """Requête SportAPI7 avec retry rapide sur 429 (délais courts)."""
     if not RAPIDAPI_KEY:
         return None
     for tentative in range(1, retries + 1):
@@ -417,24 +417,23 @@ def _sportapi7_get(endpoint, params=None, retries=3):
                 timeout=8,
             )
             if r.status_code == 429:
-                wait = int(r.headers.get("Retry-After", tentative * 10))
-                logging.warning(f"SportAPI7 429 — retry dans {wait}s… ({tentative}/{retries})")
-                time.sleep(wait)
-                continue
+                if tentative < retries:
+                    time.sleep(3)  # Délai court — pas de blocage 5 min
+                    continue
+                return None
             if r.status_code == 404:
-                return None  # Pas de données pour cet event — normal
+                return None
             r.raise_for_status()
             return r.json()
         except requests.exceptions.HTTPError as e:
             if "429" in str(e):
-                time.sleep(tentative * 10)
-                continue
-            logging.warning(f"SportAPI7 {endpoint} : {e}")
+                if tentative < retries:
+                    time.sleep(3)
+                    continue
+                return None
             return None
-        except Exception as e:
-            logging.warning(f"SportAPI7 {endpoint} : {e}")
+        except Exception:
             return None
-    logging.warning(f"SportAPI7 {endpoint} — échec après {retries} tentatives.")
     return None
 
 
@@ -452,15 +451,11 @@ def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
     try:
         # Récupérer tous les matchs tennis du jour — retry si 429
         data = None
-        for tentative in range(1, 4):
-            data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
-            if data:
-                break
-            logging.warning(f"SportAPI7 Tennis — tentative {tentative}/3, retry dans 5s…")
-            time.sleep(5)
+        # Un seul appel — _sportapi7_get gère déjà les retries 429 en interne
+        data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
 
         if not data:
-            logging.info("SportAPI7 Tennis — pas de données disponibles.")
+            logging.info("SportAPI7 Tennis — indisponible (429/quota), on continue sans.")
             return rapid_matchs
 
         events   = data.get("events", [])
@@ -1548,15 +1543,16 @@ def run_bot_autonome():
 
         # Filtrer les tickets abandonnés — Claude les affiche pour transparence
         # mais ils ne doivent pas être sauvegardés ni comptabilisés
-        mots_abandon = ["abandonné", "delta négatif", "pas de value", "ticket abandonné",
-                        "kelly 0%", "aucune value", "interdit"]
+        # Filtrer tickets abandonnés — garder toujours ceux commençant par 🎾 ou 🔴
+        mots_abandon = ["ticket abandonné", "kelly 0%", "mise : 0%", "mise 0%"]
         tickets_valides = []
         for t in tickets:
-            t_lower = t.lower()
-            if any(mot in t_lower for mot in mots_abandon):
+            if t.startswith("🎾") or t.startswith("🔴"):
+                tickets_valides.append(t)  # Ticket propre valide — toujours gardé
+            elif not any(m in t.lower() for m in mots_abandon):
+                tickets_valides.append(t)
+            else:
                 logging.info(f"Ticket abandonné détecté — non sauvegardé.")
-                continue
-            tickets_valides.append(t)
         tickets = tickets_valides
         if not tickets:
             _envoyer_notification_sans_ticket(
