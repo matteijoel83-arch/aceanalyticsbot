@@ -1354,13 +1354,23 @@ MISES (Kelly quart plafonné par niveau) :
 Simple ÉLEVÉE 3% · Simple MODÉRÉE 2% · Simple BASSE 1% · Combiné MAX 2%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
-⚠️ RÈGLE FONDAMENTALE : N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
-Les tickets abandonnés (delta négatif, pas de value) → NE PAS les inclure dans la réponse.
+⚠️⚠️ RÈGLE ABSOLUE — INTERDICTION D'AFFICHER UN TICKET ABANDONNÉ ⚠️⚠️
+Si Delta < 0.10 → le match est ABANDONNÉ → tu NE génères AUCUN ticket pour lui.
+Tu ne dois JAMAIS écrire un bloc 🎾 PRONOSTIC avec un delta ❌ ou la mention "Abandon".
+Un ticket affiché = un pari validé que l'abonné va jouer. Afficher un ticket abandonné
+trompe l'abonné qui va miser sur un mauvais pari. C'est une FAUTE GRAVE.
+
+PROCESSUS CORRECT :
+• Delta ≥ 0.10 + analyse OK → générer le ticket 🎾 (ce sera envoyé tel quel à l'abonné)
+• Delta < 0.10 → NE RIEN générer pour ce match, passer au suivant
+• Si AUCUN match n'a delta ≥ 0.10 → répondre UNIQUEMENT : AUCUN_MATCH + explication
+
+N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
 Si 0 ticket validé → répondre : AUCUN_MATCH suivi d'une explication courte (max 80 mots) :
   · Citer 1-2 matchs analysés avec le joueur favori et pourquoi pas de value
   · Mentionner le delta et la raison principale (cote trop basse, données insuffisantes)
   · Ton naturel et direct, comme un analyste qui explique à ses abonnés
-  Exemple : "AUCUN_MATCH — Sinner écrase Etcheverry sur gazon mais cote 1.19 trop basse (delta -0.14). Medvedev domine à Halle mais même problème (delta -0.08). Cotes trop compressées aujourd'hui, pas de value exploitable."
+  Exemple : "AUCUN_MATCH — Fery favori sur gazon mais cote 1.40 trop basse (delta +0.07 insuffisant). Andreeva domine mais cote 1.42 sans value. Cotes trop serrées aujourd'hui."
 La limite de {MAX_TICKETS} tickets est un PLAFOND, pas un objectif.
 1 ticket excellent vaut mieux que 5 tickets moyens.
 HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
@@ -1541,18 +1551,30 @@ def run_bot_autonome():
 
         tickets = [t.strip() for t in texte.split(TICKET_SEP) if len(t.strip()) > 20][:MAX_TICKETS]
 
-        # Filtrer les tickets abandonnés — Claude les affiche pour transparence
-        # mais ils ne doivent pas être sauvegardés ni comptabilisés
-        # Filtrer tickets abandonnés — garder toujours ceux commençant par 🎾 ou 🔴
-        mots_abandon = ["ticket abandonné", "kelly 0%", "mise : 0%", "mise 0%"]
+        # Filtrer les tickets abandonnés en analysant le DELTA réel dans la ligne VALUE
+        # Format attendu : "delta +0.07 ❌" ou "delta +0.17 ✅"
+        def _ticket_valide(t):
+            t_lower = t.lower()
+            # Signaux d'abandon explicites dans le texte
+            if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
+                                               "kelly 0%", "mise : 0%", "mise 0%"]):
+                return False
+            # Extraire le delta de la ligne VALUE : "delta +0.07" ou "delta -0.05"
+            m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
+            if m:
+                delta = float(m.group(1).replace(",", "."))
+                if delta < 0.10:
+                    return False  # Delta insuffisant → abandon
+            return True
+
         tickets_valides = []
         for t in tickets:
-            if t.startswith("🎾") or t.startswith("🔴"):
-                tickets_valides.append(t)  # Ticket propre valide — toujours gardé
-            elif not any(m in t.lower() for m in mots_abandon):
-                tickets_valides.append(t)
-            else:
-                logging.info(f"Ticket abandonné détecté — non sauvegardé.")
+            if not (t.startswith("🎾") or t.startswith("🔴")):
+                continue  # Pas un ticket structuré valide
+            if not _ticket_valide(t):
+                logging.info("Ticket rejeté (delta < 0.10 ou abandon explicite) — non envoyé.")
+                continue
+            tickets_valides.append(t)
         tickets = tickets_valides
         if not tickets:
             _envoyer_notification_sans_ticket(
