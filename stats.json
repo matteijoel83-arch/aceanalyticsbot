@@ -1,7 +1,7 @@
 {
   "version": 2,
   "victoires": 9,
-  "defaites": 3,
+  "defaites": 2,
   "par_marche": {
     "moneyline": {
       "v": 8,
@@ -29,7 +29,7 @@
     },
     "autre": {
       "v": 0,
-      "d": 1
+      "d": 0
     }
   },
   "par_niveau": {
@@ -43,7 +43,7 @@
     },
     "basse": {
       "v": 6,
-      "d": 3
+      "d": 2
     }
   }
 }
