@@ -530,6 +530,132 @@ def enrichir_sportapi7_football(api_matchs: list) -> list:
     return api_matchs
 
 # =====================================================================
+# 6C. MODULE ODDSPAPI — COTES COMPLÉMENTAIRES FOOTBALL
+# =====================================================================
+
+ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"
+ODDSPAPI_BASE = "https://odds-api1.p.rapidapi.com"
+
+def _oddspapi_get(endpoint, params=None, retries=2):
+    """Requête OddsPapi avec la clé RapidAPI existante."""
+    if not RAPIDAPI_KEY:
+        return None
+    for tentative in range(1, retries + 1):
+        try:
+            r = requests.get(
+                f"{ODDSPAPI_BASE}/{endpoint}",
+                headers={
+                    "x-rapidapi-key":  RAPIDAPI_KEY,
+                    "x-rapidapi-host": ODDSPAPI_HOST,
+                },
+                params=params,
+                timeout=8,
+            )
+            if r.status_code == 429:
+                time.sleep(tentative * 5)
+                continue
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            logging.warning(f"OddsPapi {endpoint} : {e}")
+            return None
+    return None
+
+
+def enrichir_oddspapi_football(api_matchs, odds_matchs):
+    """
+    Complète les cotes Winamax manquantes via OddsPapi (300+ bookmakers).
+    Endpoint /fixtures/today (sportId soccer = 1) puis cotes 1/N/2.
+    Ne remplace jamais une cote existante.
+    """
+    if not RAPIDAPI_KEY or not api_matchs:
+        return odds_matchs
+
+    try:
+        # sportId football/soccer = 10 sur OddsPapi
+        data = _oddspapi_get("fixtures/today", {
+            "sportId":    10,
+            "bookmakers": "winamax",
+        })
+        if not data:
+            logging.info("OddsPapi Football — pas de données disponibles.")
+            return odds_matchs
+
+        fixtures = data if isinstance(data, list) else data.get("fixtures", [])
+        ajouts   = 0
+
+        for fx in fixtures:
+            participants = fx.get("participants", {})
+            eq1 = participants.get("participant1Name", "")
+            eq2 = participants.get("participant2Name", "")
+            if not eq1 or not eq2:
+                continue
+
+            cle = f"{eq1}|{eq2}"
+            if cle in odds_matchs:
+                continue
+
+            bm_meta = fx.get("bookmakers", {}).get("winamax", {})
+            if not bm_meta.get("hasOdds", False):
+                continue
+
+            fixture_id = fx.get("fixtureId")
+            if not fixture_id:
+                continue
+
+            odds_data = _oddspapi_get("fixtures/odds/main", {
+                "fixtureIds": fixture_id,
+                "bookmakers": "winamax",
+            })
+            time.sleep(0.3)
+            if not odds_data:
+                continue
+
+            odds_list = odds_data if isinstance(odds_data, list) else [odds_data]
+            for od in odds_list:
+                wina = od.get("odds", {}).get("winamax", {})
+                c1 = cnul = c2 = None
+                # Marché 1X2 (marketId 101) : outcomeId 101=1, 102=X, 103=2
+                for mkt_id, mkt in wina.items():
+                    if str(mkt_id) != "101":
+                        continue
+                    outcomes = mkt.get("outcomes", {}) if isinstance(mkt, dict) else {}
+                    for out_id, out in outcomes.items():
+                        players = out.get("players", {}) if isinstance(out, dict) else {}
+                        price = None
+                        for p_id, p_data in players.items():
+                            price = p_data.get("price")
+                            break
+                        if str(out_id) == "101" and price:
+                            c1 = price
+                        elif str(out_id) == "102" and price:
+                            cnul = price
+                        elif str(out_id) == "103" and price:
+                            c2 = price
+                if c1 and c2:
+                    start = fx.get("startTime", 0)
+                    heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
+                    comp = fx.get("tournament", {}).get("tournamentName", "Football")
+                    odds_matchs[cle] = {
+                        "equipe1": eq1, "equipe2": eq2,
+                        "heure_utc": heure_str,
+                        "competition": comp,
+                        "cote_1": c1, "cote_nul": cnul, "cote_2": c2,
+                        "source_cote": "Winamax (OddsPapi)",
+                    }
+                    ajouts += 1
+                    break
+
+        logging.info(f"OddsPapi Football — {ajouts} cote(s) Winamax ajoutée(s).")
+
+    except Exception as e:
+        logging.warning(f"OddsPapi Football erreur : {e}")
+
+    return odds_matchs
+
+# =====================================================================
 # 7. MODULE A — PRÉ-COLLECTE ODDS API FOOTBALL
 # =====================================================================
 
@@ -1162,6 +1288,7 @@ def run_bot_autonome():
     api_matchs         = precollecte_api_football(date)
     # Pré-filtrage horaire AVANT enrichissement SportAPI7 — économise les requêtes
     api_matchs         = filtrer_matchs_par_fenetre(api_matchs, heure, heure_fin)
+    odds_matchs        = enrichir_oddspapi_football(api_matchs, odds_matchs)  # Cotes complémentaires
     api_matchs         = enrichir_sportapi7_football(api_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, api_matchs)
     donnees_json       = collecter_donnees_football(date, heure, calendrier_injecte, heure_fin)
