@@ -1530,6 +1530,41 @@ def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
 # 12. ORCHESTRATION
 # =====================================================================
 
+def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin):
+    """
+    Filtre DUR et déterministe : retire du JSON Gemini les matchs dont
+    heure_match est hors de la fenêtre [heure_debut, heure_fin].
+    Gère le passage minuit (session SOIR, ex: 22:50 → 05:00).
+    Indépendant de Claude — garantit qu'aucun match déjà joué n'est proposé.
+    """
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    fenetre_nocturne = heure_fin < heure_debut  # ex: 22:50 → 05:00
+
+    def _dans_fenetre(hm):
+        m = re.search(r"(\d{2}):(\d{2})", str(hm))
+        if not m:
+            return True  # heure inconnue → garder (prudence)
+        h = m.group(0)
+        if fenetre_nocturne:
+            return h >= heure_debut or h <= heure_fin
+        return heure_debut <= h <= heure_fin
+
+    gardes = [m for m in matchs if _dans_fenetre(m.get("heure_match", ""))]
+    retires = len(matchs) - len(gardes)
+    if retires:
+        logging.info(f"Filtre fenêtre JSON : {retires} match(s) hors {heure_debut}→{heure_fin} retiré(s), {len(gardes)} gardé(s).")
+    data["matchs"] = gardes
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def run_bot_autonome():
     debut      = time.time()
     maintenant = datetime.now(ZoneInfo("Europe/Paris"))
@@ -1564,6 +1599,10 @@ def run_bot_autonome():
     rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
     donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin)
+
+    # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
+    # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
+    donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin)
 
     try:
         donnees = json.loads(donnees_json)
@@ -1651,6 +1690,12 @@ def run_bot_autonome():
 
         # Filtrer les tickets abandonnés en analysant le DELTA réel dans la ligne VALUE
         # Format attendu : "delta +0.07 ❌" ou "delta +0.17 ✅"
+        def _heure_dans_fenetre(hm, debut, fin):
+            """True si l'heure HH:MM est dans la fenêtre (gère passage minuit)."""
+            if fin < debut:  # fenêtre nocturne (ex: 22:50 → 05:00)
+                return hm >= debut or hm <= fin
+            return debut <= hm <= fin
+
         def _ticket_valide(t):
             t_lower = t.lower()
             # Signaux d'abandon explicites dans le texte
@@ -1663,6 +1708,16 @@ def run_bot_autonome():
                                                "cote non disponible", "cote handicap estimée"]):
                 logging.info("Ticket rejeté — cote estimée/inventée détectée.")
                 return False
+            # FILTRE HORAIRE : extraire l'heure du ticket (ligne HEURE) et vérifier la fenêtre.
+            # Empêche de parier sur un match déjà joué (ex: 09:00 en session soir 22:50→05:00).
+            mh = re.search(r"heure\s*:?\s*</b>?\s*(\d{1,2})[h:](\d{2})", t_lower)
+            if not mh:
+                mh = re.search(r"(\d{1,2})[h:](\d{2})", t_lower)
+            if mh:
+                hm = f"{int(mh.group(1)):02d}:{mh.group(2)}"
+                if not _heure_dans_fenetre(hm, heure, heure_fin):
+                    logging.warning(f"Ticket rejeté — match à {hm} hors fenêtre {heure}→{heure_fin} (déjà joué ou trop tard).")
+                    return False
             # Extraire le delta de la ligne VALUE : "delta +0.07" ou "delta -0.05"
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
             if m:
