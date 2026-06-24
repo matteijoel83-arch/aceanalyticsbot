@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "victoires": 8,
-  "defaites": 2,
+  "victoires": 9,
+  "defaites": 3,
   "par_marche": {
     "moneyline": {
       "v": 8,
@@ -9,14 +9,14 @@
     },
     "score_exact": {
       "v": 0,
-      "d": 0
+      "d": 1
     },
     "over_under": {
       "v": 0,
       "d": 0
     },
     "handicap": {
-      "v": 0,
+      "v": 1,
       "d": 0
     },
     "tiebreak": {
@@ -42,8 +42,8 @@
       "d": 0
     },
     "basse": {
-      "v": 5,
-      "d": 2
+      "v": 6,
+      "d": 3
     }
   }
 }
