@@ -572,7 +572,7 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
         # sportId tennis = 12 sur OddsPapi
         data = _oddspapi_get("fixtures/today", {
             "sportId":    12,
-            "bookmakers": "winamax",
+            "bookmakers": "366",
         })
         if not data:
             logging.info("OddsPapi Tennis — pas de données disponibles.")
@@ -593,7 +593,7 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
                 continue  # Déjà couvert
 
             # Vérifier que Winamax a des cotes pour ce match
-            bm_meta = fx.get("bookmakers", {}).get("winamax", {})
+            bm_meta = fx.get("bookmakers", {}).get("366", fx.get("bookmakers", {}).get("winamax", {}))
             if not bm_meta.get("hasOdds", False):
                 continue
 
@@ -604,7 +604,7 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
 
             odds_data = _oddspapi_get("fixtures/odds/main", {
                 "fixtureIds": fixture_id,
-                "bookmakers": "winamax",
+                "bookmakers": "366",
             })
             time.sleep(0.3)
             if not odds_data:
@@ -612,7 +612,7 @@ def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
 
             odds_list = odds_data if isinstance(odds_data, list) else [odds_data]
             for od in odds_list:
-                wina = od.get("odds", {}).get("winamax", {})
+                wina = od.get("odds", {}).get("366", od.get("odds", {}).get("winamax", {}))
                 c1 = c2 = None
                 marches_alt = {}  # Handicaps jeux + totaux avec vraies cotes
 
@@ -1292,7 +1292,8 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 
         texte = rep.text.strip()
         texte = re.sub(r"^```json\s*", "", texte)
-        texte = re.sub(r"\s*```$", "", texte)
+        texte = re.sub(r"\s*
+```$", "", texte)
         data  = json.loads(texte)
         logging.info(f"Gemini OK — {len(data.get('matchs', []))} match(s).")
         return json.dumps(data, ensure_ascii=False, indent=2)
