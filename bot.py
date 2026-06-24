@@ -527,6 +527,137 @@ def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
     return rapid_matchs
 
 # =====================================================================
+# 6C. MODULE ODDSPAPI — COTES COMPLÉMENTAIRES TENNIS
+# =====================================================================
+
+ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"
+ODDSPAPI_BASE = "https://odds-api1.p.rapidapi.com"
+
+def _oddspapi_get(endpoint, params=None, retries=2):
+    """Requête OddsPapi avec la clé RapidAPI existante."""
+    if not RAPIDAPI_KEY:
+        return None
+    for tentative in range(1, retries + 1):
+        try:
+            r = requests.get(
+                f"{ODDSPAPI_BASE}/{endpoint}",
+                headers={
+                    "x-rapidapi-key":  RAPIDAPI_KEY,
+                    "x-rapidapi-host": ODDSPAPI_HOST,
+                },
+                params=params,
+                timeout=8,
+            )
+            if r.status_code == 429:
+                time.sleep(tentative * 5)
+                continue
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            logging.warning(f"OddsPapi {endpoint} : {e}")
+            return None
+    return None
+
+
+def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
+    """
+    Complète les cotes Winamax manquantes via OddsPapi (300+ bookmakers).
+    Endpoint /fixtures/today (sportId tennis = 13) puis croisement par nom.
+    Ne remplace JAMAIS une cote existante.
+    """
+    if not RAPIDAPI_KEY or not rapid_matchs:
+        return odds_matchs
+
+    try:
+        # sportId tennis = 12 sur OddsPapi
+        data = _oddspapi_get("fixtures/today", {
+            "sportId":    12,
+            "bookmakers": "winamax",
+        })
+        if not data:
+            logging.info("OddsPapi Tennis — pas de données disponibles.")
+            return odds_matchs
+
+        fixtures = data if isinstance(data, list) else data.get("fixtures", [])
+        ajouts   = 0
+
+        for fx in fixtures:
+            participants = fx.get("participants", {})
+            p1 = participants.get("participant1Name", "")
+            p2 = participants.get("participant2Name", "")
+            if not p1 or not p2:
+                continue
+
+            cle = f"{p1}|{p2}"
+            if cle in odds_matchs:
+                continue  # Déjà couvert
+
+            # Vérifier que Winamax a des cotes pour ce match
+            bm_meta = fx.get("bookmakers", {}).get("winamax", {})
+            if not bm_meta.get("hasOdds", False):
+                continue
+
+            # Récupérer les cotes via /fixtures/odds/main
+            fixture_id = fx.get("fixtureId")
+            if not fixture_id:
+                continue
+
+            odds_data = _oddspapi_get("fixtures/odds/main", {
+                "fixtureIds": fixture_id,
+                "bookmakers": "winamax",
+            })
+            time.sleep(0.3)
+            if not odds_data:
+                continue
+
+            odds_list = odds_data if isinstance(odds_data, list) else [odds_data]
+            for od in odds_list:
+                wina = od.get("odds", {}).get("winamax", {})
+                c1 = c2 = None
+                # Marché winner tennis : le marketId le plus bas = match winner
+                # outcomes triés : premier = joueur1, deuxième = joueur2
+                if wina:
+                    # Trouver le marché winner (marketId numérique le plus petit)
+                    market_ids = sorted(wina.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999)
+                    for mkt_id in market_ids:
+                        mkt = wina[mkt_id]
+                        outcomes = mkt.get("outcomes", {}) if isinstance(mkt, dict) else {}
+                        if len(outcomes) < 2:
+                            continue
+                        prices = []
+                        for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
+                            out = outcomes[out_id]
+                            players = out.get("players", {}) if isinstance(out, dict) else {}
+                            for p_id, p_data in players.items():
+                                pr = p_data.get("price")
+                                if pr:
+                                    prices.append(pr)
+                                break
+                        if len(prices) >= 2:
+                            c1, c2 = prices[0], prices[1]
+                            break
+                if c1 and c2:
+                    start = fx.get("startTime", 0)
+                    heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
+                    odds_matchs[cle] = {
+                        "joueur1": p1, "joueur2": p2,
+                        "heure_utc": heure_str,
+                        "cote_j1": c1, "cote_j2": c2,
+                        "source_cote": "Winamax (OddsPapi)",
+                    }
+                    ajouts += 1
+                    break
+
+        logging.info(f"OddsPapi Tennis — {ajouts} cote(s) Winamax ajoutée(s).")
+
+    except Exception as e:
+        logging.warning(f"OddsPapi Tennis erreur : {e}")
+
+    return odds_matchs
+
+# =====================================================================
 # 7. MODULE A — PRÉ-COLLECTE ODDS API
 # =====================================================================
 
@@ -1325,6 +1456,7 @@ def run_bot_autonome():
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
     rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
+    odds_matchs        = enrichir_oddspapi_tennis(rapid_matchs, odds_matchs)  # Cotes complémentaires
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
     rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
