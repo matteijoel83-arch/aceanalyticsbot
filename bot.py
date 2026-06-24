@@ -203,17 +203,20 @@ def enregistrer_resultat(victoire, pari_termine=None):
     logging.info(f"{'✅ VICTOIRE' if victoire else '❌ DÉFAITE'} — {s['victoires']}V / {s['defaites']}D")
 
 def _detecter_marche(ticket_texte):
-    """Détecte le type de marché depuis le texte du ticket."""
+    """Détecte le type de marché depuis le texte du ticket (noms Winamax)."""
     t = ticket_texte.lower()
     if "combiné" in t or "combine" in t:
         return "combine"
-    if "tiebreak" in t:
+    if "tiebreak" in t or "tie-break" in t:
         return "tiebreak"
-    if "handicap" in t:
+    # Écart de jeux / écart de set = handicap (vérifier AVANT "jeux" pour over_under)
+    if "écart de jeux" in t or "ecart de jeux" in t or "écart de set" in t or \
+       "ecart de set" in t or "handicap" in t:
         return "handicap"
-    if "over" in t or "under" in t or "jeux" in t:
+    # Nombre de jeux / nombre de sets = over/under
+    if "nombre de jeux" in t or "nombre de set" in t or "over" in t or "under" in t:
         return "over_under"
-    if "2-0" in t or "2-1" in t or "score" in t:
+    if "score exact" in t or "2-0" in t or "2-1" in t:
         return "score_exact"
     if "moneyline" in t or "vainqueur" in t or "gagne" in t or "victoire" in t:
         return "moneyline"
@@ -1343,13 +1346,23 @@ FILTRES IMMÉDIATS :
 ✅ MARCHÉS ALTERNATIFS AUTORISÉS (si cote réelle fournie) :
 • Quand un match affiche "Marchés Winamax réels → Écart de jeux X / Total X jeux", ces cotes sont EXACTES et JOUABLES.
 • Tu PEUX jouer un écart de jeux ou un total de jeux SI sa cote est explicitement listée.
-• ⚠️ NOM EXACT WINAMAX : le marché s'appelle "ÉCART DE JEUX" (PAS "handicap de jeux" qui n'existe pas).
-  Format : Outsider +X.5 jeux / Favori -X.5 jeux.
-• Exemple : "Écart de jeux 3.5: Alexandrova 1.84/Andreeva 1.96" → tu écris "Alexandrova +3.5 jeux (écart de jeux)" à 1.84.
-• Exemple : "Total 21.5 jeux: Over 1.90/Under 1.92" → tu peux jouer Over 21.5 jeux à 1.90.
+
+📋 MARCHÉS WINAMAX TENNIS — NOMS EXACTS À UTILISER :
+• "Vainqueur" → Moneyline (qui gagne le match)
+• "Écart de jeux" → Outsider +X.5 jeux / Favori -X.5 jeux (PAS "handicap de jeux")
+• "Écart de set" → handicap sets, ex: +1.5 / -1.5 sets
+• "Score exact" → score en sets, ex: 2-0, 2-1
+• "Nombre de jeux" → Over/Under total de jeux, ex: +21.5 jeux
+• "Nombre de sets" → Over/Under sets, ex: +2.5 sets
+
+⚠️ RÈGLES DE NOMMAGE STRICTES :
+• Pour un handicap de jeux → écris "Écart de jeux" (jamais "handicap de jeux" qui n'existe pas).
+• Pour un handicap de sets → écris "Écart de set".
+• Respecte EXACTEMENT la ligne : si c'est +3.5, écris +3.5 (jamais +4.5).
+• Exemple correct : "Alexandrova +3.5 jeux (écart de jeux)" à cote réelle 1.84.
+• Exemple correct : "Over 21.5 jeux (nombre de jeux)" à cote réelle 1.90.
 • Ces marchés offrent souvent plus de value que le Moneyline — exploite-les quand la cote réelle est fournie.
-• ⚠️ Respecte EXACTEMENT la ligne indiquée : si c'est +3.5, écris +3.5 (jamais +4.5).
-• ⚠️ Le handicap de SETS existe sur Winamax, mais le handicap de JEUX s'appelle "écart de jeux". Ne confonds pas.
+• ⚠️ N'utilise QUE les cotes réelles fournies — jamais d'estimation.
 
 CALIBRATION PROBABILITÉS :
 • Cote < 1.50  → MAX 75%
