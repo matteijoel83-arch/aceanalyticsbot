@@ -63,9 +63,12 @@ STATS_DEFAUT = {
         "autre":       {"v": 0, "d": 0},
     },
     "par_niveau": {
-        "elevee":  {"v": 0, "d": 0},
-        "moderee": {"v": 0, "d": 0},
-        "basse":   {"v": 0, "d": 0},
+        "elevee":         {"v": 0, "d": 0},
+        "moderee":        {"v": 0, "d": 0},
+        "basse":          {"v": 0, "d": 0},
+        "qualif_elevee":  {"v": 0, "d": 0},
+        "qualif_moderee": {"v": 0, "d": 0},
+        "qualif_basse":   {"v": 0, "d": 0},
     }
 }
 
