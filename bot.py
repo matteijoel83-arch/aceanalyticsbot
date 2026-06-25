@@ -1257,16 +1257,24 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"⚠️ AUCUN calendrier pré-collecté (sources API indisponibles).\n"
             f"MISSION SPÉCIALE : cherche TOI-MÊME les matchs du {date} entre {heure} et {heure_fin}.\n\n"
             f"TOURNOIS À COUVRIR (uniquement ceux couverts par Winamax) :\n{liste_tournois}\n\n"
-            f"Pour CHAQUE tournoi de cette liste qui se joue aujourd'hui :\n"
-            f"1. Trouve les matchs du jour (simples uniquement, PAS les qualifications, PAS les doubles)\n"
-            f"   → Sources : flashscore.fr, sofascore.com, atptour.com, wtatennis.com\n"
-            f"2. Pour chaque match, trouve la COTE WINAMAX RÉELLE :\n"
+            f"⚠️ MÉTHODE OBLIGATOIRE — EXHAUSTIVITÉ TOURNOI PAR TOURNOI :\n"
+            f"Tu DOIS traiter CHAQUE tournoi de la liste ci-dessus SÉPARÉMENT, un par un.\n"
+            f"Pour CHAQUE tournoi, fais une recherche DÉDIÉE (ex: 'Eastbourne ATP ordre du jour {date}',\n"
+            f"puis 'Bad Homburg WTA programme {date}', puis 'Wimbledon qualifications WTA {date}'...).\n"
+            f"NE T'ARRÊTE PAS après quelques matchs : un tournoi peut avoir 4 à 8 matchs par jour.\n"
+            f"Liste TOUS les matchs simples de CHAQUE tournoi, sans en oublier aucun.\n"
+            f"Objectif : ne manquer AUCUN match jouable. Mieux vaut 20 matchs listés que 8.\n\n"
+            f"Pour CHAQUE match trouvé :\n"
+            f"1. Match simple uniquement (PAS doubles). Qualifs : SEULEMENT si Grand Chelem.\n"
+            f"2. Trouve la COTE WINAMAX RÉELLE :\n"
             f"   → sportytrader.com/fr/cotes/tennis/ en priorité (affiche Winamax)\n"
             f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Sportytrader)'\n"
             f"   → Si seulement une autre cote bookmaker EU → source_cote = nom du bookmaker\n"
             f"   → Si AUCUNE cote réelle → source_cote = 'non trouvée' (le match sera écarté)\n"
             f"⛔ INTERDIT d'inventer ou d'estimer une cote. Cote RÉELLE lue sur le site UNIQUEMENT.\n"
-            f"3. Ajoute Hold%, forme, H2H si tu as des requêtes restantes.\n"
+            f"3. PRIORITÉ À L'EXHAUSTIVITÉ : liste d'abord TOUS les matchs avec leur cote.\n"
+            f"   Ajoute Hold%, forme, H2H ensuite SI tu as des recherches restantes — mais ne\n"
+            f"   sacrifie JAMAIS un match entier pour enrichir les stats d'un autre.\n"
         )
 
     prompt = f"""
@@ -1355,31 +1363,17 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
         derniere_erreur = None
         for tentative in range(1, 4):
             try:
-                # Essayer avec max_remote_calls=15 — fallback sans si non supporté
-                try:
-                    rep = gemini_client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            tools=[types.Tool(google_search=types.GoogleSearch())],
-                            temperature=0.1,
-                            max_remote_calls=15,
-                        ),
-                    )
-                    logging.info("Gemini — mode 15 requêtes activé ✅")
-                except Exception as e_max:
-                    if "extra inputs" in str(e_max) or "max_remote_calls" in str(e_max):
-                        logging.warning("max_remote_calls non supporté — fallback 10 requêtes.")
-                        rep = gemini_client.models.generate_content(
-                            model=GEMINI_MODEL,
-                            contents=prompt,
-                            config=types.GenerateContentConfig(
-                                tools=[types.Tool(google_search=types.GoogleSearch())],
-                                temperature=0.1,
-                            ),
-                        )
-                    else:
-                        raise
+                # max_remote_calls n'existe plus : Gemini décide lui-même du nombre
+                # de recherches selon le prompt. Le prompt force l'exhaustivité tournoi
+                # par tournoi pour qu'il couvre tous les matchs.
+                rep = gemini_client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[types.Tool(google_search=types.GoogleSearch())],
+                        temperature=0.1,
+                    ),
+                )
                 break
             except Exception as e:
                 derniere_erreur = e
