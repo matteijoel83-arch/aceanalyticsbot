@@ -1,0 +1,23 @@
+{
+  "_commentaire": "Liste des tournois couverts par Winamax. Éditable directement sur GitHub : ajoute/retire un tournoi selon le calendrier de la semaine, le bot s'adapte au run suivant. Utilisé par Gemini comme guide de recherche du calendrier quand RapidAPI est indisponible.",
+  "_maj": "2026-06-25",
+  "tournois_actifs": [
+    "Wimbledon",
+    "US Open",
+    "Australian Open",
+    "Roland Garros",
+    "ATP Eastbourne",
+    "WTA Eastbourne",
+    "WTA Bad Homburg",
+    "ATP Mallorca"
+  ],
+  "categories_couvertes": [
+    "Grand Chelem",
+    "ATP 250", "ATP 500", "ATP Masters 1000", "ATP Finals",
+    "WTA 250", "WTA 500", "WTA 1000", "WTA Finals",
+    "ATP Challenger"
+  ],
+  "exclure": [
+    "qualifications", "ITF M15", "ITF W15", "doubles"
+  ]
+}
