@@ -1679,7 +1679,8 @@ def run_bot_autonome():
     # ~25 req RapidAPI/run = 2400/mois >> quota 500/mois → tuait RapidAPI tout le mois.
     # Sans lui : ~180 req/mois, RapidAPI vit, calendrier complet revient.
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
-    rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
+    # SportAPI7 SUPPRIMÉ : ses données (cotes, tournoi) n'étaient lues nulle part
+    # dans le pipeline → requêtes RapidAPI gaspillées pour rien. Odds API couvre les cotes.
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
     tournois_winamax   = charger_tournois_winamax()  # Liste éditable sur GitHub
     if not calendrier_injecte:
