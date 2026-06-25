@@ -88,9 +88,12 @@ STATS_DEFAUT  = {
         "autre":       {"v": 0, "d": 0},
     },
     "par_niveau": {
-        "elevee":  {"v": 0, "d": 0},
-        "moderee": {"v": 0, "d": 0},
-        "basse":   {"v": 0, "d": 0},
+        "elevee":         {"v": 0, "d": 0},
+        "moderee":        {"v": 0, "d": 0},
+        "basse":          {"v": 0, "d": 0},
+        "qualif_elevee":  {"v": 0, "d": 0},
+        "qualif_moderee": {"v": 0, "d": 0},
+        "qualif_basse":   {"v": 0, "d": 0},
     }
 }
 TICKET_SEP    = "[SEPARATEUR]"
@@ -226,6 +229,17 @@ def _detecter_marche(ticket_texte):
 def _detecter_niveau(ticket_texte):
     """Détecte le niveau de confiance depuis le texte du ticket."""
     t = ticket_texte.lower()
+    # Qualif détecté en premier (mention "qualif" + niveau)
+    est_qualif = "qualif" in t or "wimbledon q" in t or "roland-garros q" in t or \
+                 "us open q" in t or "australian open q" in t
+    if est_qualif:
+        if "élevée" in t or "elevee" in t:
+            return "qualif_elevee"
+        if "modérée" in t or "moderee" in t:
+            return "qualif_moderee"
+        if "basse" in t:
+            return "qualif_basse"
+        return "qualif_basse"  # qualif par défaut = prudent
     if "élevée" in t or "elevee" in t:
         return "elevee"
     if "modérée" in t or "moderee" in t:
@@ -853,20 +867,24 @@ def precollecte_rapidapi_tennis(date_fr):
                     if not n1 or not n2:
                         continue
 
-                    # Exclure qualifiés (seed = "Q")
-                    if str(m.get("seed1") or "") == "Q" or str(m.get("seed2") or "") == "Q":
-                        continue
+                    # Tournoi et surface (lu avant le filtre qualif pour décider)
+                    trn     = m.get("tournament") or {}
+                    nom_trn = trn.get("name", "Tournoi inconnu")
+                    court   = trn.get("court") or {}
+                    surface = court.get("name", "non disponible")
+
+                    # Qualifs : exclues SAUF pour les Grand Chelems (Winamax les cote).
+                    est_qualif = str(m.get("seed1") or "") == "Q" or str(m.get("seed2") or "") == "Q"
+                    nom_lower = nom_trn.lower()
+                    est_grand_chelem = any(gc in nom_lower for gc in
+                        ["wimbledon", "roland", "us open", "australian open", "french open"])
+                    if est_qualif and not est_grand_chelem:
+                        continue  # qualif de petit tournoi → skip
 
                     # Heure
                     h = m.get("date") or "heure inconnue"
                     if "T" in str(h):
                         h = h[:16].replace("T", " ") + " UTC"
-
-                    # Tournoi et surface
-                    trn     = m.get("tournament") or {}
-                    nom_trn = trn.get("name", "Tournoi inconnu")
-                    court   = trn.get("court") or {}
-                    surface = court.get("name", "non disponible")
 
                     # Round
                     rnd     = m.get("round") or {}
@@ -1414,7 +1432,10 @@ FILTRES IMMÉDIATS :
 • absence_recente > 2 mois → skip
 • alertes_physiques → marchés de jeux interdits + mise 0.5%
 • Retour 3-8 semaines → marchés alternatifs + mise 0.5%
-• Qualifications ou hors tableau principal → skip
+• Qualifications de PETITS tournois (hors Grand Chelem) → skip
+• Qualifications de GRAND CHELEM (Wimbledon Q, Roland-Garros Q, US Open Q, Australian Open Q)
+  → AUTORISÉES si cote Winamax réelle fournie. Voir section QUALIFS GRAND CHELEM plus bas.
+• Hors tableau principal d'un petit tournoi → skip
 • Cote "non trouvée" → skip automatique
 • Match en doublon (même joueurs, heure différente) → garder uniquement le plus récent dans la fenêtre (pas de marché = impossible à jouer sur Winamax)
 
@@ -1453,6 +1474,25 @@ CALIBRATION PROBABILITÉS :
 • 1.50-1.80    → MAX 68%
 • 1.80-2.20    → MAX 58%
 • > 2.20       → MAX 52%
+
+🎓 QUALIFS GRAND CHELEM — RÈGLES SPÉCIALES :
+Les qualifs de Grand Chelem (Wimbledon Q, etc.) sont jouables MAIS plus risquées :
+joueurs moins connus, données plus pauvres, résultats plus volatils.
+• CALIBRATION PRUDENTE (plafonds abaissés) :
+  - Cote < 1.50  → MAX 60% (au lieu de 75%)
+  - 1.50-1.80    → MAX 55%
+  - 1.80-2.20    → MAX 50%
+  - > 2.20       → MAX 45%
+• EXIGENCE DE DONNÉES RENFORCÉE : si Hold%, forme OU H2H manquent pour les DEUX
+  joueurs → données insuffisantes → NE PAS jouer ce match. Mieux vaut s'abstenir
+  que parier à l'aveugle sur un joueur obscur.
+• MISES QUALIF (réduites — phase de test de ce segment) :
+  - Qualif confiance ÉLEVÉE  → 0,75%
+  - Qualif confiance MODÉRÉE → 0,50%
+  - Qualif confiance BASSE   → 0,25%
+• Dans le ticket d'une qualif, indique CONFIANCE "QUALIF ÉLEVÉE/MODÉRÉE/BASSE"
+  (le mot QUALIF est OBLIGATOIRE pour le suivi statistique séparé).
+• Cote Winamax réelle TOUJOURS obligatoire (jamais d'estimation).
 
 NIVEAUX DE CONFIANCE ET MISES :
 ⚠️ Le niveau est déterminé par la qualité des données ET la solidité de l'analyse :
@@ -1531,6 +1571,7 @@ CONFIANCE MODÉRÉE — Moneyline INTERDIT :
 
 MISES (Kelly quart plafonné par niveau) :
 Simple ÉLEVÉE 3% · Simple MODÉRÉE 2% · Simple BASSE 1% · Combiné MAX 2%
+Qualif GC : ÉLEVÉE 0,75% · MODÉRÉE 0,50% · BASSE 0,25%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️⚠️ RÈGLE ABSOLUE — INTERDICTION D'AFFICHER UN TICKET ABANDONNÉ ⚠️⚠️
