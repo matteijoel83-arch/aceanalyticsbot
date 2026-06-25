@@ -1285,29 +1285,43 @@ MISSION : Enrichir les données avec stats, H2H et contexte.
 
 {bloc}
 
-RECHERCHES (max 15 requêtes — H2H et forme déjà fournis si disponibles) :
+RECHERCHES — MÉTHODE SYSTÉMATIQUE MATCH PAR MATCH :
 
-PRIORITÉ 1 — Données souvent manquantes (chercher en premier) :
-1. Hold% et stats service/retour (1 requête par match prioritaire) :
+⚠️ MÉTHODE OBLIGATOIRE — EXTRACTION STAT PAR STAT, MATCH PAR MATCH :
+Procède EXACTEMENT comme pour le calendrier : avec méthode et exhaustivité.
+Pour CHAQUE match retenu dans la fenêtre, traite-le INDIVIDUELLEMENT et remplis
+sa fiche stat par stat. Ne passe PAS au match suivant tant que tu n'as pas tenté
+de remplir les 4 stats prioritaires du match courant. Ne te contente JAMAIS de ce
+que tu trouves vite : fais une recherche DÉDIÉE par donnée manquante.
+Un match avec stats complètes permet à l'analyste de décider ; un match sans stats
+est inexploitable. La qualité des stats = la qualité de l'analyse finale.
+
+PRIORITÉ 1 — Pour CHAQUE match, faire une recherche dédiée par donnée, dans l'ordre :
+1. Hold% des DEUX joueurs (donnée la plus importante) :
    → tennisabstract.com OU ultimatetennisstatistics.com OU tennisratio.com OU matchstat.com
-   → Combiner J1+J2 dans la même requête si possible
    → Chercher : "Prénom Nom hold% tennisabstract" ou "Nom serve stats UTS"
+   → Recherche SÉPARÉE pour J1 puis pour J2 si besoin — ne pas se contenter d'un seul
+   → Si introuvable après recherche réelle → "non trouvé" (ne PAS inventer)
 
-2. Forme récente détaillée — UNIQUEMENT si forme_j1_api ou forme_j2_api = "non disponible" :
+2. Forme récente des DEUX joueurs (5 derniers matchs, surface incluse) :
    → flashscore.fr OU sofascore.com OU matchstat.com
-   → 5 derniers matchs avec surface + score + adversaire
    → Si déjà fourni dans le calendrier → NE PAS re-chercher
+   → Chercher la forme sur GAZON en priorité (surface actuelle)
 
-3. Stats avancées par surface (Break%, Return%, Win% gazon/terre/dur) :
+3. H2H direct entre les deux joueurs (confrontations passées + surface) :
+   → flashscore.fr OU tennisabstract.com OU atptour.com/wtatennis.com
+   → Recherche dédiée "Joueur1 vs Joueur2 head to head"
+   → Si première confrontation → l'indiquer explicitement (pas "non trouvé")
+
+4. Stats avancées par surface si disponibles (Break%, Return%, Win% gazon) :
    → ultimatetennisstatistics.com OU tennisabstract.com
-   → Particulièrement utile pour matchs sur surface spécifique
 
-PRIORITÉ 2 — Contexte :
-4. Blessures/forfaits (1 requête globale) :
+PRIORITÉ 2 — Contexte (1 recherche globale chacun, pas par match) :
+5. Blessures/forfaits du jour :
    → eurosport.fr OU tennis.com OU atptour.com
-5. Points ATP/WTA à défendre + classement actuel :
+6. Points ATP/WTA à défendre + classement actuel :
    → atptour.com OU wtatennis.com
-6. Charge physique — heures jouées 72h, matchs enchaînés :
+7. Charge physique — heures jouées 72h, matchs enchaînés :
    → flashscore.fr OU sofascore.com
 
 PRIORITÉ 3 — Vérification cotes matchs secondaires :
