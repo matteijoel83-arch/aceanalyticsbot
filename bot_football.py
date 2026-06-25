@@ -1535,6 +1535,27 @@ def run_bot_autonome():
                 delta = float(m.group(1).replace(",", "."))
                 if delta < 0.10:
                     return False
+            # GARDE-FOU ÉCART MODÈLE-MARCHÉ :
+            # Un faux delta apparaît quand le bot surestime trop la proba vs le marché.
+            # Ex Écosse-Brésil : bot 25% alors que cote 5.70 → marché ~17.5%.
+            # On extrait la proba estimée (ex "25%") et la cote réelle de la ligne VALUE.
+            mp_prob = re.search(r"value\s*:?\s*</b>?\s*(\d+(?:[.,]\d+)?)\s*%", t_lower)
+            mc_reel = re.search(r"r[ée]elle\s*(\d+[.,]\d+)", t_lower)
+            if mp_prob and mc_reel:
+                proba_bot = float(mp_prob.group(1).replace(",", ".")) / 100
+                cote_reelle = float(mc_reel.group(1).replace(",", "."))
+                proba_marche = 1 / cote_reelle if cote_reelle > 0 else 1
+                # Écart relatif : de combien le bot dépasse le marché
+                if proba_marche > 0:
+                    ecart_relatif = (proba_bot - proba_marche) / proba_marche
+                    # Si le bot est > 30% plus optimiste que le marché → faux delta probable
+                    if ecart_relatif > 0.30:
+                        logging.info(
+                            f"Ticket rejeté — écart modèle-marché trop élevé : "
+                            f"bot {proba_bot*100:.0f}% vs marché {proba_marche*100:.0f}% "
+                            f"(+{ecart_relatif*100:.0f}%). Faux delta probable."
+                        )
+                        return False
             return True
 
         tickets_valides = []
