@@ -397,6 +397,23 @@ def sauvegarder_pari_pour_suivi(pari_info):
     paris.append(pari_info)
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
+
+# Liste de secours si le fichier GitHub est absent (catégories Winamax larges)
+TOURNOIS_WINAMAX_DEFAUT = [
+    "Wimbledon", "US Open", "Australian Open", "Roland Garros",
+]
+
+def charger_tournois_winamax():
+    """
+    Charge la liste des tournois Winamax depuis GitHub (tournois_winamax.json).
+    Éditable à la main sur GitHub sans toucher au code. Sert de guide à Gemini
+    pour chercher le calendrier quand RapidAPI est indisponible.
+    """
+    data, _ = _gh_get("tournois_winamax.json")
+    if isinstance(data, dict) and data.get("tournois_actifs"):
+        return data["tournois_actifs"]
+    return TOURNOIS_WINAMAX_DEFAUT
+
 # =====================================================================
 # 6A-BIS. COMPTEUR DE QUOTA RAPIDAPI
 # =====================================================================
@@ -1179,7 +1196,7 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
 
 
 
-def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None, heure_fin="23:59"):
+def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None, heure_fin="23:59", tournois_winamax=None):
     # Enrichir le texte du calendrier avec les données RapidAPI déjà collectées
     if rapid_matchs and calendrier_injecte:
         lignes_enrichies = []
@@ -1202,23 +1219,43 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
                     break
         calendrier_injecte = "\n".join(lignes_enrichies)
 
-    bloc = (
-        f"{calendrier_injecte}\n\n"
-        f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
-        f"→ IMPORTANT : Transmettre TOUS les matchs avec cotes disponibles — ne pas filtrer par heure.\n"
-        f"→ Indiquer l'heure exacte de chaque match dans le champ heure_match.\n"
-        f"→ Claude se chargera du filtrage par fenêtre horaire ({heure} → {heure_fin}).\n"
-        f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
-        if calendrier_injecte else
-        f"Cherche les matchs du {date} entre {heure} et {heure_fin} sur flashscore.fr et atptour.com."
-    )
+    # Liste des tournois Winamax pour guider la recherche de secours
+    liste_tournois = ", ".join(tournois_winamax) if tournois_winamax else "Grand Chelem, ATP/WTA 250 à 1000"
+
+    if calendrier_injecte:
+        # Cas normal : calendrier déjà fourni par les API → Gemini enrichit seulement
+        bloc = (
+            f"{calendrier_injecte}\n\n"
+            f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
+            f"→ IMPORTANT : Transmettre TOUS les matchs avec cotes disponibles — ne pas filtrer par heure.\n"
+            f"→ Indiquer l'heure exacte de chaque match dans le champ heure_match.\n"
+            f"→ Claude se chargera du filtrage par fenêtre horaire ({heure} → {heure_fin}).\n"
+            f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
+        )
+    else:
+        # SECOURS : aucune source API n'a fourni de calendrier (RapidAPI mort + Odds API vide).
+        # Gemini cherche lui-même le calendrier des tournois Winamax sur le web.
+        bloc = (
+            f"⚠️ AUCUN calendrier pré-collecté (sources API indisponibles).\n"
+            f"MISSION SPÉCIALE : cherche TOI-MÊME les matchs du {date} entre {heure} et {heure_fin}.\n\n"
+            f"TOURNOIS À COUVRIR (uniquement ceux couverts par Winamax) :\n{liste_tournois}\n\n"
+            f"Pour CHAQUE tournoi de cette liste qui se joue aujourd'hui :\n"
+            f"1. Trouve les matchs du jour (simples uniquement, PAS les qualifications, PAS les doubles)\n"
+            f"   → Sources : flashscore.fr, sofascore.com, atptour.com, wtatennis.com\n"
+            f"2. Pour chaque match, trouve la COTE WINAMAX RÉELLE :\n"
+            f"   → sportytrader.com/fr/cotes/tennis/ en priorité (affiche Winamax)\n"
+            f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Sportytrader)'\n"
+            f"   → Si seulement une autre cote bookmaker EU → source_cote = nom du bookmaker\n"
+            f"   → Si AUCUNE cote réelle → source_cote = 'non trouvée' (le match sera écarté)\n"
+            f"⛔ INTERDIT d'inventer ou d'estimer une cote. Cote RÉELLE lue sur le site UNIQUEMENT.\n"
+            f"3. Ajoute Hold%, forme, H2H si tu as des requêtes restantes.\n"
+        )
 
     prompt = f"""
 Tu es un agent de collecte tennis. Date : {date}. Heure : {heure} France.
 
 MISSION : Enrichir les données avec stats, H2H et contexte.
-Tu NE cherches PAS le calendrier — il est fourni ci-dessous.
-Tes 15 requêtes Google : UNIQUEMENT stats, H2H, blessures, contexte.
+{'Tu NE cherches PAS le calendrier — il est fourni ci-dessous.' if calendrier_injecte else 'Tu DOIS chercher le calendrier toi-même (voir mission spéciale ci-dessous).'}
 
 {bloc}
 
@@ -1638,11 +1675,16 @@ def run_bot_autonome():
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
     rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
-    odds_matchs        = enrichir_oddspapi_tennis(rapid_matchs, odds_matchs)  # Cotes complémentaires
+    # OddsPapi SUPPRIMÉ : ne remontait jamais Winamax (prouvé par logs) et brûlait
+    # ~25 req RapidAPI/run = 2400/mois >> quota 500/mois → tuait RapidAPI tout le mois.
+    # Sans lui : ~180 req/mois, RapidAPI vit, calendrier complet revient.
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
     rapid_matchs       = enrichir_sportapi7_tennis(rapid_matchs)  # Source complémentaire
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
-    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin)
+    tournois_winamax   = charger_tournois_winamax()  # Liste éditable sur GitHub
+    if not calendrier_injecte:
+        logging.info(f"Calendrier API vide → Gemini cherchera lui-même ({len(tournois_winamax)} tournois Winamax).")
+    donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin, tournois_winamax)
 
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
