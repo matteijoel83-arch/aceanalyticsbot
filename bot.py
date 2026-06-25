@@ -1691,6 +1691,24 @@ def run_bot_autonome():
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin)
 
+    # RELAIS GEMINI CALENDRIER : si après filtrage il ne reste AUCUN match jouable,
+    # cela ne veut PAS dire qu'il n'y a rien à jouer — les API peuvent avoir remonté
+    # uniquement des matchs hors fenêtre (ex: qualifs du matin) tout en MASQUANT les
+    # vrais tournois Winamax de la fenêtre (Eastbourne, Bad Homburg...).
+    # Dans ce cas, on force Gemini à chercher lui-même le calendrier des tournois Winamax.
+    try:
+        nb_jouables = len(json.loads(donnees_json).get("matchs", []))
+    except Exception:
+        nb_jouables = 0
+    if nb_jouables == 0:
+        logging.info(
+            f"0 match jouable après filtre → relais Gemini calendrier forcé "
+            f"({len(tournois_winamax)} tournois Winamax)."
+        )
+        # Appel SANS calendrier injecté → déclenche la mission spéciale (recherche web)
+        donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
+        donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin)
+
     try:
         donnees = json.loads(donnees_json)
         if not donnees.get("matchs"):
