@@ -94,6 +94,10 @@ STATS_DEFAUT  = {
         "qualif_elevee":  {"v": 0, "d": 0},
         "qualif_moderee": {"v": 0, "d": 0},
         "qualif_basse":   {"v": 0, "d": 0},
+    },
+    "par_modele": {
+        "opus":   {"v": 0, "d": 0},
+        "sonnet": {"v": 0, "d": 0},
     }
 }
 TICKET_SEP    = "[SEPARATEUR]"
@@ -1930,6 +1934,7 @@ def run_bot_autonome():
                     "date":   date,
                     "marche": _detecter_marche(ticket_propre),
                     "niveau": _detecter_niveau(ticket_propre),
+                    "modele": "opus" if modele_choisi == CLAUDE_OPUS else "sonnet",
                 })
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
@@ -1993,6 +1998,19 @@ def envoyer_recap_hebdo():
         if détails_n:
             lignes.append("\n🛡 <b>Par confiance :</b>")
             lignes.extend(détails_n)
+
+    # Détail par modèle (Opus vs Sonnet) — pour comparer leur fiabilité
+    par_modele = s.get("par_modele", {})
+    if par_modele:
+        détails_m = []
+        for modele, vd in par_modele.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                wr_m = v / (v + d) * 100
+                détails_m.append(f"  • {modele.capitalize()} : {v}V/{d}D ({wr_m:.0f}%)")
+        if détails_m:
+            lignes.append("\n🤖 <b>Par modèle :</b>")
+            lignes.extend(détails_m)
 
     # Quota RapidAPI du mois
     quota, _ = _gh_get("quota_rapidapi.json")
