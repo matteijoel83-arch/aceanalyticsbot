@@ -245,16 +245,28 @@ INSTRUCTIONS_VERIFICATION = (
     "\n1. Cherche le score FINAL du match (avec preuve de fin : Terminé/FT/score complet)"
     "\n2. Si pas de preuve de fin claire → EN_COURS immédiatement"
     "\n3. Si match terminé : compare avec le pronostic exact indiqué"
-    "\n\nFORMAT DE RÉPONSE OBLIGATOIRE :"
-    "\nTermine ta réponse par EXACTEMENT une de ces lignes, seule sur la dernière ligne :"
-    "\nVERDICT: GAGNE"
+    "\n\n⚠️⚠️ FORMAT DE RÉPONSE — RÈGLE ABSOLUE, VIOLATION = ÉCHEC ⚠️⚠️"
+    "\nTa réponse doit être COURTE et se terminer OBLIGATOIREMENT par DEUX lignes,"
+    "\nchacune seule sur sa ligne, dans CET ORDRE EXACT :"
+    "\nPREUVE DE FIN: [score final cité, ex: Flashscore Terminé 6-4 6-2] ou 'aucune'"
+    "\nVERDICT: GAGNE   (ou PERDU, ou EN_COURS)"
+    "\n\n⛔ INTERDICTIONS :"
+    "\n- NE PAS faire de tableaux markdown, d'analyse longue, d'emojis décoratifs."
+    "\n- NE PAS écrire 'RÉSULTAT', 'ANALYSE' ou autre en guise de conclusion."
+    "\n- La SEULE conclusion valide = la ligne 'VERDICT: X'. Sans elle = ÉCHEC total."
+    "\n- Réponds en 3-4 lignes maximum : preuve trouvée + les 2 lignes finales."
+    "\n\nEXEMPLE DE RÉPONSE CORRECTE (à imiter EXACTEMENT) :"
+    "\nMatch trouvé sur Flashscore, terminé. Ruse bat Navarro 6-4 6-2."
+    "\nLe pronostic était Victoire Navarro → non validé."
+    "\nPREUVE DE FIN: Flashscore affiche Terminé, score final 6-4 6-2"
     "\nVERDICT: PERDU"
-    "\nVERDICT: EN_COURS"
     "\n\nRÈGLES STRICTES :"
     "\n- Match pas encore terminé OU score partiel OU doute → VERDICT: EN_COURS"
     "\n- Match terminé (preuve explicite) + pronostic validé → VERDICT: GAGNE"
     "\n- Match terminé (preuve explicite) + pronostic non validé → VERDICT: PERDU"
     "\n- Le moindre doute sur la fin du match → VERDICT: EN_COURS"
+    "\n\n⚠️ RAPPEL FINAL : quoi que tu écrives avant, tu DOIS terminer par la ligne"
+    "\n'VERDICT: GAGNE/PERDU/EN_COURS'. C'est la SEULE chose que le système lit."
 )
 
 
@@ -280,7 +292,7 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
     try:
         reponse = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=256,
+            max_tokens=512,
             system=INSTRUCTIONS_VERIFICATION,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
@@ -320,7 +332,11 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
 
         # Pas de ligne VERDICT trouvée → sécurité maximale : EN_COURS
         # (on ne devine PAS à partir du texte libre, pour ne pas clôturer à tort)
-        logging.warning("Aucune ligne VERDICT trouvée → EN_COURS par sécurité.")
+        logging.warning(
+            "Aucune ligne VERDICT trouvée → EN_COURS par sécurité. "
+            "Causes possibles : réponse coupée (max_tokens) ou format ignoré par Claude. "
+            f"Fin de réponse : '...{verdict[-120:]}'"
+        )
         return "EN_COURS"
     except Exception as e:
         logging.error(f"Erreur Claude : {e}")
