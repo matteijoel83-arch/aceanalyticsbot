@@ -69,6 +69,10 @@ STATS_DEFAUT = {
         "qualif_elevee":  {"v": 0, "d": 0},
         "qualif_moderee": {"v": 0, "d": 0},
         "qualif_basse":   {"v": 0, "d": 0},
+    },
+    "par_modele": {
+        "opus":   {"v": 0, "d": 0},
+        "sonnet": {"v": 0, "d": 0},
     }
 }
 
@@ -83,8 +87,8 @@ def _migrer_stats(s):
     return s
 
 
-def _maj_stats_detail(stats, victoire, marche, niveau):
-    """Met à jour les stats par marché et par niveau."""
+def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre"):
+    """Met à jour les stats par marché, par niveau et par modèle."""
     cle = "v" if victoire else "d"
     # Par marché
     if "par_marche" not in stats:
@@ -97,6 +101,11 @@ def _maj_stats_detail(stats, victoire, marche, niveau):
     niveau_cle = niveau if niveau in stats["par_niveau"] else "autre"
     if niveau_cle in stats["par_niveau"]:
         stats["par_niveau"][niveau_cle][cle] += 1
+    # Par modèle (opus / sonnet)
+    if "par_modele" not in stats:
+        stats["par_modele"] = dict(STATS_DEFAUT["par_modele"])
+    if modele in stats["par_modele"]:
+        stats["par_modele"][modele][cle] += 1
     return stats
 
 # =====================================================================
@@ -378,6 +387,7 @@ def main():
         # Récupérer marché et niveau depuis pari_en_cours.json
         marche = item.get("marche", "autre")
         niveau = item.get("niveau", "autre")
+        modele = item.get("modele", "autre")
 
         logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
         statut = interroger_claude_statut(pari_texte, item.get("date", ""))
@@ -385,13 +395,13 @@ def main():
 
         if statut == "GAGNE":
             stats["victoires"] += 1
-            stats = _maj_stats_detail(stats, True, marche, niveau)
+            stats = _maj_stats_detail(stats, True, marche, niveau, modele)
             stats_modifiees = True
             logging.info("🏆 Victoire enregistrée.")
             notifier_resultat("GAGNE", pari_texte, stats)
         elif statut == "PERDU":
             stats["defaites"] += 1
-            stats = _maj_stats_detail(stats, False, marche, niveau)
+            stats = _maj_stats_detail(stats, False, marche, niveau, modele)
             stats_modifiees = True
             logging.info("❌ Défaite enregistrée.")
             notifier_resultat("PERDU", pari_texte, stats)
