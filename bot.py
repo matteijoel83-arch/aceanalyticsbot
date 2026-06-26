@@ -1891,6 +1891,28 @@ def run_bot_autonome():
                 delta = float(m.group(1).replace(",", "."))
                 if delta < 0.10:
                     return False  # Delta insuffisant → abandon
+            # GARDE-FOU ÉCART MODÈLE-MARCHÉ (validé par les cas Wang et Ruse) :
+            # Un faux delta géant apparaît quand Claude (surtout Opus) surestime trop
+            # la proba d'un outsider vs le marché. Ex Wang : bot 45% vs marché 26% → +73%.
+            # Ex Ruse : bot 52% vs marché 36% → +44%. Les deux ont perdu.
+            # On extrait la proba estimée (X%) et la cote réelle (Z.ZZ) de la ligne VALUE :
+            # "X% → juste Y.YY → réelle Z.ZZ → delta +D.DD"
+            mp = re.search(r"value\s*:?\s*</b>?\s*(\d+(?:[.,]\d+)?)\s*%", t_lower)
+            mc = re.search(r"r[ée]elle\s*(\d+[.,]\d+)", t_lower)
+            if mp and mc:
+                proba_bot = float(mp.group(1).replace(",", ".")) / 100
+                cote_reelle = float(mc.group(1).replace(",", "."))
+                proba_marche = 1 / cote_reelle if cote_reelle > 0 else 1
+                if proba_marche > 0:
+                    ecart_relatif = (proba_bot - proba_marche) / proba_marche
+                    # Si le bot dépasse le marché de plus de 30% → faux delta probable → rejet
+                    if ecart_relatif > 0.30:
+                        logging.warning(
+                            f"Ticket rejeté — écart modèle-marché trop élevé : "
+                            f"bot {proba_bot*100:.0f}% vs marché {proba_marche*100:.0f}% "
+                            f"(+{ecart_relatif*100:.0f}%). Faux delta probable (cf. Wang/Ruse)."
+                        )
+                        return False
             return True
 
         tickets_valides = []
