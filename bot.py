@@ -1246,7 +1246,10 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"{calendrier_injecte}\n\n"
             f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
             f"→ IMPORTANT : Transmettre TOUS les matchs avec cotes disponibles — ne pas filtrer par heure.\n"
-            f"→ Indiquer l'heure exacte de chaque match dans le champ heure_match.\n"
+            f"→ ⏰ CONVERSION HORAIRE OBLIGATOIRE : les heures du calendrier ci-dessus sont en UTC\n"
+            f"   (suffixe 'UTC'). Tu DOIS les convertir en HEURE FRANÇAISE (Europe/Paris = UTC+2 en été)\n"
+            f"   avant de les mettre dans heure_match. Ex : '13:00 UTC' → heure_match '15:00'.\n"
+            f"   heure_match doit TOUJOURS être en heure française, au format HH:MM, sans 'UTC'.\n"
             f"→ Claude se chargera du filtrage par fenêtre horaire ({heure} → {heure_fin}).\n"
             f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
         )
@@ -1266,13 +1269,19 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"Objectif : ne manquer AUCUN match jouable. Mieux vaut 20 matchs listés que 8.\n\n"
             f"Pour CHAQUE match trouvé :\n"
             f"1. Match simple uniquement (PAS doubles). Qualifs : SEULEMENT si Grand Chelem.\n"
-            f"2. Trouve la COTE WINAMAX RÉELLE :\n"
+            f"2. ⏰ HEURE EN HEURE FRANÇAISE OBLIGATOIRE (fuseau Europe/Paris) :\n"
+            f"   → L'heure du match DOIT être convertie en heure française (Paris).\n"
+            f"   → ATTENTION : beaucoup de sites donnent l'heure en UTC/GMT. La France est\n"
+            f"     à UTC+2 en été. Un match affiché 13:00 UTC = 15:00 heure française.\n"
+            f"   → Vérifie sur Winamax ou Sportytrader (sites FR, déjà en heure française).\n"
+            f"   → Indique l'heure française dans heure_match au format HH:MM.\n"
+            f"3. Trouve la COTE WINAMAX RÉELLE :\n"
             f"   → sportytrader.com/fr/cotes/tennis/ en priorité (affiche Winamax)\n"
             f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Sportytrader)'\n"
             f"   → Si seulement une autre cote bookmaker EU → source_cote = nom du bookmaker\n"
             f"   → Si AUCUNE cote réelle → source_cote = 'non trouvée' (le match sera écarté)\n"
             f"⛔ INTERDIT d'inventer ou d'estimer une cote. Cote RÉELLE lue sur le site UNIQUEMENT.\n"
-            f"3. PRIORITÉ À L'EXHAUSTIVITÉ : liste d'abord TOUS les matchs avec leur cote.\n"
+            f"4. PRIORITÉ À L'EXHAUSTIVITÉ : liste d'abord TOUS les matchs avec leur cote.\n"
             f"   Ajoute Hold%, forme, H2H ensuite SI tu as des recherches restantes — mais ne\n"
             f"   sacrifie JAMAIS un match entier pour enrichir les stats d'un autre.\n"
         )
@@ -1354,7 +1363,7 @@ FORMAT JSON STRICT :
 {{
   "heure_collecte": "{heure}",
   "matchs": [{{
-    "heure_match": "HH:MM",
+    "heure_match": "HH:MM (HEURE FRANÇAISE Europe/Paris — jamais UTC)",
     "joueur1": "Nom", "joueur2": "Nom",
     "tournoi": "Nom", "surface": "Terre/Dur/Gazon", "indoor": false,
     "cote_j1": 1.XX, "cote_j2": 1.XX, "source_cote": "Winamax/non trouvée",
