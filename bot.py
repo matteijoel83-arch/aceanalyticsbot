@@ -403,6 +403,17 @@ def _alerter_telegram_erreur(msg):
 # 6. PARIS EN COURS
 # =====================================================================
 
+def _signature_pari(pari_info):
+    """Signature stable d'un pari pour la déduplication : match + date + prono."""
+    txt = re.sub(r"<[^>]+>", "", pari_info.get("pari", "")).lower()
+    # Extraire match et prono des lignes du ticket
+    match_m = re.search(r"match\s*:?\s*(.+)", txt)
+    prono_m = re.search(r"prono\s*:?\s*(.+)", txt)
+    match_s = match_m.group(1).strip()[:60] if match_m else ""
+    prono_s = prono_m.group(1).strip()[:40] if prono_m else ""
+    return f"{pari_info.get('date','')}|{match_s}|{prono_s}"
+
+
 def sauvegarder_pari_pour_suivi(pari_info):
     if "pari" not in pari_info or "date" not in pari_info:
         logging.error(f"Structure invalide : {pari_info}")
@@ -412,6 +423,13 @@ def sauvegarder_pari_pour_suivi(pari_info):
     paris, sha = _gh_get("pari_en_cours.json")
     if not isinstance(paris, list):
         paris = []
+    # DÉDUPLICATION : ne pas ajouter un pari déjà présent (même match+date+prono).
+    # Évite le double comptage si le même match passe à deux runs rapprochés.
+    sig_nouveau = _signature_pari(pari_info)
+    for p in paris:
+        if _signature_pari(p) == sig_nouveau:
+            logging.warning(f"Pari déjà en file (doublon évité) : {sig_nouveau}")
+            return
     paris.append(pari_info)
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
@@ -1263,13 +1281,23 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
         bloc = (
             f"⚠️ AUCUN calendrier pré-collecté (sources API indisponibles).\n"
             f"MISSION SPÉCIALE : cherche TOI-MÊME les matchs du {date} entre {heure} et {heure_fin}.\n\n"
+            f"🗓️ RÈGLE DE DATE ABSOLUE — LA PLUS IMPORTANTE :\n"
+            f"Tu ne retiens QUE les matchs qui se jouent RÉELLEMENT le {date} (date du jour).\n"
+            f"⛔ INTERDIT de remonter un match programmé un AUTRE jour (demain, lundi, cette semaine).\n"
+            f"   Exemple d'ERREUR GRAVE : un tournoi commence dans 3 jours → tu remontes ses matchs\n"
+            f"   du 1er tour en les datant d'aujourd'hui. C'est FAUX. Ces matchs ne se jouent PAS le {date}.\n"
+            f"Pour CHAQUE match, VÉRIFIE la date exacte sur la source : si ce n'est pas le {date},\n"
+            f"tu l'IGNORES totalement. Mieux vaut 0 match qu'un match à la mauvaise date.\n"
+            f"Si un tournoi de la liste n'a AUCUN match le {date} (pas encore commencé, jour de repos),\n"
+            f"tu écris simplement qu'il n'a pas de match aujourd'hui et tu passes au suivant.\n"
+            f"⛔ NE JAMAIS inventer un match pour 'remplir' un tournoi sans match aujourd'hui.\n\n"
             f"TOURNOIS À COUVRIR (uniquement ceux couverts par Winamax) :\n{liste_tournois}\n\n"
             f"⚠️ MÉTHODE OBLIGATOIRE — EXHAUSTIVITÉ TOURNOI PAR TOURNOI :\n"
             f"Tu DOIS traiter CHAQUE tournoi de la liste ci-dessus SÉPARÉMENT, un par un.\n"
             f"Pour CHAQUE tournoi, fais une recherche DÉDIÉE (ex: 'Eastbourne ATP ordre du jour {date}',\n"
             f"puis 'Bad Homburg WTA programme {date}', puis 'Wimbledon qualifications WTA {date}'...).\n"
             f"NE T'ARRÊTE PAS après quelques matchs : un tournoi peut avoir 4 à 8 matchs par jour.\n"
-            f"Liste TOUS les matchs simples de CHAQUE tournoi, sans en oublier aucun.\n"
+            f"Liste TOUS les matchs simples de CHAQUE tournoi DU JOUR {date}, sans en oublier aucun.\n"
             f"Objectif : ne manquer AUCUN match jouable. Mieux vaut 20 matchs listés que 8.\n\n"
             f"Pour CHAQUE match trouvé :\n"
             f"1. Match simple uniquement (PAS doubles). Qualifs : SEULEMENT si Grand Chelem.\n"
@@ -1367,6 +1395,7 @@ FORMAT JSON STRICT :
 {{
   "heure_collecte": "{heure}",
   "matchs": [{{
+    "date_match": "JJ/MM/AAAA (date réelle du match — DOIT être {date}, sinon ne pas inclure)",
     "heure_match": "HH:MM (HEURE FRANÇAISE Europe/Paris — jamais UTC)",
     "joueur1": "Nom", "joueur2": "Nom",
     "tournoi": "Nom", "surface": "Terre/Dur/Gazon", "indoor": false,
@@ -1673,12 +1702,14 @@ def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
 # 12. ORCHESTRATION
 # =====================================================================
 
-def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin):
+def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=None):
     """
     Filtre DUR et déterministe : retire du JSON Gemini les matchs dont
-    heure_match est hors de la fenêtre [heure_debut, heure_fin].
+    heure_match est hors de la fenêtre [heure_debut, heure_fin], ET les matchs
+    dont la date_match n'est pas celle du jour (anti-hallucination de date :
+    empêche de remonter un match de lundi en le datant d'aujourd'hui).
     Gère le passage minuit (session SOIR, ex: 22:50 → 05:00).
-    Indépendant de Claude — garantit qu'aucun match déjà joué n'est proposé.
+    Indépendant de Claude — garantit qu'aucun match déjà joué ni à la mauvaise date n'est proposé.
     """
     try:
         data = json.loads(donnees_json)
@@ -1688,6 +1719,29 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin):
     matchs = data.get("matchs", [])
     if not matchs:
         return donnees_json
+
+    # FILTRE DE DATE : retirer tout match dont la date n'est pas celle du jour.
+    # Protège contre le bug où Gemini remonte des matchs d'un autre jour
+    # (ex: 1er tour Wimbledon programmé lundi, daté à tort d'aujourd'hui).
+    if date_jour:
+        def _bonne_date(m):
+            dm = str(m.get("date_match", "")).strip()
+            if not dm:
+                return True  # date absente → on ne filtre pas ici (prudence), l'heure filtrera
+            # Normaliser : extraire JJ/MM/AAAA
+            md = re.search(r"(\d{2})[/-](\d{2})[/-](\d{4})", dm)
+            if not md:
+                return True  # format inattendu → garder, ne pas casser
+            date_normalisee = f"{md.group(1)}/{md.group(2)}/{md.group(3)}"
+            return date_normalisee == date_jour
+        avant = len(matchs)
+        matchs = [m for m in matchs if _bonne_date(m)]
+        retires_date = avant - len(matchs)
+        if retires_date:
+            logging.warning(
+                f"Filtre DATE : {retires_date} match(s) à une date ≠ {date_jour} retiré(s) "
+                f"(probable hallucination de date par Gemini)."
+            )
 
     fenetre_nocturne = heure_fin < heure_debut  # ex: 22:50 → 05:00
 
@@ -1751,7 +1805,7 @@ def run_bot_autonome():
 
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
-    donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin)
+    donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
 
     # RELAIS GEMINI CALENDRIER : si après filtrage il ne reste AUCUN match jouable,
     # cela ne veut PAS dire qu'il n'y a rien à jouer — les API peuvent avoir remonté
@@ -1769,7 +1823,7 @@ def run_bot_autonome():
         )
         # Appel SANS calendrier injecté → déclenche la mission spéciale (recherche web)
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
-        donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin)
+        donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
 
     try:
         donnees = json.loads(donnees_json)
