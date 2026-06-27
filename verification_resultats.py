@@ -376,6 +376,30 @@ def main():
 
     logging.info(f"Vérification de {len(paris)} pari(s)…")
 
+    # DÉDUPLICATION de sécurité : si des doublons existent déjà dans le fichier
+    # (match+date+prono identiques), ne traiter qu'une seule occurrence pour
+    # éviter le double comptage dans les stats.
+    def _sig(item):
+        txt = re.sub(r"<[^>]+>", "", item.get("pari", "")).lower()
+        mm = re.search(r"match\s*:?\s*(.+)", txt)
+        pm = re.search(r"prono\s*:?\s*(.+)", txt)
+        ms = mm.group(1).strip()[:60] if mm else ""
+        ps = pm.group(1).strip()[:40] if pm else ""
+        return f"{item.get('date','')}|{ms}|{ps}"
+
+    vus = set()
+    paris_uniques = []
+    for item in paris:
+        s = _sig(item)
+        if s in vus:
+            logging.warning(f"Doublon ignoré dans pari_en_cours : {s}")
+            continue
+        vus.add(s)
+        paris_uniques.append(item)
+    if len(paris_uniques) != len(paris):
+        logging.warning(f"{len(paris) - len(paris_uniques)} doublon(s) retiré(s) avant vérification.")
+    paris = paris_uniques
+
     restants        = []
     stats_modifiees = False
 
