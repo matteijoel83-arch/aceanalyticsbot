@@ -824,9 +824,19 @@ def precollecte_odds_api(heure_utc_min):
                             src = "Winamax" if is_w else bk.get("title", "EU")
                     if is_w:
                         break
+            # Conversion UTC → heure française (déterministe, comme RapidAPI)
+            heure_fr_odds = commence[:16].replace("T", " ")
+            try:
+                iso = commence.replace("Z", "+00:00")
+                dt_utc = datetime.fromisoformat(iso)
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+                heure_fr_odds = dt_utc.astimezone(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
             matchs[cle] = {
                 "joueur1": j1, "joueur2": j2,
-                "heure_utc": commence[:16].replace("T", " ") + " UTC",
+                "heure_utc": heure_fr_odds,
                 "cote_j1": c1, "cote_j2": c2, "source_cote": src,
             }
         logging.info(f"Odds API — {len(matchs)} match(s). Quota : {quota}")
@@ -903,10 +913,24 @@ def precollecte_rapidapi_tennis(date_fr):
                     if est_qualif and not est_grand_chelem:
                         continue  # qualif de petit tournoi → skip
 
-                    # Heure
-                    h = m.get("date") or "heure inconnue"
-                    if "T" in str(h):
-                        h = h[:16].replace("T", " ") + " UTC"
+                    # Heure — conversion UTC → heure française DÉTERMINISTE (à la source).
+                    # RapidAPI donne l'heure en UTC ISO (ex: "2026-06-29T14:05:00Z").
+                    # On la convertit en Europe/Paris ici, dans le code, pour ne JAMAIS
+                    # dépendre de Gemini (qui invente/décale les heures).
+                    h_brut = m.get("date") or ""
+                    heure_fr = "heure inconnue"
+                    if "T" in str(h_brut):
+                        try:
+                            # Parser l'ISO UTC et convertir en Europe/Paris
+                            iso = str(h_brut).replace("Z", "+00:00")
+                            dt_utc = datetime.fromisoformat(iso)
+                            if dt_utc.tzinfo is None:
+                                dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+                            dt_fr = dt_utc.astimezone(ZoneInfo("Europe/Paris"))
+                            heure_fr = dt_fr.strftime("%Y-%m-%d %H:%M")  # heure française, sans 'UTC'
+                        except Exception:
+                            heure_fr = str(h_brut)[:16].replace("T", " ")
+                    h = heure_fr
 
                     # Round
                     rnd     = m.get("round") or {}
@@ -1274,10 +1298,14 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"{calendrier_injecte}\n\n"
             f"→ Calendrier COMPLET avec H2H et forme pré-collectés. Ne pas les re-vérifier.\n"
             f"→ IMPORTANT : Transmettre TOUS les matchs avec cotes disponibles — ne pas filtrer par heure.\n"
-            f"→ ⏰ CONVERSION HORAIRE OBLIGATOIRE : les heures du calendrier ci-dessus sont en UTC\n"
-            f"   (suffixe 'UTC'). Tu DOIS les convertir en HEURE FRANÇAISE (Europe/Paris = UTC+2 en été)\n"
-            f"   avant de les mettre dans heure_match. Ex : '13:00 UTC' → heure_match '15:00'.\n"
-            f"   heure_match doit TOUJOURS être en heure française, au format HH:MM, sans 'UTC'.\n"
+            f"→ ⏰ HEURES AUTORITAIRES — RÈGLE ABSOLUE : les heures du calendrier ci-dessus sont\n"
+            f"   DÉJÀ en heure française correcte (converties depuis la source officielle).\n"
+            f"   Tu DOIS recopier EXACTEMENT l'heure indiquée pour chaque match dans heure_match.\n"
+            f"   ⛔ INTERDIT de modifier, recalculer, décaler ou 'corriger' une heure.\n"
+            f"   ⛔ INTERDIT d'inventer une heure. Si un match du calendrier indique 16:05,\n"
+            f"      tu écris heure_match '16:05'. Pas 18:00, pas 14:40. EXACTEMENT 16:05.\n"
+            f"   Pour un match SANS heure dans le calendrier, cherche-la sur Winamax/Sportytrader\n"
+            f"   (heure française) — ne l'invente JAMAIS.\n"
             f"→ Claude se chargera du filtrage par fenêtre horaire ({heure} → {heure_fin}).\n"
             f"→ Tes requêtes Google : UNIQUEMENT blessures, contexte psychologique, Hold%."
         )
