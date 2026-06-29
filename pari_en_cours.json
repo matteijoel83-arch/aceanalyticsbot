@@ -19,5 +19,12 @@
     "marche": "score_exact",
     "niveau": "basse",
     "modele": "opus"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Hugo Gaston vs Stefanos Tsitsipas\n🏆 <b>COMPÉTITION :</b> Wimbledon - London (Gazon)\n⏰ <b>HEURE :</b> 18:15\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Hugo Gaston vainqueur\n📈 <b>COTE :</b> 2.85\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 38% → juste 2.63 → réelle 2.85 → delta +0.22 ✅ → Kelly 1%\n📌 <b>POURQUOI ?</b> Tsitsipas traverse une période instable (séparation avec son père-coach, résultats médiocres). Gaston arrive lancé par 3 victoires en qualifs et ses amorties peuvent être dévastatrices sur gazon. Tsitsipas est historiquement vulnérable sur cette surface et sa forme D-D-V-D-V n'inspire pas confiance.\n⚠️ <b>DONNÉES MANQUANTES :</b> Stats gazon détaillées de Gaston, H2H limité (1 match sur dur)",
+    "date": "29/06/2026",
+    "marche": "moneyline",
+    "niveau": "qualif_basse",
+    "modele": "opus"
   }
 ]
