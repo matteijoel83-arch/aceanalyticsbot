@@ -867,7 +867,7 @@ def precollecte_rapidapi_tennis(date_fr):
                 r   = requests.get(url, headers=headers, timeout=10, params={
                     "include":  "tournament,round",
                     "filter":   "PlayerGroup:singles",
-                    "pageSize": 50,
+                    "pageSize": 100,
                     "pageNo":   page,
                 })
                 r.raise_for_status()
@@ -926,6 +926,12 @@ def precollecte_rapidapi_tennis(date_fr):
                     })
 
                 if not has_next:
+                    break
+                # Plafond de pagination : 3 pages × 100 = 300 matchs max par tour.
+                # Largement suffisant (un jour de Grand Chelem = ~150 matchs/tour max).
+                # Évite de brûler le quota quotidien (50/jour) sur la pagination.
+                if page >= 3:
+                    logging.info(f"RapidAPI {tour.upper()} — plafond 3 pages atteint, on s'arrête (économie quota).")
                     break
                 page += 1
 
@@ -1794,7 +1800,7 @@ def run_bot_autonome():
     # OddsPapi SUPPRIMÉ : ne remontait jamais Winamax (prouvé par logs) et brûlait
     # ~25 req RapidAPI/run = 2400/mois >> quota 500/mois → tuait RapidAPI tout le mois.
     # Sans lui : ~180 req/mois, RapidAPI vit, calendrier complet revient.
-    rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=6)
+    rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=4)
     # SportAPI7 SUPPRIMÉ : ses données (cotes, tournoi) n'étaient lues nulle part
     # dans le pipeline → requêtes RapidAPI gaspillées pour rien. Odds API couvre les cotes.
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
