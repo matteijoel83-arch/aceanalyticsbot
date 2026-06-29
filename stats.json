@@ -1,15 +1,15 @@
 {
   "version": 2,
-  "victoires": 12,
-  "defaites": 6,
+  "victoires": 13,
+  "defaites": 7,
   "par_marche": {
     "moneyline": {
-      "v": 11,
+      "v": 12,
       "d": 6
     },
     "score_exact": {
       "v": 0,
-      "d": 1
+      "d": 2
     },
     "over_under": {
       "v": 0,
@@ -34,7 +34,7 @@
   },
   "par_niveau": {
     "elevee": {
-      "v": 2,
+      "v": 3,
       "d": 0
     },
     "moderee": {
@@ -43,13 +43,13 @@
     },
     "basse": {
       "v": 7,
-      "d": 6
+      "d": 7
     }
   },
   "par_modele": {
     "opus": {
-      "v": 1,
-      "d": 0
+      "v": 2,
+      "d": 1
     },
     "sonnet": {
       "v": 0,
