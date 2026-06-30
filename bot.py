@@ -2172,4 +2172,37 @@ def envoyer_recap_hebdo():
 
     message = "\n".join(lignes)
     if DRY_RUN:
-        logging.info("[DRY-RUN] Récap hebdo :"
+        logging.info("[DRY-RUN] Recap hebdo :")
+        logging.info(message)
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        logging.info("Recap hebdo envoye.")
+    except Exception as e:
+        logging.warning(f"Echec recap hebdo : {e}")
+
+
+if __name__ == "__main__":
+    args = [a for a in sys.argv[1:] if a != "--dry-run"]
+    if not args:
+        run_bot_autonome()
+    elif args[0] == "recap":
+        envoyer_recap_hebdo()
+    elif args[0] == "resultat" and len(args) == 2:
+        flag = args[1].lower()
+        if flag in ("v", "victoire", "win", "1"):
+            enregistrer_resultat(True)
+        elif flag in ("d", "defaite", "lose", "0"):
+            enregistrer_resultat(False)
+        else:
+            print("Utilise v ou d.")
+            sys.exit(1)
+    elif args[0] in ("--help", "-h"):
+        print(__doc__)
+    else:
+        print("Commande inconnue.")
+        sys.exit(1)
