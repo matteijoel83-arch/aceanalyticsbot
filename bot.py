@@ -1559,6 +1559,28 @@ CALIBRATION PROBABILITÉS :
 • 1.80-2.20    → MAX 58%
 • > 2.20       → MAX 52%
 
+🚫 RÈGLE ANTI-SURESTIMATION — DONNÉES MANQUANTES (CRITIQUE) :
+Constat vérifié sur résultats réels : quand il manque des données importantes
+(stats sur la surface du match, Hold% sur la surface, forme récente, H2H), le
+modèle a tendance à combler le vide par une analyse narrative (forme générale,
+"momentum", contexte psychologique) et à SURESTIMER un joueur — ce qui crée de
+faux deltas et fait perdre.
+
+RÈGLE ABSOLUE :
+• Si tu n'as PAS les données de surface (ex: Hold%/forme/win% sur gazon pour un
+  match sur gazon) d'un joueur, tu n'as PAS le droit d'estimer sa probabilité
+  AU-DESSUS de sa probabilité de marché (= 1/cote réelle).
+• Sans données suffisantes pour JUSTIFIER un écart, tu t'ALIGNES sur le marché.
+• Tu ne survalorises JAMAIS un joueur sur la seule base d'arguments narratifs
+  (momentum, forme générale toutes surfaces, contexte psychologique, "vulnérable
+  sur cette surface" sans stats chiffrées à l'appui).
+• Concrètement : si "données manquantes" inclut les stats de la surface du match
+  pour un joueur, alors proba_estimée de CE joueur ≤ proba_marché (1/cote).
+  → Résultat : pas d'écart au marché → pas de faux delta → souvent pas de pari.
+• Tu PEUX t'écarter du marché et survaloriser un joueur UNIQUEMENT si tu as les
+  données chiffrées de surface qui le justifient (comme pour un favori bien documenté).
+Cette règle vaut pour TOUTES les surfaces (gazon, terre, dur) et tous les tournois.
+
 🎓 QUALIFS GRAND CHELEM — RÈGLES SPÉCIALES :
 Les qualifs de Grand Chelem (Wimbledon Q, etc.) sont jouables MAIS plus risquées :
 joueurs moins connus, données plus pauvres, résultats plus volatils.
@@ -1993,12 +2015,24 @@ def run_bot_autonome():
                 proba_marche = 1 / cote_reelle if cote_reelle > 0 else 1
                 if proba_marche > 0:
                     ecart_relatif = (proba_bot - proba_marche) / proba_marche
-                    # Si le bot dépasse le marché de plus de 30% → faux delta probable → rejet
-                    if ecart_relatif > 0.30:
+                    # Seuil ADAPTATIF selon la présence de données manquantes :
+                    # Constat réel (Semenistaja, Gaston) : les paris perdants avaient
+                    # des stats de surface manquantes ET une survalorisation. Quand des
+                    # données importantes manquent, on durcit le seuil — le modèle n'a
+                    # alors quasiment pas le droit de s'écarter du marché.
+                    # Détecter si le ticket signale des données manquantes (≠ "Aucune")
+                    dm_match = re.search(r"donn[ée]es manquantes\s*:?\s*(?:</b>)?\s*(.+)", t_lower)
+                    donnees_manquantes = False
+                    if dm_match:
+                        contenu_dm = dm_match.group(1).strip()
+                        donnees_manquantes = bool(contenu_dm) and not contenu_dm.startswith("aucune")
+                    seuil = 0.10 if donnees_manquantes else 0.30
+                    if ecart_relatif > seuil:
+                        raison = "données manquantes + survalorisation" if donnees_manquantes else "faux delta probable (cf. Wang/Ruse)"
                         logging.warning(
                             f"Ticket rejeté — écart modèle-marché trop élevé : "
                             f"bot {proba_bot*100:.0f}% vs marché {proba_marche*100:.0f}% "
-                            f"(+{ecart_relatif*100:.0f}%). Faux delta probable (cf. Wang/Ruse)."
+                            f"(+{ecart_relatif*100:.0f}%, seuil {seuil*100:.0f}%). {raison}."
                         )
                         return False
             return True
@@ -2138,36 +2172,4 @@ def envoyer_recap_hebdo():
 
     message = "\n".join(lignes)
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Récap hebdo :\n{message}")
-        return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "HTML"},
-            timeout=10,
-        )
-        logging.info("✅ Récap hebdo envoyé.")
-    except Exception as e:
-        logging.warning(f"Échec récap hebdo : {e}")
-
-
-if __name__ == "__main__":
-    args         = [a for a in sys.argv[1:] if a != "--dry-run"]
-    if not args:
-        run_bot_autonome()
-    elif args[0] == "recap":
-        envoyer_recap_hebdo()
-    elif args[0] == "resultat" and len(args) == 2:
-        flag = args[1].lower()
-        if flag in ("v", "victoire", "win", "1"):
-            enregistrer_resultat(True)
-        elif flag in ("d", "defaite", "lose", "0"):
-            enregistrer_resultat(False)
-        else:
-            print(f"❌ Utilise 'v' ou 'd'.")
-            sys.exit(1)
-    elif args[0] in ("--help", "-h"):
-        print(__doc__)
-    else:
-        print(f"❌ Commande inconnue.")
-        sys.exit(1)
+        logging.info(f"[DRY-RUN] Récap hebdo :
