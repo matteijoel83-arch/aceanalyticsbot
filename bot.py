@@ -2172,4 +2172,4 @@ def envoyer_recap_hebdo():
 
     message = "\n".join(lignes)
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Récap hebdo :
+        logging.info("[DRY-RUN] Récap hebdo :"
