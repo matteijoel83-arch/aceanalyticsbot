@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "victoires": 16,
+  "victoires": 17,
   "defaites": 9,
   "par_marche": {
     "moneyline": {
@@ -8,7 +8,7 @@
       "d": 8
     },
     "score_exact": {
-      "v": 0,
+      "v": 1,
       "d": 2
     },
     "over_under": {
@@ -38,7 +38,7 @@
       "d": 0
     },
     "moderee": {
-      "v": 6,
+      "v": 7,
       "d": 0
     },
     "basse": {
@@ -48,7 +48,7 @@
   },
   "par_modele": {
     "opus": {
-      "v": 5,
+      "v": 6,
       "d": 3
     },
     "sonnet": {
