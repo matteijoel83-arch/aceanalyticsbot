@@ -2148,7 +2148,7 @@ def run_bot_autonome():
         logging.info(f"✅ {paris_envoyes} ticket(s) envoyé(s).")
 
     except Exception as e:
-      logging.error(f"Erreur critique : {e}", exc_info=True)
+        logging.error(f"Erreur critique : {e}", exc_info=True)
         _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
         _quota_persister()
@@ -2263,3 +2263,4 @@ if __name__ == "__main__":
     else:
         print(f"❌ Commande inconnue.")
         sys.exit(1)
+      
