@@ -1381,8 +1381,9 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"   → Vérifie sur Winamax ou Sportytrader (sites FR, déjà en heure française).\n"
             f"   → Indique l'heure française dans heure_match au format HH:MM.\n"
             f"3. Trouve la COTE WINAMAX RÉELLE :\n"
-            f"   → sportytrader.com/fr/cotes/tennis/ en priorité (affiche Winamax)\n"
-            f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Sportytrader)'\n"
+            f"   → coteur.com/cotes-tennis en priorité (spécialisé bookmakers français, affiche Winamax)\n"
+            f"   → puis flashscore.fr (onglet cotes) ou sportytrader.com/fr/cotes/tennis/\n"
+            f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Coteur/Flashscore/Sportytrader)'\n"
             f"   → Si seulement une autre cote bookmaker EU → source_cote = nom du bookmaker\n"
             f"   → Si AUCUNE cote réelle → source_cote = 'non trouvée' (le match sera écarté)\n"
             f"⛔ INTERDIT d'inventer ou d'estimer une cote. Cote RÉELLE lue sur le site UNIQUEMENT.\n"
@@ -1439,18 +1440,28 @@ PRIORITÉ 2 — Contexte (1 recherche globale chacun, pas par match) :
    → flashscore.fr OU sofascore.com
 
 PRIORITÉ 3 — Vérification cotes matchs secondaires :
-7. Pour tout match SANS cote dans le calendrier :
+7. Pour tout match SANS cote dans le calendrier, chercher la cote Winamax réelle sur :
+   → coteur.com/cotes-tennis (spécialisé bookmakers français ANJ, affiche Winamax) — SOURCE PRIORITAIRE
+   → flashscore.fr (onglet cotes, compare Winamax aux concurrents)
    → sportytrader.com/fr/cotes/tennis/
-   → Cote Winamax trouvée → source_cote = "Sportytrader"
-   → Introuvable → source_cote = "non trouvée"
+   → Cote Winamax trouvée → source_cote = "Coteur"/"Flashscore"/"Sportytrader" (selon la source réelle)
+   → Introuvable → source_cote = "non trouvée" (NE JAMAIS inventer une cote)
 
-SOURCES PAR TYPE :
+SOURCES PAR TYPE (utilise ces sites réels — ne jamais inventer une valeur non trouvée) :
 • Hold% / Break% / Return%  → tennisabstract.com · ultimatetennisstatistics.com · tennisratio.com · matchstat.com
 • Forme récente + scores    → flashscore.fr · sofascore.com · matchstat.com
-• Stats par surface         → ultimatetennisstatistics.com · tennisabstract.com
+• Stats par surface (Elo)   → tennisabstract.com (Elo par surface) · ultimatetennisstatistics.com
+• Challengers / Futures     → tennisexplorer.com (couvre les circuits secondaires mieux que les autres)
 • Classements + points      → atptour.com · wtatennis.com
 • Blessures + actualités    → eurosport.fr · tennis.com · atptour.com
-• Cotes                     → sportytrader.com
+• Cotes Winamax             → coteur.com (priorité, marché français) · flashscore.fr · sportytrader.com
+
+⚠️ RÈGLE DE FIABILITÉ DES SOURCES :
+Pour CHAQUE donnée (cote ou stat), tu dois l'avoir RÉELLEMENT lue sur un des sites ci-dessus.
+Si une donnée n'est pas trouvée sur ces sources → tu écris "non trouvé" pour ce champ.
+⛔ Il est FORMELLEMENT INTERDIT d'estimer, deviner ou inventer une cote ou une statistique.
+Une donnée inventée est pire qu'une donnée absente : "non trouvé" permet à Claude de s'adapter,
+une valeur fausse le trompe. Dans le doute, écris toujours "non trouvé".
 
 ⚠️ IMPORTANT : Inclure TOUS les matchs du calendrier dans le JSON — même ceux hors fenêtre {heure}→{heure_fin}.
    Claude filtrera par fenêtre horaire. Ton rôle est de collecter les stats, pas de filtrer.
@@ -2137,7 +2148,7 @@ def run_bot_autonome():
         logging.info(f"✅ {paris_envoyes} ticket(s) envoyé(s).")
 
     except Exception as e:
-        logging.error(f"Erreur critique : {e}", exc_info=True)
+      logging.error(f"Erreur critique : {e}", exc_info=True)
         _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
         _quota_persister()
