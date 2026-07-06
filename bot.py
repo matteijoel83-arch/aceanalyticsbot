@@ -2291,4 +2291,3 @@ if __name__ == "__main__":
         print(f"❌ Commande inconnue.")
         sys.exit(1)
       
-            
