@@ -1712,8 +1712,19 @@ ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
 
 [2] DÉCISION :
   Proba % → Cote Juste = 1/proba → Delta = Cote réelle - Cote Juste
-  Delta < 0.10 → ❌ abandonné
-  Delta ≥ 0.10 → VALUE ✅ → Kelly quart = ((p×c−1)/(c−1))×0.25
+
+  ⚖️ SEUIL DE DELTA ADAPTATIF SELON LA COTE (nouveau — en test) :
+  Le delta minimum requis dépend de la cote, car un delta absolu de 0.10 est
+  plus dur à atteindre sur un favori que sur un outsider (question de proportion).
+  • Cote < 1.90 (favori)        → delta minimum requis : 0.07
+  • Cote 1.90 à 2.50 (équilibré) → delta minimum requis : 0.10
+  • Cote > 2.50 (outsider)       → delta minimum requis : 0.12
+  Raison : on facilite les favoris modérés (zone historiquement rentable) et on
+  durcit les outsiders (zone plus risquée). Applique le seuil correspondant à la
+  cote réelle du pari.
+
+  Delta < seuil requis → ❌ abandonné
+  Delta ≥ seuil requis → VALUE ✅ → Kelly quart = ((p×c−1)/(c−1))×0.25
   Zéro value → AUCUN_MATCH
 
 DOUBLE VALIDATION (TOUS les marchés) :
@@ -1738,15 +1749,16 @@ Qualif GC : ÉLEVÉE 0,75% · MODÉRÉE 0,50% · BASSE 0,25%
 
 FORMAT (max {MAX_TICKETS} tickets, [SEPARATEUR] entre chaque) :
 ⚠️⚠️ RÈGLE ABSOLUE — INTERDICTION D'AFFICHER UN TICKET ABANDONNÉ ⚠️⚠️
-Si Delta < 0.10 → le match est ABANDONNÉ → tu NE génères AUCUN ticket pour lui.
+Si Delta < seuil requis (selon la cote : 0.07 favori / 0.10 équilibré / 0.12 outsider)
+→ le match est ABANDONNÉ → tu NE génères AUCUN ticket pour lui.
 Tu ne dois JAMAIS écrire un bloc 🎾 PRONOSTIC avec un delta ❌ ou la mention "Abandon".
 Un ticket affiché = un pari validé que l'abonné va jouer. Afficher un ticket abandonné
 trompe l'abonné qui va miser sur un mauvais pari. C'est une FAUTE GRAVE.
 
 PROCESSUS CORRECT :
-• Delta ≥ 0.10 + analyse OK → générer le ticket 🎾 (ce sera envoyé tel quel à l'abonné)
-• Delta < 0.10 → NE RIEN générer pour ce match, passer au suivant
-• Si AUCUN match n'a delta ≥ 0.10 → répondre UNIQUEMENT : AUCUN_MATCH + explication
+• Delta ≥ seuil requis + analyse OK → générer le ticket 🎾 (envoyé tel quel à l'abonné)
+• Delta < seuil requis → NE RIEN générer pour ce match, passer au suivant
+• Si AUCUN match n'atteint son seuil → répondre UNIQUEMENT : AUCUN_MATCH + explication
 
 N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
 Si 0 ticket validé → répondre : AUCUN_MATCH suivi d'une explication courte (max 80 mots) :
@@ -2056,8 +2068,23 @@ def run_bot_autonome():
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
             if m:
                 delta = float(m.group(1).replace(",", "."))
-                if delta < 0.10:
-                    return False  # Delta insuffisant → abandon
+                # SEUIL ADAPTATIF selon la cote (cohérent avec le prompt Claude) :
+                # favori (<1.90) → 0.07 ; équilibré (1.90-2.50) → 0.10 ; outsider (>2.50) → 0.12
+                cote_ticket = None
+                mcote = re.search(r"cote\s*:?\s*</b>?\s*(\d+[.,]\d+)", t_lower)
+                if not mcote:
+                    mcote = re.search(r"r[ée]elle\s*(\d+[.,]\d+)", t_lower)
+                if mcote:
+                    cote_ticket = float(mcote.group(1).replace(",", "."))
+                if cote_ticket is not None and cote_ticket < 1.90:
+                    seuil_delta = 0.07
+                elif cote_ticket is not None and cote_ticket > 2.50:
+                    seuil_delta = 0.12
+                else:
+                    seuil_delta = 0.10
+                if delta < seuil_delta:
+                    logging.info(f"Ticket rejeté — delta {delta:+.2f} < seuil {seuil_delta:.2f} (cote {cote_ticket}).")
+                    return False  # Delta insuffisant pour cette cote → abandon
             # GARDE-FOU ÉCART MODÈLE-MARCHÉ (validé par les cas Wang et Ruse) :
             # Un faux delta géant apparaît quand Claude (surtout Opus) surestime trop
             # la proba d'un outsider vs le marché. Ex Wang : bot 45% vs marché 26% → +73%.
@@ -2264,3 +2291,4 @@ if __name__ == "__main__":
         print(f"❌ Commande inconnue.")
         sys.exit(1)
       
+            
