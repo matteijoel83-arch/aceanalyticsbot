@@ -1,11 +1,11 @@
 {
   "version": 2,
   "victoires": 17,
-  "defaites": 13,
+  "defaites": 14,
   "par_marche": {
     "moneyline": {
       "v": 15,
-      "d": 11
+      "d": 12
     },
     "score_exact": {
       "v": 1,
@@ -39,7 +39,7 @@
     },
     "moderee": {
       "v": 7,
-      "d": 3
+      "d": 4
     },
     "basse": {
       "v": 7,
@@ -49,7 +49,7 @@
   "par_modele": {
     "opus": {
       "v": 6,
-      "d": 7
+      "d": 8
     },
     "sonnet": {
       "v": 0,
