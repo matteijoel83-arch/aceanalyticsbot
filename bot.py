@@ -1451,6 +1451,7 @@ SOURCES PAR TYPE (utilise ces sites réels — ne jamais inventer une valeur non
 • Hold% / Break% / Return%  → tennisabstract.com · ultimatetennisstatistics.com · tennisratio.com · matchstat.com
 • Forme récente + scores    → flashscore.fr · sofascore.com · matchstat.com
 • Stats par surface (Elo)   → tennisabstract.com (Elo par surface) · ultimatetennisstatistics.com
+• Momentum / forme actuelle → tennisabstract.com (Elo surface récent) · predixsport.com (Form Index : mesure objective de qui surperforme en ce moment) · tennisratio.com (pressure points = solidité mentale dans les moments clés)
 • Challengers / Futures     → tennisexplorer.com (couvre les circuits secondaires mieux que les autres)
 • Classements + points      → atptour.com · wtatennis.com
 • Blessures + actualités    → eurosport.fr · tennis.com · atptour.com
@@ -1637,6 +1638,22 @@ RÈGLE ABSOLUE :
 • Tu PEUX t'écarter du marché et survaloriser un joueur UNIQUEMENT si tu as les
   données chiffrées de surface qui le justifient (comme pour un favori bien documenté).
 Cette règle vaut pour TOUTES les surfaces (gazon, terre, dur) et tous les tournois.
+
+📈 MOMENTUM OBJECTIF — NE PAS SE FIER QU'À L'HISTORIQUE (important) :
+Un joueur peut être BIEN plus fort que ses stats de saison ne le suggèrent s'il est
+dans un grand moment de carrière (titre récent, finale récente, série de victoires
+contre du haut niveau). Inversement, un favori "sur le papier" peut être en déclin.
+Pour capter cela SANS tomber dans la narration subjective, utilise des mesures OBJECTIVES :
+• L'Elo par surface RÉCENT (tennisabstract) : reflète la vraie force actuelle, pas la réputation.
+• Le Form Index (predixsport) : mesure chiffrée de qui surperforme en ce moment.
+RÈGLE : si l'adversaire d'un favori a un Elo surface récent proche ou un Form Index élevé
+(il "monte"), alors le favori est MOINS sûr que sa cote ne le suggère → n'augmente PAS
+sa probabilité, reste au niveau du marché ou en-dessous. Un "favori sur réputation" contre
+un joueur en pleine forme est un piège classique (ex : un ancien favori surface battu par
+un joueur qui vient de gagner un grand titre).
+⚠️ Ceci n'est PAS une autorisation à survaloriser l'outsider : c'est une raison d'être
+PLUS PRUDENT sur le favori. Dans le doute entre deux joueurs de bon niveau (typique en
+phase finale de gros tournoi), s'aligner sur le marché plutôt que de surestimer le favori.
 
 🎓 QUALIFS GRAND CHELEM — RÈGLES SPÉCIALES :
 Les qualifs de Grand Chelem (Wimbledon Q, etc.) sont jouables MAIS plus risquées :
