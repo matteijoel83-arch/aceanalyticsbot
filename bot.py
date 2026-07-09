@@ -75,7 +75,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-MARCHES_ALT_MODE = "actif"   # ← passe à "observation" pour tester, puis "actif"
+MARCHES_ALT_MODE = "observation"   # ← passe à "observation" pour tester, puis "actif"
 
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
 ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
