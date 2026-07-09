@@ -75,7 +75,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-MARCHES_ALT_MODE = "observation"   # ← passe à "observation" pour tester, puis "actif"
+MARCHES_ALT_MODE = "off"   # ← passe à "observation" pour tester, puis "actif"
 
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
 ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
@@ -1949,7 +1949,23 @@ def _est_faux_tennis(fixture):
 
 def _sim_noms(a, b):
     from difflib import SequenceMatcher
-    return SequenceMatcher(None, str(a).lower(), str(b).lower()).ratio()
+    # Normaliser : retirer virgules, mettre en minuscules, trier les mots
+    # (gère "Karolina Muchova" vs "Muchova, Karolina" — même mots, ordre différent)
+    def norm(x):
+        x = str(x).lower().replace(",", " ").replace("-", " ")
+        mots = sorted(w for w in x.split() if w)
+        return " ".join(mots)
+    na, nb = norm(a), norm(b)
+    # Score direct sur noms normalisés (mots triés)
+    score = SequenceMatcher(None, na, nb).ratio()
+    # Bonus : si le nom de famille (mot le plus long) est présent des deux côtés
+    mots_a = set(na.split())
+    mots_b = set(nb.split())
+    communs = mots_a & mots_b
+    if communs:
+        # proportion de mots communs
+        score = max(score, len(communs) / max(len(mots_a), len(mots_b)))
+    return score
 
 
 def oddspapi_fixtures_jour():
@@ -2076,9 +2092,24 @@ def analyser_marches_alternatifs(matchs_serres, date):
         j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
         fid = oddspapi_trouver_fixture(j1, j2, fixtures)
         if not fid:
+            if MARCHES_ALT_MODE == "observation":
+                # Diagnostic : montrer les noms OddsPapi les plus proches pour comprendre l'échec
+                proches = []
+                for f in fixtures[:400]:
+                    p = f.get("participants", {})
+                    n1 = str(p.get("participant1Name", ""))
+                    n2 = str(p.get("participant2Name", ""))
+                    s = max((_sim_noms(j1, n1) + _sim_noms(j2, n2)) / 2,
+                            (_sim_noms(j1, n2) + _sim_noms(j2, n1)) / 2)
+                    proches.append((s, f"{n1} vs {n2}"))
+                proches.sort(reverse=True)
+                top = proches[0] if proches else (0, "aucun")
+                logging.info(f"[OBS] Pas de correspondance pour '{j1} vs {j2}' — meilleur candidat OddsPapi : '{top[1]}' (score {top[0]:.2f})")
             continue
         cotes = oddspapi_cotes(fid)
         if not cotes:
+            if MARCHES_ALT_MODE == "observation":
+                logging.info(f"[OBS] Match trouvé (fid={fid}) pour {j1} vs {j2} mais AUCUNE cote alt récupérée (match commencé ? format ?).")
             continue
 
         # MODE OBSERVATION : on logue ce qu'on a trouvé, sans parier
