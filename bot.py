@@ -66,6 +66,27 @@ CLAUDE_OPUS    = "claude-opus-4-6"     # Sessions riches ≥ 3 matchs
 CLAUDE_MODEL   = CLAUDE_SONNET         # Défaut — sera remplacé dynamiquement
 GEMINI_MODEL   = "gemini-3.5-flash"   # Dernière version stable — meilleur que 2.5 Pro
 SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opus
+
+# ============================================================
+# MARCHÉS ALTERNATIFS (Total Sets O/U 2.5 + Total Games O/U) — via OddsPapi/Pinnacle
+# ============================================================
+# INTERRUPTEUR PRINCIPAL — 3 modes :
+#   "off"         : désactivé totalement, le bot fonctionne comme avant (DÉFAUT SÛR)
+#   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
+#                   (pour valider le format réel de la réponse via les logs)
+#   "actif"       : génère de vrais tickets sur les marchés alternatifs
+MARCHES_ALT_MODE = "off"   # ← passe à "observation" pour tester, puis "actif"
+
+ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
+ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
+MARKET_TOTAL_SETS_LIGNE = 2.5                 # Over 2.5 sets = "va au 3e set"
+# Déclencheur : on ne regarde les marchés alt que sur les matchs "serrés"
+# (cote du favori dans cette fourchette = match équilibré, incertain sur le vainqueur)
+MARCHES_ALT_COTE_MIN = 1.50
+MARCHES_ALT_COTE_MAX = 2.10
+# Catégories de faux tennis à EXCLURE absolument (matchs simulés par ordinateur)
+CATEGORIES_INTERDITES = ("simulated reality", "srl")
+
 GITHUB_API    = "https://api.github.com"
 GITHUB_HEADERS = {
     "Authorization":        f"Bearer {GITHUB_TOKEN}",
@@ -1904,6 +1925,182 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+# ============================================================
+# MARCHÉS ALTERNATIFS — récupération cotes OddsPapi/Pinnacle
+# (Total Sets O/U 2.5 + Total Games O/U). Protégé par MARCHES_ALT_MODE.
+# ============================================================
+
+def _oddspapi_headers():
+    return {"X-RapidAPI-Key": RAPIDAPI_KEY or "", "X-RapidAPI-Host": ODDSPAPI_HOST}
+
+
+def _est_faux_tennis(fixture):
+    """Exclut le SRL (Simulated Reality) = faux tennis simulé par ordinateur."""
+    t = fixture.get("tournament", {}) or {}
+    cat = str(t.get("categoryName", "")).lower()
+    nom = str(t.get("tournamentName", "")).lower()
+    if any(x in cat for x in CATEGORIES_INTERDITES):
+        return True
+    if "srl" in nom or "simulated" in nom:
+        return True
+    p1 = str(fixture.get("participants", {}).get("participant1Name", "")).lower()
+    return "(srl)" in p1
+
+
+def _sim_noms(a, b):
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, str(a).lower(), str(b).lower()).ratio()
+
+
+def oddspapi_fixtures_jour():
+    """Récupère les vrais matchs tennis du jour (SRL exclu). [] si erreur."""
+    try:
+        r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/today",
+                         headers=_oddspapi_headers(), params={"sportId": 12}, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logging.warning(f"OddsPapi fixtures indisponible : {e}")
+        return []
+    fixtures = data if isinstance(data, list) else data.get("fixtures", data.get("data", []))
+    if not isinstance(fixtures, list):
+        return []
+    vrais = [f for f in fixtures if not _est_faux_tennis(f)]
+    exclus = len(fixtures) - len(vrais)
+    if exclus:
+        logging.info(f"OddsPapi : {exclus} match(s) SRL exclu(s), {len(vrais)} vrai(s).")
+    return vrais
+
+
+def oddspapi_trouver_fixture(joueur1, joueur2, fixtures):
+    """Trouve le fixtureId correspondant à un match (par noms, tolère les variantes)."""
+    meilleur, score_max = None, 0.0
+    for f in fixtures:
+        p = f.get("participants", {})
+        n1, n2 = str(p.get("participant1Name", "")), str(p.get("participant2Name", ""))
+        direct  = (_sim_noms(joueur1, n1) + _sim_noms(joueur2, n2)) / 2
+        inverse = (_sim_noms(joueur1, n2) + _sim_noms(joueur2, n1)) / 2
+        score = max(direct, inverse)
+        if score > score_max:
+            score_max, meilleur = score, f.get("fixtureId")
+    return meilleur if score_max >= 0.7 else None
+
+
+def oddspapi_cotes(fixture_id):
+    """
+    Récupère les cotes Pinnacle des marchés alternatifs d'un match.
+    Retourne : {"total_sets": {"over":x,"under":y,"ligne":2.5},
+                "total_games": {"over":x,"under":y,"ligne":21.5}}
+    """
+    try:
+        r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/odds",
+                         headers=_oddspapi_headers(),
+                         params={"fixtureId": fixture_id, "bookmakers": ODDSPAPI_BOOKMAKER},
+                         timeout=15)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logging.warning(f"OddsPapi cotes {fixture_id} : {e}")
+        return {}
+
+    # MODE OBSERVATION : loguer le format brut pour validation
+    if MARCHES_ALT_MODE == "observation":
+        apercu = json.dumps(data, ensure_ascii=False)[:1500]
+        logging.info(f"[OBS] Format réponse OddsPapi odds : {apercu}")
+
+    outcomes = _oddspapi_extraire_outcomes(data)
+    res = {}
+    for o in outcomes:
+        bo = str(o.get("bookmakerOutcomeId", ""))
+        price = o.get("price")
+        if price is None:
+            continue
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            continue
+        m = re.match(r"(\d+(?:\.\d+)?)/(over|under)", bo)
+        if not m:
+            continue
+        ligne, sens = float(m.group(1)), m.group(2)
+        if ligne == 2.5:  # Total Sets
+            res.setdefault("total_sets", {"ligne": 2.5})[sens] = price
+        elif ligne >= 10:  # Total Games (lignes hautes)
+            tg = res.setdefault("total_games", {})
+            is_main = o.get("mainLine", False)
+            if is_main or "ligne" not in tg:
+                tg["ligne"], tg[sens] = ligne, price
+            elif tg.get("ligne") == ligne:
+                tg[sens] = price
+    return res
+
+
+def _oddspapi_extraire_outcomes(data):
+    """Normalise la réponse OddsPapi en liste d'outcomes (price + bookmakerOutcomeId)."""
+    out = []
+    def _collecte(obj):
+        if isinstance(obj, dict):
+            if "price" in obj and "bookmakerOutcomeId" in obj:
+                out.append(obj)
+            else:
+                for v in obj.values():
+                    _collecte(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                _collecte(v)
+    _collecte(data)
+    return out
+
+
+def analyser_marches_alternatifs(matchs_serres, date):
+    """
+    Pour chaque match serré, récupère les cotes sets/jeux Pinnacle et (si mode actif)
+    demande à Claude d'estimer s'il y a de la value sur "Over 2.5 sets" ou Total Games.
+    Retourne une liste de tickets marchés alternatifs (vide en mode observation/off).
+
+    matchs_serres : liste de dicts {joueur1, joueur2, cote_j1, cote_j2, surface, ...}
+    """
+    if MARCHES_ALT_MODE == "off":
+        return []
+    if not RAPIDAPI_KEY:
+        logging.info("Marchés alt : pas de clé RapidAPI, skip.")
+        return []
+
+    fixtures = oddspapi_fixtures_jour()
+    if not fixtures:
+        logging.info("Marchés alt : aucun fixture OddsPapi disponible.")
+        return []
+
+    tickets_alt = []
+    for m in matchs_serres:
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        fid = oddspapi_trouver_fixture(j1, j2, fixtures)
+        if not fid:
+            continue
+        cotes = oddspapi_cotes(fid)
+        if not cotes:
+            continue
+
+        # MODE OBSERVATION : on logue ce qu'on a trouvé, sans parier
+        if MARCHES_ALT_MODE == "observation":
+            ts = cotes.get("total_sets", {})
+            tg = cotes.get("total_games", {})
+            logging.info(
+                f"[OBS] {j1} vs {j2} — "
+                f"Sets O/U 2.5: Over {ts.get('over','?')}/Under {ts.get('under','?')} | "
+                f"Games O/U {tg.get('ligne','?')}: Over {tg.get('over','?')}/Under {tg.get('under','?')}"
+            )
+            continue
+
+        # MODE ACTIF : demander à Claude d'estimer la value (à implémenter après validation)
+        # Pour l'instant, en mode actif, on prépare la structure mais on reste prudent :
+        # on ne génère un ticket que si la logique d'estimation est en place.
+        # (Cette partie sera complétée une fois le format validé en observation.)
+        logging.info(f"[ACTIF] Marchés alt prêts pour {j1} vs {j2} — estimation à implémenter.")
+
+    return tickets_alt
+
+
 def run_bot_autonome():
     debut      = time.time()
     maintenant = datetime.now(ZoneInfo("Europe/Paris"))
@@ -1995,6 +2192,32 @@ def run_bot_autonome():
             )
     except Exception as e:
         logging.warning(f"DEBUG log matchs : {e}")
+
+    # ----- MARCHÉS ALTERNATIFS (sets / jeux) — actif seulement si MARCHES_ALT_MODE != "off"
+    if MARCHES_ALT_MODE != "off":
+        try:
+            matchs_all = json.loads(donnees_json).get("matchs", [])
+            # Un match "serré" = cote du favori dans la fourchette (match équilibré)
+            matchs_serres = []
+            for m in matchs_all:
+                try:
+                    c1 = float(m.get("cote_j1") or 0)
+                    c2 = float(m.get("cote_j2") or 0)
+                except (TypeError, ValueError):
+                    continue
+                cotes_valides = [c for c in (c1, c2) if c > 0]
+                if not cotes_valides:
+                    continue
+                cote_favori = min(cotes_valides)
+                if MARCHES_ALT_COTE_MIN <= cote_favori <= MARCHES_ALT_COTE_MAX:
+                    matchs_serres.append(m)
+            if matchs_serres:
+                logging.info(f"Marchés alt ({MARCHES_ALT_MODE}) : {len(matchs_serres)} match(s) serré(s) à examiner.")
+                analyser_marches_alternatifs(matchs_serres, date)
+            else:
+                logging.info("Marchés alt : aucun match serré aujourd'hui.")
+        except Exception as e:
+            logging.warning(f"Marchés alt : erreur non bloquante : {e}")
 
     # Bascule dynamique Sonnet → Opus selon richesse des données
     nb_matchs_analyse = len(json.loads(donnees_json).get("matchs", []))
