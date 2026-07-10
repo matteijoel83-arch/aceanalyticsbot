@@ -87,7 +87,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-MARCHES_ALT_MODE = "observation"   # ← passe à "observation" pour tester, puis "actif"
+MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
 ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
@@ -1773,7 +1773,21 @@ def oddspapi_fixtures_jour():
     exclus = len(fixtures) - len(vrais)
     if exclus:
         logging.info(f"OddsPapi : {exclus} match(s) SRL exclu(s), {len(vrais)} vrai(s).")
-    return vrais
+    # v7.3.1 : exclure les matchs terminés/en cours — plus de cotes pré-match
+    # disponibles, l'appel /fixtures/odds serait du quota gaspillé (constat
+    # run 10/07 : Coppejans "Finished" interrogé pour rien).
+    def _est_jouable(f):
+        st = str((f.get("status") or {}).get("statusName") or "")
+        if st in ("Finished", "Live", "In-Play", "Cancelled", "Postponed", "Retired"):
+            return False
+        if f.get("trueStartTime"):
+            return False  # le match a déjà commencé
+        return True
+    jouables = [f for f in vrais if _est_jouable(f)]
+    retires = len(vrais) - len(jouables)
+    if retires:
+        logging.info(f"OddsPapi : {retires} match(s) terminé(s)/en cours exclu(s), {len(jouables)} jouable(s).")
+    return jouables
 
 
 def oddspapi_trouver_fixture(joueur1, joueur2, fixtures):
