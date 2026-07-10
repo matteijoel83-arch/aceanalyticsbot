@@ -109,6 +109,8 @@ MARCHES_ALT_MISE      = 0.5    # mise fixe % (phase test — cote Winamax à vé
 # (cote du favori dans cette fourchette = match équilibré, incertain sur le vainqueur)
 MARCHES_ALT_COTE_MIN = 1.50
 MARCHES_ALT_COTE_MAX = 2.10
+# Plafond d'appels /fixtures/odds par run (économie quota — v7.3.2)
+MARCHES_ALT_MAX_APPELS = 4
 # Catégories de faux tennis à EXCLURE absolument (matchs simulés par ordinateur)
 CATEGORIES_INTERDITES = ("simulated reality", "srl")
 
@@ -1791,7 +1793,11 @@ def oddspapi_fixtures_jour():
 
 
 def oddspapi_trouver_fixture(joueur1, joueur2, fixtures):
-    """Trouve le fixtureId correspondant à un match (par noms, tolère les variantes)."""
+    """
+    Trouve le FIXTURE complet correspondant à un match (par noms, tolère les variantes).
+    v7.3.2 : retourne l'objet fixture entier (et plus seulement l'ID) pour
+    permettre de lire hasOdds/tournament AVANT d'appeler /fixtures/odds.
+    """
     meilleur, score_max = None, 0.0
     for f in fixtures:
         p = f.get("participants", {})
@@ -1800,7 +1806,7 @@ def oddspapi_trouver_fixture(joueur1, joueur2, fixtures):
         inverse = (_sim_noms(joueur1, n2) + _sim_noms(joueur2, n1)) / 2
         score = max(direct, inverse)
         if score > score_max:
-            score_max, meilleur = score, f.get("fixtureId")
+            score_max, meilleur = score, f
     return meilleur if score_max >= 0.7 else None
 
 
@@ -1930,10 +1936,15 @@ def analyser_marches_alternatifs(matchs_serres, date):
         return []
 
     tickets_alt = []
+    appels_cotes = 0
     for m in matchs_serres:
+        # PLAFOND (v7.3.2) : max MARCHES_ALT_MAX_APPELS appels /fixtures/odds par run
+        if appels_cotes >= MARCHES_ALT_MAX_APPELS:
+            logging.info(f"Marchés alt : plafond {MARCHES_ALT_MAX_APPELS} appels cotes atteint — matchs restants ignorés (économie quota).")
+            break
         j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
-        fid = oddspapi_trouver_fixture(j1, j2, fixtures)
-        if not fid:
+        fx = oddspapi_trouver_fixture(j1, j2, fixtures)
+        if not fx:
             if MARCHES_ALT_MODE == "observation":
                 proches = []
                 for f in fixtures[:400]:
@@ -1947,6 +1958,16 @@ def analyser_marches_alternatifs(matchs_serres, date):
                 top = proches[0] if proches else (0, "aucun")
                 logging.info(f"[OBS] Pas de correspondance pour '{j1} vs {j2}' — meilleur candidat OddsPapi : '{top[1]}' (score {top[0]:.2f})")
             continue
+        # FILTRE hasOdds (v7.3.2) : si le fixture annonce explicitement qu'il n'a
+        # PAS de cotes, inutile d'appeler /fixtures/odds (constat run 10/07 :
+        # 3 ITF interrogés pour rien). Clé absente → on tente quand même (prudence).
+        if fx.get("hasOdds") is False:
+            logging.info(f"Marchés alt : '{j1} vs {j2}' sans cotes annoncées (hasOdds=false) — appel cotes évité.")
+            continue
+        fid = fx.get("fixtureId")
+        if not fid:
+            continue
+        appels_cotes += 1
         cotes = oddspapi_cotes(fid)
         if not cotes:
             if MARCHES_ALT_MODE == "observation":
