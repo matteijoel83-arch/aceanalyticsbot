@@ -1812,10 +1812,22 @@ def oddspapi_cotes(fixture_id):
         logging.warning(f"OddsPapi cotes {fixture_id} : {e}")
         return {}
 
-    # MODE OBSERVATION : loguer le format brut pour validation
+    # MODE OBSERVATION : loguer la section utile (marchés Pinnacle), pas le début
+    # de la réponse (métadonnées) — le log tronqué à 1500 chars n'atteignait
+    # jamais les cotes (constat run du 10/07 : coupé avant "markets").
     if MARCHES_ALT_MODE == "observation":
-        apercu = json.dumps(data, ensure_ascii=False)[:1500]
-        logging.info(f"[OBS] Format réponse OddsPapi odds : {apercu}")
+        base = data[0] if isinstance(data, list) and data else data
+        section = {}
+        if isinstance(base, dict):
+            for cle_book in ("bookmakers", "bookmakerOdds", "odds"):
+                bloc = base.get(cle_book)
+                if isinstance(bloc, dict) and bloc:
+                    pin = bloc.get("pinnacle", bloc)
+                    section = pin.get("markets", pin) if isinstance(pin, dict) else pin
+                    if section:
+                        break
+        apercu = json.dumps(section or base, ensure_ascii=False)[:2500]
+        logging.info(f"[OBS] Marchés Pinnacle bruts : {apercu}")
 
     outcomes = _oddspapi_extraire_outcomes(data)
     res = {}
@@ -1853,12 +1865,29 @@ def oddspapi_cotes(fixture_id):
 
 
 def _oddspapi_extraire_outcomes(data):
-    """Normalise la réponse OddsPapi en liste d'outcomes (price + bookmakerOutcomeId)."""
+    """
+    Normalise la réponse OddsPapi en liste d'outcomes (price + bookmakerOutcomeId).
+    v7.3.1 : tolère les DEUX structures observées :
+      - price directement dans l'objet outcome
+      - price niché sous players."0".price (structure bookmakers.pinnacle.markets)
+    """
     out = []
+    def _prix(obj):
+        pr = obj.get("price")
+        if pr is None:
+            players = obj.get("players")
+            if isinstance(players, dict):
+                pr = (players.get("0") or {}).get("price")
+            elif isinstance(players, list) and players:
+                pr = (players[0] or {}).get("price")
+        return pr
     def _collecte(obj):
         if isinstance(obj, dict):
-            if "price" in obj and "bookmakerOutcomeId" in obj:
-                out.append(obj)
+            if "bookmakerOutcomeId" in obj:
+                pr = _prix(obj)
+                if pr is not None:
+                    out.append({"bookmakerOutcomeId": obj["bookmakerOutcomeId"],
+                                "price": pr})
             else:
                 for v in obj.values():
                     _collecte(v)
