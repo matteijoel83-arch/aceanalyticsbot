@@ -257,12 +257,25 @@ def enregistrer_resultat(victoire, index_pari=None):
         if isinstance(paris, list) and 1 <= index_pari <= len(paris):
             p = paris.pop(index_pari - 1)
             cle = "v" if victoire else "d"
+            # v7.4 : YIELD — profit en unités de mise (% de bankroll)
+            cote  = p.get("cote")
+            mise  = p.get("mise_pct")
+            profit = None
+            if cote and mise:
+                profit = round((cote - 1) * mise, 4) if victoire else round(-mise, 4)
+                roi = s.setdefault("roi", {"mise_totale": 0.0, "profit": 0.0})
+                roi["mise_totale"] = round(roi.get("mise_totale", 0.0) + mise, 4)
+                roi["profit"]      = round(roi.get("profit", 0.0) + profit, 4)
             for champ, section in [("marche", "par_marche"),
                                    ("niveau", "par_niveau"),
                                    ("modele", "par_modele")]:
                 val = p.get(champ)
                 if val and val in s.get(section, {}):
                     s[section][val][cle] += 1
+                    if profit is not None:
+                        seg = s[section][val]
+                        seg["mise"]   = round(seg.get("mise", 0.0) + mise, 4)
+                        seg["profit"] = round(seg.get("profit", 0.0) + profit, 4)
                 elif val:
                     logging.warning(f"Segment inconnu '{val}' dans {section} — ignoré.")
             resume = re.sub(r"<[^>]+>", "", p.get("pari", ""))[:80]
@@ -543,28 +556,41 @@ def charger_tournois_winamax():
 # Ce compteur trace la conso réelle par run et cumule sur le mois pour
 # éviter les 429 surprise. N'affecte PAS l'analyse ni la stratégie.
 
-_QUOTA_RUN = {"rapidapi": 0}  # compteur en mémoire pour ce run
+_QUOTA_RUN = {"tennisapi": 0, "oddspapi": 0}  # compteurs en mémoire pour ce run
 
-def _quota_inc(n=1):
-    """Incrémente le compteur de requêtes RapidAPI de ce run."""
-    _QUOTA_RUN["rapidapi"] += n
+def _quota_inc(api="tennisapi", n=1):
+    """Incrémente le compteur de requêtes de l'API donnée pour ce run."""
+    _QUOTA_RUN[api] = _QUOTA_RUN.get(api, 0) + n
 
 def _quota_persister():
-    """Cumule la conso du run dans quota_rapidapi.json (reset auto chaque mois)."""
-    if DRY_RUN or _QUOTA_RUN["rapidapi"] == 0:
+    """
+    Cumule la conso du run dans quota_rapidapi.json.
+    v7.4 : compteurs SÉPARÉS par API — leurs budgets sont distincts :
+      - tennisapi : 50 req/JOUR  (Tennis API ATP-WTA-ITF)
+      - oddspapi  : 1000 req/MOIS (OddsPapi)
+    Le compteur jour de tennisapi se reset chaque jour, les mois chaque mois.
+    """
+    if DRY_RUN or (_QUOTA_RUN["tennisapi"] == 0 and _QUOTA_RUN["oddspapi"] == 0):
         return
-    mois_actuel = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m")
+    now = datetime.now(ZoneInfo("Europe/Paris"))
+    mois_actuel = now.strftime("%Y-%m")
+    jour_actuel = now.strftime("%Y-%m-%d")
     data, sha = _gh_get("quota_rapidapi.json")
     if not isinstance(data, dict) or data.get("mois") != mois_actuel:
-        # Nouveau mois (ou première fois) → reset
-        data = {"mois": mois_actuel, "rapidapi_utilise": 0}
-        sha = sha  # garder le sha pour écraser l'ancien mois
-    data["rapidapi_utilise"] = data.get("rapidapi_utilise", 0) + _QUOTA_RUN["rapidapi"]
+        data = {"mois": mois_actuel, "tennisapi_mois": 0, "oddspapi_mois": 0,
+                "jour": jour_actuel, "tennisapi_jour": 0}
+    if data.get("jour") != jour_actuel:
+        data["jour"] = jour_actuel
+        data["tennisapi_jour"] = 0
+    data["tennisapi_mois"] = data.get("tennisapi_mois", 0) + _QUOTA_RUN["tennisapi"]
+    data["tennisapi_jour"] = data.get("tennisapi_jour", 0) + _QUOTA_RUN["tennisapi"]
+    data["oddspapi_mois"]  = data.get("oddspapi_mois", 0)  + _QUOTA_RUN["oddspapi"]
     try:
-        _gh_put("quota_rapidapi.json", data, "📊 Maj quota RapidAPI", sha=sha)
+        _gh_put("quota_rapidapi.json", data, "📊 Maj quotas API", sha=sha)
         logging.info(
-            f"Quota RapidAPI — {_QUOTA_RUN['rapidapi']} req ce run / "
-            f"{data['rapidapi_utilise']} cumulées en {mois_actuel}."
+            f"Quotas — TennisAPI : {_QUOTA_RUN['tennisapi']} ce run, "
+            f"{data['tennisapi_jour']}/50 aujourd'hui, {data['tennisapi_mois']} ce mois · "
+            f"OddsPapi : {_QUOTA_RUN['oddspapi']} ce run, {data['oddspapi_mois']}/1000 ce mois."
         )
     except Exception as e:
         logging.warning(f"Quota persist échoué : {e}")
@@ -657,7 +683,7 @@ def precollecte_rapidapi_tennis(date_fr):
         while True:
             try:
                 url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
-                _quota_inc()
+                _quota_inc("tennisapi")
                 r   = requests.get(url, headers=headers, timeout=10, params={
                     "include":  "tournament,round",
                     "filter":   "PlayerGroup:singles",
@@ -888,7 +914,7 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
 
     def _get(url, params=None):
         try:
-            _quota_inc()
+            _quota_inc("tennisapi")
             r = requests.get(url, headers=headers, params=params, timeout=8)
             r.raise_for_status()
             return r.json()
@@ -1243,7 +1269,9 @@ RÈGLES DE PRIORITÉ :
 - Pour les matchs sans stats complètes → inclure avec "non trouvé" dans les champs manquants
 - Ne jamais exclure un match à cause de données manquantes — Claude décidera
 - Si tu manques de requêtes, inclure le match avec les données partielles disponibles
-EXCLURE : qualifications, doubles. INCLURE : tableau principal uniquement.
+EXCLURE : qualifications (sauf Grand Chelem), doubles, et TOUS les tournois
+ITF/Futures (M15/M25/W15 à W100) — Winamax ne les propose pas et leurs stats
+sont introuvables. INCLURE : ATP, WTA, Challenger, Grand Chelem uniquement.
 
 FORMAT JSON STRICT :
 {{
@@ -1679,6 +1707,38 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+# Marqueurs des circuits ITF/Futures — Winamax ne les propose pas, et leurs
+# stats (Hold%, forme) sont introuvables → la règle anti-surestimation les
+# bloque de toute façon. Constat empirique runs du 10/07/2026.
+MARQUEURS_ITF = ("itf", "futures", "m15", "m25", "w15", "w25",
+                 "w35", "w50", "w75", "w100", "utr")
+
+def filtrer_json_itf(donnees_json):
+    """
+    Filtre ITF (v7.4) : retire les matchs ITF/Futures du pipeline.
+    On ne garde que ATP / WTA / Challenger / Grand Chelem (+ qualifs GC).
+    Économie : moins de tokens Gemini/Claude sur des matchs injouables.
+    """
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+    motif = re.compile(r"\b(" + "|".join(MARQUEURS_ITF) + r")\b")
+
+    def _est_itf(m):
+        return bool(motif.search(str(m.get("tournoi", "")).lower()))
+
+    gardes  = [m for m in matchs if not _est_itf(m)]
+    retires = len(matchs) - len(gardes)
+    if retires:
+        logging.info(f"Filtre ITF : {retires} match(s) ITF/Futures retiré(s), {len(gardes)} gardé(s).")
+    data["matchs"] = gardes
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def filtrer_json_sans_cote(donnees_json):
     """
     Filtre COTES (v7.3) : retire les matchs SANS cote réelle exploitable.
@@ -1757,10 +1817,15 @@ def _sim_noms(a, b):
     return score
 
 
-def oddspapi_fixtures_jour():
-    """Récupère les vrais matchs tennis du jour (SRL exclu). [] si erreur."""
+def oddspapi_fixtures_jour(exclure_termines=True):
+    """
+    Récupère les vrais matchs tennis du jour (SRL exclu). [] si erreur.
+    exclure_termines=True (défaut) : filtre les matchs finis/en cours (pipeline paris).
+    exclure_termines=False : garde tout, y compris les terminés (commande 'regler'
+    qui a justement besoin des scores finaux).
+    """
     try:
-        _quota_inc()  # v7.2 : compter cet appel dans le quota RapidAPI
+        _quota_inc("oddspapi")  # budget séparé : 1000 req/mois
         r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/today",
                          headers=_oddspapi_headers(), params={"sportId": 12}, timeout=15)
         r.raise_for_status()
@@ -1785,6 +1850,8 @@ def oddspapi_fixtures_jour():
         if f.get("trueStartTime"):
             return False  # le match a déjà commencé
         return True
+    if not exclure_termines:
+        return vrais  # commande 'regler' : les terminés sont précisément ce qu'on veut
     jouables = [f for f in vrais if _est_jouable(f)]
     retires = len(vrais) - len(jouables)
     if retires:
@@ -1821,7 +1888,7 @@ def oddspapi_cotes(fixture_id):
     la mainLine (10.5 remontait à tort comme ligne principale).
     """
     try:
-        _quota_inc()  # v7.2 : compter cet appel dans le quota RapidAPI
+        _quota_inc("oddspapi")  # budget séparé : 1000 req/mois
         r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/odds",
                          headers=_oddspapi_headers(),
                          params={"fixtureId": fixture_id, "bookmakers": ODDSPAPI_BOOKMAKER},
@@ -1860,6 +1927,13 @@ def oddspapi_cotes(fixture_id):
         try:
             price = float(price)
         except (TypeError, ValueError):
+            continue
+        # Moneyline Pinnacle (CLV) : outcomes "home"/"away" du marché vainqueur
+        if bo == "home":
+            res.setdefault("moneyline", {})["home"] = price
+            continue
+        if bo == "away":
+            res.setdefault("moneyline", {})["away"] = price
             continue
         m = re.match(r"(\d+(?:\.\d+)?)/(over|under)", bo)
         if not m:
@@ -1918,7 +1992,45 @@ def _oddspapi_extraire_outcomes(data):
     return out
 
 
-def analyser_marches_alternatifs(matchs_serres, date):
+def corriger_heures_avec_oddspapi(donnees_json, fixtures):
+    """
+    v7.4 : écrase l'heure Gemini par le startTime OddsPapi (epoch, déterministe)
+    pour tout match apparié. Constat run 10/07 : Gemini annonçait Coppejans à
+    19:00 alors que le trueStartTime réel était 16:02 FR. L'epoch OddsPapi est
+    fiable, l'heure Gemini non. Coût : 0 requête (fixtures déjà récupérés).
+    """
+    if not fixtures:
+        return donnees_json
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    corriges = 0
+    for m in data.get("matchs", []):
+        fx = oddspapi_trouver_fixture(m.get("joueur1", ""), m.get("joueur2", ""), fixtures)
+        if not fx:
+            continue
+        start = fx.get("startTime")
+        if not start:
+            continue
+        try:
+            h_fr = datetime.fromtimestamp(int(start), timezone.utc) \
+                .astimezone(ZoneInfo("Europe/Paris")).strftime("%H:%M")
+        except Exception:
+            continue
+        if m.get("heure_match") != h_fr:
+            logging.info(
+                f"Heure corrigée (OddsPapi) : {m.get('joueur1')} vs {m.get('joueur2')} "
+                f"{m.get('heure_match')} → {h_fr}"
+            )
+            m["heure_match"] = h_fr
+            corriges += 1
+    if corriges:
+        logging.info(f"Heures autoritaires OddsPapi : {corriges} match(s) corrigé(s).")
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
     """
     Pour chaque match serré, récupère les cotes sets/jeux Pinnacle et (si mode actif)
     les prépare pour être injectées dans le prompt de Claude.
@@ -1930,7 +2042,8 @@ def analyser_marches_alternatifs(matchs_serres, date):
         logging.info("Marchés alt : pas de clé RapidAPI, skip.")
         return []
 
-    fixtures = oddspapi_fixtures_jour()
+    if fixtures is None:
+        fixtures = oddspapi_fixtures_jour()
     if not fixtures:
         logging.info("Marchés alt : aucun fixture OddsPapi disponible.")
         return []
@@ -2049,6 +2162,15 @@ Tu dois évaluer le Moneyline ET les marchés alternatifs (Sets/Jeux) de manièr
 2. Écart de forme majeur récent entre les deux joueurs (l'un surperforme, l'autre sous-performe).
 3. L'un des joueurs possède un très faible Hold% au service, ce qui permet à l'autre de breaker et de conclure rapidement.
 
+🎾 RÈGLE D'ARBITRAGE MONEYLINE vs MARCHÉ ALTERNATIF (PRIORITAIRE) :
+• Le marché alternatif est une OPTION supplémentaire, JAMAIS un remplacement systématique du Moneyline.
+• Évalue TOUJOURS les deux indépendamment. UN SEUL ticket par match, jamais les deux.
+• Si les DEUX présentent de la value → priorité au MONEYLINE (marché principal, cote Winamax
+  directe, pas de vérification manuelle nécessaire), SAUF si l'edge du marché alternatif est
+  NETTEMENT supérieur : au moins 3 points de % d'edge de plus que le Moneyline.
+• Si seul le Moneyline a de la value → joue le Moneyline. Si seul l'alternatif → joue l'alternatif.
+• Si aucun des deux → abandon du match, comme d'habitude.
+
 🎯 RÈGLE DE SÉLECTION :
 - Calcule ton estimation de probabilité d'aller en 3 sets (Over 2.5) et compare-la à la probabilité du marché Pinnacle (1 / cote).
 - Si la Value est sur le Moneyline, propose le Moneyline.
@@ -2100,6 +2222,8 @@ def run_bot_autonome():
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
     # Filtre COTES (v7.3) : matchs sans cote = injouables → retirés avant Claude
     donnees_json = filtrer_json_sans_cote(donnees_json)
+    # Filtre ITF (v7.4) : retirer les ITF/Futures (stats introuvables, injouables)
+    donnees_json = filtrer_json_itf(donnees_json)
 
     # RELAIS GEMINI CALENDRIER : si après filtrage il ne reste AUCUN match jouable,
     # cela ne veut PAS dire qu'il n'y a rien à jouer — les API peuvent avoir remonté
@@ -2119,6 +2243,7 @@ def run_bot_autonome():
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
         donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
         donnees_json = filtrer_json_sans_cote(donnees_json)
+        donnees_json = filtrer_json_itf(donnees_json)
 
     try:
         donnees = json.loads(donnees_json)
@@ -2131,6 +2256,16 @@ def run_bot_autonome():
             return
     except Exception:
         pass
+
+    # ----- FIXTURES ODDSPAPI (1 seul appel, réutilisé pour heures + marchés alt)
+    fixtures_oddspapi = []
+    if MARCHES_ALT_MODE != "off" and RAPIDAPI_KEY:
+        fixtures_oddspapi = oddspapi_fixtures_jour()
+        if fixtures_oddspapi:
+            # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini
+            donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
+            # Re-filtrer par fenêtre : une heure corrigée peut sortir de la session
+            donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
 
     prompt = construire_prompt_claude(date, heure, donnees_json, heure_fin)
 
@@ -2150,6 +2285,7 @@ def run_bot_autonome():
         logging.warning(f"DEBUG log matchs : {e}")
 
     # ----- MARCHÉS ALTERNATIFS (sets / jeux) — actif seulement si MARCHES_ALT_MODE != "off"
+    tickets_alt_data = []
     if MARCHES_ALT_MODE != "off":
         try:
             matchs_all = json.loads(donnees_json).get("matchs", [])
@@ -2169,7 +2305,7 @@ def run_bot_autonome():
                     matchs_serres.append(m)
             if matchs_serres:
                 logging.info(f"Marchés alt ({MARCHES_ALT_MODE}) : {len(matchs_serres)} match(s) serré(s) à examiner.")
-                tickets_alt_data = analyser_marches_alternatifs(matchs_serres, date)
+                tickets_alt_data = analyser_marches_alternatifs(matchs_serres, date, fixtures_oddspapi)
 
                 # Injection des instructions si mode actif et cotes trouvées
                 if MARCHES_ALT_MODE == "actif" and tickets_alt_data:
@@ -2367,13 +2503,29 @@ def run_bot_autonome():
                     if idx != -1 and not ticket_propre.startswith(marqueur):
                         ticket_propre = ticket_propre[idx:]
                         break
-                sauvegarder_pari_pour_suivi({
+                pari_rec = {
                     "pari":   ticket_propre,
                     "date":   date,
                     "marche": _detecter_marche(ticket_propre),
                     "niveau": _detecter_niveau(ticket_propre),
                     "modele": "opus" if modele_choisi == CLAUDE_OPUS else "sonnet",
-                })
+                }
+                # v7.4 : cote et mise pour le calcul de YIELD (profit/mises)
+                tpl = ticket_propre.lower()
+                mcote = re.search(r"cote\s*:?\s*(?:</b>)?\s*(\d+[.,]\d+)", tpl)
+                mmise = re.search(r"mise\s*:?\s*(?:</b>)?\s*(\d+(?:[.,]\d+)?)\s*%", tpl)
+                if mcote:
+                    pari_rec["cote"] = float(mcote.group(1).replace(",", "."))
+                if mmise:
+                    pari_rec["mise_pct"] = float(mmise.group(1).replace(",", "."))
+                # v7.4 : CLV — joindre la moneyline Pinnacle du moment si dispo
+                for dm in tickets_alt_data:
+                    if dm["j1"].lower() in tpl or dm["j2"].lower() in tpl:
+                        ml = dm.get("cotes", {}).get("moneyline")
+                        if ml:
+                            pari_rec["pinnacle_ml_ouverture"] = ml
+                        break
+                sauvegarder_pari_pour_suivi(pari_rec)
                 hashes_connus.add(h)
                 nouveaux_hashes.append(h)
                 paris_envoyes += 1
@@ -2398,6 +2550,85 @@ def run_bot_autonome():
 # 13. POINT D'ENTRÉE CLI
 # =====================================================================
 
+def regler_paris_interactif():
+    """
+    Règlement SEMI-AUTOMATIQUE des paris en cours (v7.4) :
+    1. Charge la file pari_en_cours.json
+    2. Récupère les matchs du jour OddsPapi AVEC les terminés (1 requête)
+    3. Pour chaque pari : apparie le match, affiche le score final et le vainqueur
+    4. TOI tu confirmes v/d (ou s pour passer) — le bot ne décide JAMAIS seul
+       si le pari est gagné (un score ne suffit pas pour juger un écart de jeux
+       ou un over/under sans risque d'erreur).
+    Limite assumée : OddsPapi ne couvre que les matchs DU JOUR → lancer 'regler'
+    le soir même. Les paris plus anciens restent réglables via 'resultat v/d N'.
+    """
+    paris, _ = _gh_get("pari_en_cours.json")
+    if not paris:
+        print("File vide — aucun pari à régler.")
+        return
+    if not RAPIDAPI_KEY:
+        print("RAPIDAPI_KEY absente — impossible de récupérer les scores.")
+        return
+
+    fixtures = oddspapi_fixtures_jour(exclure_termines=False)
+    if not fixtures:
+        print("OddsPapi indisponible — réessaie plus tard ou utilise 'resultat v/d N'.")
+        return
+
+    def _extraire_joueurs(p):
+        txt = re.sub(r"<[^>]+>", "", p.get("pari", ""))
+        m = re.search(r"matchs?\s*:?\s*(.+?)\s+vs\s+(.+)", txt, re.IGNORECASE)
+        if not m:
+            return None, None
+        return m.group(1).strip()[:40], m.group(2).strip().split("\n")[0][:40]
+
+    # Parcourir en ordre INVERSE : enregistrer_resultat retire le pari de la
+    # file par index — en remontant, les index des paris restants ne bougent pas.
+    for idx in range(len(paris), 0, -1):
+        p = paris[idx - 1]
+        j1, j2 = _extraire_joueurs(p)
+        resume = re.sub(r"<[^>]+>", "", p.get("pari", "")).replace("\n", " ")[:90]
+        print(f"\n[{idx}] {p.get('date','?')} | {resume}")
+        if not j1 or not j2:
+            print("   ⚠️ Joueurs non identifiables dans le ticket — passe (règle via 'resultat v/d N').")
+            continue
+        fx = oddspapi_trouver_fixture(j1, j2, fixtures)
+        if not fx:
+            print(f"   ⚠️ Match '{j1} vs {j2}' introuvable chez OddsPapi (autre jour ?) — passé.")
+            continue
+        statut = str((fx.get("status") or {}).get("statusName") or "?")
+        scores = fx.get("scores", {}) or {}
+        resultat = scores.get("result", {})
+        if statut != "Finished" or not resultat:
+            print(f"   ⏳ Match pas terminé (statut : {statut}) — passé.")
+            continue
+        pn = fx.get("participants", {})
+        n1 = pn.get("participant1Name", "?")
+        n2 = pn.get("participant2Name", "?")
+        s1 = resultat.get("participant1Score", "?")
+        s2 = resultat.get("participant2Score", "?")
+        sets_detail = []
+        for per in ("p1", "p2", "p3"):
+            sd = scores.get(per)
+            if sd:
+                sets_detail.append(f"{sd.get('participant1Score','?')}-{sd.get('participant2Score','?')}")
+        vainqueur = n1 if str(s1) > str(s2) else n2
+        print(f"   🏁 Score final : {n1} {s1}-{s2} {n2} ({', '.join(sets_detail)}) — Vainqueur : {vainqueur}")
+        try:
+            rep_u = input("   → Ton pari : [v]ictoire / [d]éfaite / [s]auter ? ").strip().lower()
+        except EOFError:
+            print("   Mode non interactif — utilise 'resultat v/d N'.")
+            return
+        if rep_u in ("v", "victoire", "1"):
+            enregistrer_resultat(True, index_pari=idx)
+        elif rep_u in ("d", "defaite", "0"):
+            enregistrer_resultat(False, index_pari=idx)
+        else:
+            print("   Passé.")
+    _quota_persister()
+    print("\n✅ Règlement terminé.")
+
+
 def envoyer_recap_hebdo():
     """
     Envoie un bilan de performance sur Telegram (à déclencher 1×/semaine via cron).
@@ -2414,6 +2645,15 @@ def envoyer_recap_hebdo():
         f"📈 <b>Win Rate global : {wr:.1f}%</b> ({total} paris)",
     ]
 
+    # v7.4 : YIELD global (la vraie métrique de rentabilité, pas le win rate)
+    roi = s.get("roi", {})
+    if roi.get("mise_totale"):
+        y = roi["profit"] / roi["mise_totale"] * 100
+        lignes.append(
+            f"💶 <b>Profit : {roi['profit']:+.2f}u</b> sur {roi['mise_totale']:.2f}u misées "
+            f"— <b>Yield {y:+.1f}%</b>"
+        )
+
     # Détail par marché (si v2 disponible)
     par_marche = s.get("par_marche", {})
     if par_marche:
@@ -2422,7 +2662,10 @@ def envoyer_recap_hebdo():
             v, d = vd.get("v", 0), vd.get("d", 0)
             if v + d > 0:
                 wr_m = v / (v + d) * 100
-                détails.append(f"  • {marche} : {v}V/{d}D ({wr_m:.0f}%)")
+                extra = ""
+                if vd.get("mise"):
+                    extra = f" · yield {vd.get('profit', 0) / vd['mise'] * 100:+.0f}%"
+                détails.append(f"  • {marche} : {v}V/{d}D ({wr_m:.0f}%){extra}")
         if détails:
             lignes.append("\n🎯 <b>Par marché :</b>")
             lignes.extend(détails)
@@ -2435,7 +2678,10 @@ def envoyer_recap_hebdo():
             v, d = vd.get("v", 0), vd.get("d", 0)
             if v + d > 0:
                 wr_n = v / (v + d) * 100
-                détails_n.append(f"  • {niveau} : {v}V/{d}D ({wr_n:.0f}%)")
+                extra = ""
+                if vd.get("mise"):
+                    extra = f" · yield {vd.get('profit', 0) / vd['mise'] * 100:+.0f}%"
+                détails_n.append(f"  • {niveau} : {v}V/{d}D ({wr_n:.0f}%){extra}")
         if détails_n:
             lignes.append("\n🛡 <b>Par confiance :</b>")
             lignes.extend(détails_n)
@@ -2457,8 +2703,10 @@ def envoyer_recap_hebdo():
     quota, _ = _gh_get("quota_rapidapi.json")
     if isinstance(quota, dict):
         lignes.append(
-            f"\n⚙️ Quota RapidAPI {quota.get('mois','?')} : "
-            f"{quota.get('rapidapi_utilise', 0)} requêtes utilisées."
+            f"\n⚙️ Quotas {quota.get('mois','?')} — "
+            f"TennisAPI : {quota.get('tennisapi_mois', quota.get('rapidapi_utilise', 0))} req/mois "
+            f"({quota.get('tennisapi_jour', '?')}/50 aujourd'hui) · "
+            f"OddsPapi : {quota.get('oddspapi_mois', 0)}/1000."
         )
 
     # Note de calibration : combien de paris avant validation
@@ -2492,6 +2740,9 @@ if __name__ == "__main__":
     elif args[0] == "file":
         # Liste la file des paris en cours avec leurs numéros
         lister_file_paris()
+    elif args[0] == "regler":
+        # Règlement semi-auto : scores OddsPapi + confirmation manuelle v/d
+        regler_paris_interactif()
     elif args[0] == "resultat" and len(args) in (2, 3):
         # resultat v          → victoire, stats globales seulement
         # resultat v 2        → victoire du pari n°2 de la file
