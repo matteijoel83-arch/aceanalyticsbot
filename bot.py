@@ -1,10 +1,12 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.2                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.3                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
 ║                                                                      ║
-║  v7.2 — corrections :                                                ║
+║  v7.3 — corrections (inclut v7.2) :                                  ║
+║   • Filtre COTES : matchs sans cote retirés AVANT Claude             ║
+║     (moins de tokens, Opus déclenché sur les seuls matchs jouables)  ║
 ║   • CLAUDE_OPUS → claude-opus-4-8 (l'ancien string plantait)         ║
 ║   • Historique dédup : ordre chronologique garanti                   ║
 ║   • Stats segmentées enfin alimentées (resultat v/d [n°] + file)     ║
@@ -1675,6 +1677,41 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def filtrer_json_sans_cote(donnees_json):
+    """
+    Filtre COTES (v7.3) : retire les matchs SANS cote réelle exploitable.
+    Un match sans cote est mathématiquement injouable (pas de delta calculable,
+    pas de pari possible sur Winamax) — Claude les skippait déjà un par un.
+    Les retirer ICI évite de gonfler le prompt (tokens gaspillés) et surtout
+    de déclencher Opus à tort (ex: 20 matchs comptés dont 17 ITF sans cote).
+    ⚠️ NE retire PAS les matchs aux stats partielles (Hold%, H2H, forme
+    manquants) : ceux-là restent analysés et classés ÉLEVÉE/MODÉRÉE/BASSE.
+    Seule l'ABSENCE DE COTE élimine un match.
+    """
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    def _cote_ok(v):
+        # Cote valide = convertible en nombre > 1.0 (écarte None, "", "non trouvé", 0)
+        try:
+            return float(v) > 1.0
+        except (TypeError, ValueError):
+            return False
+
+    gardes = [m for m in matchs
+              if _cote_ok(m.get("cote_j1")) and _cote_ok(m.get("cote_j2"))]
+    retires = len(matchs) - len(gardes)
+    if retires:
+        logging.info(f"Filtre COTES : {retires} match(s) sans cote retiré(s), {len(gardes)} gardé(s).")
+    data["matchs"] = gardes
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 # ============================================================
 # MARCHÉS ALTERNATIFS — récupération cotes OddsPapi/Pinnacle
 # (Total Sets O/U 2.5 + Total Games O/U). Protégé par MARCHES_ALT_MODE.
@@ -1997,6 +2034,8 @@ def run_bot_autonome():
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+    # Filtre COTES (v7.3) : matchs sans cote = injouables → retirés avant Claude
+    donnees_json = filtrer_json_sans_cote(donnees_json)
 
     # RELAIS GEMINI CALENDRIER : si après filtrage il ne reste AUCUN match jouable,
     # cela ne veut PAS dire qu'il n'y a rien à jouer — les API peuvent avoir remonté
@@ -2015,6 +2054,7 @@ def run_bot_autonome():
         # Appel SANS calendrier injecté → déclenche la mission spéciale (recherche web)
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
         donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+        donnees_json = filtrer_json_sans_cote(donnees_json)
 
     try:
         donnees = json.loads(donnees_json)
