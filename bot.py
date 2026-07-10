@@ -1,8 +1,19 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.1                      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.2                      ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
+║                                                                      ║
+║  v7.2 — corrections :                                                ║
+║   • CLAUDE_OPUS → claude-opus-4-8 (l'ancien string plantait)         ║
+║   • Historique dédup : ordre chronologique garanti                   ║
+║   • Stats segmentées enfin alimentées (resultat v/d [n°] + file)     ║
+║   • Quota RapidAPI compté sur les appels marchés alternatifs         ║
+║   • PATCH B : Total Games = lignes de MATCH (18.5-26.5), plus 10.5   ║
+║   • Prompt : 🔴 → 🎾 harmonisé, seuil delta adaptatif partout        ║
+║   • Fusion calendrier : correspondance sur LES DEUX joueurs          ║
+║     + inversion des cotes si l'ordre des joueurs diffère             ║
+║   • Garde Gemini rep.text vide · code mort SportAPI7/OddsPapi retiré ║
 ║                                                                      ║
 ║  Secrets GitHub requis :                                             ║
 ║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
@@ -62,8 +73,7 @@ claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 3 matchs
-CLAUDE_OPUS    = "claude-opus-4-6"     # Sessions riches ≥ 3 matchs
-CLAUDE_MODEL   = CLAUDE_SONNET         # Défaut — sera remplacé dynamiquement
+CLAUDE_OPUS    = "claude-opus-4-8"     # Sessions riches ≥ 3 matchs (CORRIGÉ v7.2)
 GEMINI_MODEL   = "gemini-3.5-flash"   # Dernière version stable — meilleur que 2.5 Pro
 SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opus
 
@@ -80,6 +90,19 @@ MARCHES_ALT_MODE = "observation"   # ← passe à "observation" pour tester, pui
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
 ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
 MARKET_TOTAL_SETS_LIGNE = 2.5                 # Over 2.5 sets = "va au 3e set"
+# PATCH B — Total Games : ne garder que les lignes de MATCH complet.
+# Les totaux d'UN SEUL set (9.5-12.5) polluaient via la mainLine (10.5).
+MARCHES_ALT_GAMES_MIN   = 18.5
+MARCHES_ALT_GAMES_MAX   = 26.5
+MARCHES_ALT_GAMES_CIBLE = 22.5   # ligne principale de match la plus courante
+# Value contre Pinnacle (sharp) : BANDE d'edge acceptable + plafonds prudents.
+#   edge = proba estimée par Claude − proba implicite Pinnacle
+#   - sous MARGE_MIN : pas assez de value pour parier contre un book sharp
+#   - au-dessus d'ECART_MAX : Claude diverge trop → c'est probablement LUI qui a tort
+MARCHES_ALT_MARGE_MIN = 0.06
+MARCHES_ALT_ECART_MAX = 0.15
+MARCHES_ALT_PROBA_MAX = 0.65   # plafond proba estimée (anti-surconfiance marché dérivé)
+MARCHES_ALT_MISE      = 0.5    # mise fixe % (phase test — cote Winamax à vérifier à la main)
 # Déclencheur : on ne regarde les marchés alt que sur les matchs "serrés"
 # (cote du favori dans cette fourchette = match équilibré, incertain sur le vainqueur)
 MARCHES_ALT_COTE_MIN = 1.50
@@ -195,6 +218,8 @@ def _migrer_stats(s):
             s["par_marche"] = dict(STATS_DEFAUT["par_marche"])
         if "par_niveau" not in s:
             s["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
+    if "par_modele" not in s:
+        s["par_modele"] = dict(STATS_DEFAUT["par_modele"])
     return s
 
 
@@ -210,25 +235,60 @@ def calculer_winrate(s):
     return (s["victoires"] / total * 100) if total > 0 else 0.0
 
 
-def enregistrer_resultat(victoire, pari_termine=None):
+def enregistrer_resultat(victoire, index_pari=None):
+    """
+    Enregistre une victoire/défaite.
+    index_pari : position (1-based) du pari dans pari_en_cours.json (cf. commande 'file').
+    Si fourni → met à jour les stats segmentées (marché/niveau/modèle)
+    et retire le pari de la file. Sinon → stats globales uniquement (comme avant).
+    """
     s, sha = _gh_get("stats.json")
     if not isinstance(s, dict) or "victoires" not in s:
         s = dict(STATS_DEFAUT)
-    s["victoires" if victoire else "defaites"] += 1
     s = _migrer_stats(s)
+    s["victoires" if victoire else "defaites"] += 1
+
+    if index_pari is not None:
+        paris, psha = _gh_get("pari_en_cours.json")
+        if isinstance(paris, list) and 1 <= index_pari <= len(paris):
+            p = paris.pop(index_pari - 1)
+            cle = "v" if victoire else "d"
+            for champ, section in [("marche", "par_marche"),
+                                   ("niveau", "par_niveau"),
+                                   ("modele", "par_modele")]:
+                val = p.get(champ)
+                if val and val in s.get(section, {}):
+                    s[section][val][cle] += 1
+                elif val:
+                    logging.warning(f"Segment inconnu '{val}' dans {section} — ignoré.")
+            resume = re.sub(r"<[^>]+>", "", p.get("pari", ""))[:80]
+            logging.info(f"Pari réglé [{index_pari}] : {resume}")
+            if not DRY_RUN:
+                if paris:
+                    _gh_put("pari_en_cours.json", paris, "🧹 Pari réglé", sha=psha)
+                elif psha:
+                    _gh_delete("pari_en_cours.json", "🗑️ File vide", sha=psha)
+        else:
+            logging.warning(f"Index pari {index_pari} introuvable dans la file — stats globales seulement.")
+
     if DRY_RUN:
         logging.info(f"[DRY-RUN] Stats : {s}")
     else:
         _gh_put("stats.json", s, "🔄 Maj stats", sha=sha)
-    if pari_termine and not DRY_RUN:
-        paris, psha = _gh_get("pari_en_cours.json")
-        if isinstance(paris, list):
-            restants = [p for p in paris if p.get("pari") != pari_termine]
-            if restants:
-                _gh_put("pari_en_cours.json", restants, "🧹 Nettoyage", sha=psha)
-            elif psha:
-                _gh_delete("pari_en_cours.json", "🗑️ File vide", sha=psha)
     logging.info(f"{'✅ VICTOIRE' if victoire else '❌ DÉFAITE'} — {s['victoires']}V / {s['defaites']}D")
+
+
+def lister_file_paris():
+    """Affiche la file des paris en cours avec leur numéro (pour 'resultat v/d N')."""
+    paris, _ = _gh_get("pari_en_cours.json")
+    if not paris:
+        print("File vide — aucun pari en cours.")
+        return
+    for i, p in enumerate(paris, 1):
+        txt = re.sub(r"<[^>]+>", "", p.get("pari", "")).replace("\n", " ")[:90]
+        print(f"[{i}] {p.get('date','?')} | {p.get('marche','?')} | "
+              f"{p.get('niveau','?')} | {p.get('modele','?')} | {txt}")
+
 
 def _detecter_marche(ticket_texte):
     """Détecte le type de marché depuis le texte du ticket (noms Winamax)."""
@@ -474,8 +534,8 @@ def charger_tournois_winamax():
 # =====================================================================
 # 6A-BIS. COMPTEUR DE QUOTA RAPIDAPI
 # =====================================================================
-# Toutes les sources tennis complémentaires (RapidAPI Tennis, SportAPI7,
-# OddsPapi) partagent la MÊME clé RAPIDAPI_KEY = le même quota mensuel.
+# Toutes les sources tennis complémentaires (RapidAPI Tennis, OddsPapi)
+# partagent la MÊME clé RAPIDAPI_KEY = le même quota mensuel.
 # Ce compteur trace la conso réelle par run et cumule sur le mois pour
 # éviter les 429 surprise. N'affecte PAS l'analyse ni la stratégie.
 
@@ -504,307 +564,6 @@ def _quota_persister():
         )
     except Exception as e:
         logging.warning(f"Quota persist échoué : {e}")
-
-# =====================================================================
-# 6B. MODULE SPORTAPI7 — DONNÉES COMPLÉMENTAIRES TENNIS
-# =====================================================================
-
-SPORTAPI7_HOST = "sportapi7.p.rapidapi.com"
-SPORTAPI7_BASE = "https://sportapi7.p.rapidapi.com/api/v1"
-
-def _sportapi7_get(endpoint, params=None, retries=2):
-    """Requête SportAPI7 avec retry rapide sur 429 (délais courts)."""
-    if not RAPIDAPI_KEY:
-        return None
-    for tentative in range(1, retries + 1):
-        try:
-            _quota_inc()
-            r = requests.get(
-                f"{SPORTAPI7_BASE}/{endpoint}",
-                headers={
-                    "x-rapidapi-key":  RAPIDAPI_KEY,
-                    "x-rapidapi-host": SPORTAPI7_HOST,
-                },
-                params=params,
-                timeout=8,
-            )
-            if r.status_code == 429:
-                if tentative < retries:
-                    time.sleep(3)  # Délai court — pas de blocage 5 min
-                    continue
-                return None
-            if r.status_code == 404:
-                return None
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.HTTPError as e:
-            if "429" in str(e):
-                if tentative < retries:
-                    time.sleep(3)
-                    continue
-                return None
-            return None
-        except Exception:
-            return None
-    return None
-
-
-def enrichir_sportapi7_tennis(rapid_matchs: list) -> list:
-    """
-    Enrichit les matchs tennis avec SportAPI7 en complément de RapidAPI Tennis.
-    Endpoints : /sport/tennis/scheduled-events/{date} + /event/{id}/odds/1/all
-    Utilise la même clé RAPIDAPI_KEY — pas de quota supplémentaire.
-    """
-    if not RAPIDAPI_KEY or not rapid_matchs:
-        return rapid_matchs
-
-    date_today = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
-
-    try:
-        # Récupérer tous les matchs tennis du jour — retry si 429
-        data = None
-        # Un seul appel — _sportapi7_get gère déjà les retries 429 en interne
-        data = _sportapi7_get(f"sport/tennis/scheduled-events/{date_today}")
-
-        if not data:
-            logging.info("SportAPI7 Tennis — indisponible (429/quota), on continue sans.")
-            return rapid_matchs
-
-        events   = data.get("events", [])
-        enrichis = 0
-        logging.info(f"SportAPI7 Tennis — {len(events)} événement(s) disponible(s).")
-
-        # Index par noms de joueurs
-        sportapi7_index = {}
-        for ev in events:
-            home = ev.get("homeTeam", {}).get("name", "").lower()
-            away = ev.get("awayTeam", {}).get("name", "").lower()
-            if home and away:
-                sportapi7_index[f"{home}|{away}"] = ev
-
-        for m in rapid_matchs:
-            j1  = m.get("joueur1", "").lower()
-            j2  = m.get("joueur2", "").lower()
-            ev  = sportapi7_index.get(f"{j1}|{j2}") or sportapi7_index.get(f"{j2}|{j1}")
-
-            # Recherche partielle par nom de famille
-            if not ev:
-                for k, v in sportapi7_index.items():
-                    k1, k2 = k.split("|")
-                    nom1 = j1.split()[-1] if j1 else ""
-                    nom2 = j2.split()[-1] if j2 else ""
-                    if nom1 and nom2 and nom1 in k1 and nom2 in k2:
-                        ev = v
-                        break
-
-            if ev:
-                event_id = ev.get("id")
-
-                # Tournoi confirmé
-                tournament = ev.get("tournament", {})
-                if tournament:
-                    m["tournoi_sportapi7"] = tournament.get("name", "")
-
-                # Cotes via SportAPI7 — avec gestion 404/429
-                if event_id:
-                    try:
-                        odds_data = _sportapi7_get(f"event/{event_id}/odds/1/all")
-                        if odds_data:
-                            markets = odds_data.get("markets", [])
-                            for market in markets:
-                                if market.get("marketName", "").lower() in ["winner", "match winner"]:
-                                    choices = market.get("choices", [])
-                                    for c in choices:
-                                        if c.get("name", "").lower() in ["1", "home"]:
-                                            m["sportapi7_cote_j1"] = c.get("fractionalValue") or c.get("initialFractionalValue")
-                                        elif c.get("name", "").lower() in ["2", "away"]:
-                                            m["sportapi7_cote_j2"] = c.get("fractionalValue") or c.get("initialFractionalValue")
-                        time.sleep(0.5)  # Éviter le 429
-                    except Exception:
-                        pass  # 404/429 → ignorer silencieusement
-
-                m["sportapi7_id"] = event_id
-                enrichis += 1
-
-        logging.info(f"SportAPI7 Tennis — {enrichis} match(s) enrichi(s).")
-
-    except Exception as e:
-        logging.warning(f"SportAPI7 Tennis erreur : {e}")
-
-    return rapid_matchs
-
-# =====================================================================
-# 6C. MODULE ODDSPAPI — COTES COMPLÉMENTAIRES TENNIS
-# =====================================================================
-
-ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"
-ODDSPAPI_BASE = "https://odds-api1.p.rapidapi.com"
-
-def _oddspapi_get(endpoint, params=None, retries=2):
-    """Requête OddsPapi avec la clé RapidAPI existante."""
-    if not RAPIDAPI_KEY:
-        return None
-    for tentative in range(1, retries + 1):
-        try:
-            _quota_inc()
-            r = requests.get(
-                f"{ODDSPAPI_BASE}/{endpoint}",
-                headers={
-                    "x-rapidapi-key":  RAPIDAPI_KEY,
-                    "x-rapidapi-host": ODDSPAPI_HOST,
-                },
-                params=params,
-                timeout=8,
-            )
-            if r.status_code == 429:
-                time.sleep(tentative * 5)
-                continue
-            if r.status_code == 404:
-                return None
-            if r.status_code == 400:
-                # Logger le corps de l'erreur pour comprendre ce que l'API attend
-                logging.warning(f"OddsPapi {endpoint} 400 — réponse: {r.text[:200]}")
-                return None
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            logging.warning(f"OddsPapi {endpoint} : {e}")
-            return None
-    return None
-
-
-def enrichir_oddspapi_tennis(rapid_matchs, odds_matchs):
-    """
-    Complète les cotes Winamax via OddsPapi.
-    IMPORTANT (confirmé via données réelles) :
-      - sportId tennis = 12 (10=Soccer, 11=Basket, 12=Tennis, 13=Baseball)
-      - slug bookmaker = "winamax.fr" (recherche tolérante "winamax")
-      - /fixtures/today retourne bookmakers:{} VIDE → appeler /fixtures/odds
-      - endpoint cotes = /fixtures/odds (doc officielle /odds), fallback /fixtures/odds/main
-      - fixtureId au format complet "id1000..." (SINGULIER)
-      - structure : bookmakerOdds.{slug}.markets.{marketId}.outcomes.{outId}.players.0.price
-      - startTime en epoch SECONDES
-      - INDÉPENDANT de RapidAPI Tennis : fonctionne même si rapid_matchs vide
-    Ne remplace JAMAIS une cote existante (Odds API prioritaire).
-    """
-    if not RAPIDAPI_KEY:
-        return odds_matchs
-
-    WINA_SLUG = "winamax.fr"
-
-    try:
-        # 1) Lister les matchs tennis du jour (sportId 12 = Tennis ; 13 = Baseball !)
-        data = _oddspapi_get("fixtures/today", {"sportId": 12})
-        if not data:
-            logging.info("OddsPapi Tennis — pas de fixtures.")
-            return odds_matchs
-
-        fixtures = data if isinstance(data, list) else data.get("fixtures", [])
-
-        # Ne garder que les matchs à venir (Pre-Game) non déjà couverts.
-        # PRIORISER hasOdds=true (vrais tournois cotés, pas les M15/qualifs obscurs).
-        a_traiter = []
-        for fx in fixtures:
-            statut = fx.get("status", {}).get("statusName", "")
-            if statut not in ("Pre-Game", "", None):
-                continue
-            participants = fx.get("participants", {})
-            p1 = participants.get("participant1Name", "")
-            p2 = participants.get("participant2Name", "")
-            fixture_id = fx.get("fixtureId")
-            if not (p1 and p2 and fixture_id):
-                continue
-            if f"{p1}|{p2}" in odds_matchs:
-                continue
-            has_odds = fx.get("hasOdds", False)
-            a_traiter.append((has_odds, fixture_id, p1, p2, fx.get("startTime", 0)))
-
-        # Trier : fixtures avec cotes en premier, puis limiter
-        a_traiter.sort(key=lambda x: not x[0])  # hasOdds=True d'abord
-        nb_avec_odds = sum(1 for x in a_traiter if x[0])
-        logging.info(f"OddsPapi — {nb_avec_odds} fixture(s) avec cotes sur {len(a_traiter)} à venir.")
-        a_traiter = [x[1:] for x in a_traiter[:25]]  # retirer le flag has_odds, plafond 25
-        ajouts = 0
-
-        def _prix_outcomes(outcomes):
-            prices = []
-            for out_id in sorted(outcomes.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999):
-                players = outcomes[out_id].get("players", {})
-                pr = players.get("0", {}).get("price")
-                if pr:
-                    prices.append(pr)
-            return prices
-
-        diag_fait = False
-        for fixture_id, p1, p2, start in a_traiter:
-            # Essayer /fixtures/odds (= /odds doc officielle) puis /fixtures/odds/main en fallback
-            # NE PAS filtrer par bookmaker dans la requête : on récupère tout puis on cherche Winamax
-            odds_data = _oddspapi_get("fixtures/odds", {"fixtureId": fixture_id})
-            if not odds_data:
-                odds_data = _oddspapi_get("fixtures/odds/main", {"fixtureId": fixture_id})
-            time.sleep(0.15)
-            if not odds_data:
-                continue
-
-            od = odds_data[0] if isinstance(odds_data, list) and odds_data else odds_data
-            if not isinstance(od, dict):
-                continue
-
-            # DIAGNOSTIC (1 seule fois) : voir la structure réelle et les bookmakers dispo
-            if not diag_fait:
-                diag_fait = True
-                odds_section = od.get("odds", od.get("bookmakerOdds", {}))
-                book_keys = list(odds_section.keys()) if isinstance(odds_section, dict) else "non-dict"
-                logging.info(f"OddsPapi DIAG — slugs avec cotes: {book_keys[:30]}")
-
-            # Cotes sous 'odds' (RapidAPI) OU 'bookmakerOdds' (doc officielle)
-            book_odds = od.get("odds", {})
-            if not isinstance(book_odds, dict) or not book_odds:
-                book_odds = od.get("bookmakerOdds", {})
-            if not isinstance(book_odds, dict) or not book_odds:
-                continue
-            wina = {}
-            for slug_key, slug_val in book_odds.items():
-                if "winamax" in slug_key.lower():
-                    wina = slug_val
-                    break
-            # markets peut être directement sous wina, ou wina['markets']
-            if isinstance(wina, dict):
-                markets = wina.get("markets", wina)
-            else:
-                markets = {}
-            if not isinstance(markets, dict) or not markets:
-                continue
-
-            c1 = c2 = None
-            market_ids = sorted(markets.keys(), key=lambda x: int(x) if str(x).isdigit() else 999999)
-            for mkt_id in market_ids:
-                mkt = markets[mkt_id]
-                if not isinstance(mkt, dict):
-                    continue
-                outcomes = mkt.get("outcomes", {})
-                if len(outcomes) == 2 and not mkt.get("handicap"):
-                    prices = _prix_outcomes(outcomes)
-                    if len(prices) >= 2:
-                        c1, c2 = prices[0], prices[1]
-                        break
-
-            if c1 and c2:
-                heure_str = datetime.fromtimestamp(start, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if start else ""
-                odds_matchs[f"{p1}|{p2}"] = {
-                    "joueur1": p1, "joueur2": p2,
-                    "heure_utc": heure_str,
-                    "cote_j1": c1, "cote_j2": c2,
-                    "source_cote": "Winamax (OddsPapi)",
-                }
-                ajouts += 1
-
-        logging.info(f"OddsPapi Tennis — {ajouts} cote(s) Winamax ajoutée(s) ({len(a_traiter)} matchs testés).")
-
-    except Exception as e:
-        logging.warning(f"OddsPapi Tennis erreur : {e}")
-
-    return odds_matchs
 
 # =====================================================================
 # 7. MODULE A — PRÉ-COLLECTE ODDS API
@@ -996,10 +755,6 @@ def precollecte_rapidapi_tennis(date_fr):
 # 9. FUSION DES DEUX SOURCES
 # =====================================================================
 
-# =====================================================================
-# 9. FUSION DES DEUX SOURCES
-# =====================================================================
-
 def fusionner_calendrier(odds_matchs, rapid_matchs):
     """
     Logique de fusion en 3 étapes :
@@ -1007,14 +762,16 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
     2. Odds API → filtre "disponible sur Winamax" (cotes vérifiées)
     3. Intersection → uniquement les matchs RapidAPI avec cote Winamax confirmée
        + données complètes RapidAPI (H2H, forme, surface)
+    CORRIGÉ v7.2 : la correspondance exige LES DEUX joueurs (plus un seul),
+    et inverse les cotes si l'ordre des joueurs diffère entre les sources.
     """
     lignes = ["📋 MATCHS DISPONIBLES SUR WINAMAX (calendrier RapidAPI filtré) :\n"]
 
-    # Index Odds API par nom de joueur pour la correspondance
-    odds_index = {}
-    for cle, m in odds_matchs.items():
-        odds_index[m["joueur1"].lower()] = m
-        odds_index[m["joueur2"].lower()] = m
+    def _noms_matchent(a, b):
+        a, b = a.lower().strip(), b.lower().strip()
+        if not a or not b:
+            return False
+        return a in b or b in a
 
     matchs_winamax        = []
     matchs_sans_cote      = []
@@ -1038,49 +795,36 @@ def fusionner_calendrier(odds_matchs, rapid_matchs):
         affiches.add(cle)
         noms_famille_affiches.add(cle_famille)
 
-        # Chercher cote Winamax correspondante dans Odds API
+        # Chercher cote Winamax correspondante dans Odds API.
+        # Exiger que LES DEUX joueurs correspondent (évite d'attribuer les cotes
+        # d'un autre match sur un simple nom de famille commun type "Zverev").
         cote_trouvee = None
-        for nom, data in odds_index.items():
-            if j1.lower() in nom or nom in j1.lower() or j2.lower() in nom or nom in j2.lower():
-                if data.get("cote_j1") and data.get("cote_j2"):
-                    cote_trouvee = data
-                    break
+        inverse      = False
+        for data in odds_matchs.values():
+            if not (data.get("cote_j1") and data.get("cote_j2")):
+                continue
+            o1, o2 = data["joueur1"], data["joueur2"]
+            if _noms_matchent(j1, o1) and _noms_matchent(j2, o2):
+                cote_trouvee, inverse = data, False
+                break
+            if _noms_matchent(j1, o2) and _noms_matchent(j2, o1):
+                cote_trouvee, inverse = data, True
+                break
 
         if cote_trouvee:
-            # ✅ Match disponible sur Winamax — on enrichit avec les données RapidAPI
-            m["cote_j1"]    = cote_trouvee["cote_j1"]
-            m["cote_j2"]    = cote_trouvee["cote_j2"]
+            # ✅ Match disponible sur Winamax — enrichir avec les cotes,
+            # en respectant l'ordre des joueurs (swap si sources inversées)
+            c1 = cote_trouvee["cote_j2"] if inverse else cote_trouvee["cote_j1"]
+            c2 = cote_trouvee["cote_j1"] if inverse else cote_trouvee["cote_j2"]
+            m["cote_j1"]     = c1
+            m["cote_j2"]     = c2
             m["source_cote"] = cote_trouvee["source_cote"]
             matchs_winamax.append(m)
-            ligne = (
+            lignes.append(
                 f"• {m['heure']} | {j1} vs {j2} | {m['tournoi']} | {m['surface']}"
-                f" | Cotes {cote_trouvee['source_cote']}: {j1} {cote_trouvee['cote_j1']:.2f}"
-                f" / {j2} {cote_trouvee['cote_j2']:.2f}"
+                f" | Cotes {cote_trouvee['source_cote']}: {j1} {c1:.2f}"
+                f" / {j2} {c2:.2f}"
             )
-            # Marchés alternatifs avec VRAIES cotes Winamax (OddsPapi)
-            marches_alt = cote_trouvee.get("marches_alternatifs", {})
-            if marches_alt:
-                m["marches_alternatifs"] = marches_alt
-                alt_parts = []
-                # Handicaps jeux
-                hcaps = {}
-                for k, v in marches_alt.items():
-                    if k.startswith("hcap_j1_"):
-                        h = k.replace("hcap_j1_", "")
-                        hcaps.setdefault(h, {})["j1"] = v
-                    elif k.startswith("hcap_j2_"):
-                        h = k.replace("hcap_j2_", "")
-                        hcaps.setdefault(h, {})["j2"] = v
-                for h, vals in sorted(hcaps.items()):
-                    alt_parts.append(f"Écart de jeux {h}: {j1} {vals.get('j1','?')}/{j2} {vals.get('j2','?')}")
-                # Totaux jeux
-                for k, v in sorted(marches_alt.items()):
-                    if k.startswith("over_"):
-                        ligne_ou = k.replace("over_", "")
-                        alt_parts.append(f"Total {ligne_ou} jeux: Over {v}/Under {marches_alt.get(f'under_{ligne_ou}','?')}")
-                if alt_parts:
-                    ligne += " | Marchés Winamax réels → " + " | ".join(alt_parts)
-            lignes.append(ligne)
         else:
             # ❌ Pas de cote Winamax — Gemini vérifiera sur Sportytrader
             matchs_sans_cote.append(m)
@@ -1550,7 +1294,13 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                 return '{"matchs": [], "avertissements": "Erreur Gemini."}'
 
         # Réponse reçue → parser (avec réparation si légèrement malformé)
-        texte = rep.text.strip()
+        # GARDE v7.2 : rep.text peut être None (réponse bloquée/vide) → retry
+        texte = (rep.text or "").strip()
+        if not texte:
+            derniere_erreur = "réponse Gemini vide (rep.text=None)"
+            logging.warning(f"Gemini réponse vide tentative {tentative}/3 — retry…")
+            time.sleep(5)
+            continue
         texte = re.sub(r"^```json\s*", "", texte)
         texte = re.sub(r"\s*```$", "", texte)
         data = _reparer_json_gemini(texte)
@@ -1606,7 +1356,7 @@ FILTRES IMMÉDIATS :
 • Tu n'as le DROIT d'utiliser QUE les cotes EXACTES fournies dans les données (cote_j1, cote_j2).
 • Il est STRICTEMENT INTERDIT d'estimer, deviner ou inventer une cote.
 • Si une cote n'est PAS fournie pour un marché → tu NE PEUX PAS jouer ce marché. Point final.
-• Si tu écris "cote estimée" ou "non disponible précisément sur Winamax" → c'est une VIOLATION. Ne génère PAS ce ticket.
+• Si tu écris "cote estimée" ou "non disponible précisément sur Winamax" → cest une VIOLATION. Ne génère PAS ce ticket.
 • Marchés handicap/over-under/score : utilise-les UNIQUEMENT si leur cote exacte est dans les données.
   Sinon → reste sur le Moneyline avec sa cote réelle, ou passe au match suivant.
 • Le calcul de value DOIT se baser sur la cote réelle Winamax, jamais sur une estimation.
@@ -1699,19 +1449,19 @@ NIVEAUX DE CONFIANCE ET MISES :
 ⚠️ Le niveau est déterminé par la qualité des données ET la solidité de l'analyse :
 
 ÉLEVÉE (3%) — toutes les conditions réunies :
-  · Delta ≥ 0.10 ✅
+  · Delta ≥ seuil requis (0.07/0.10/0.12 selon la cote — voir plus bas) ✅
   · Analyse solide (forme, H2H par surface, contexte) ✅
   · Données complètes ou quasi-complètes ✅
   · Pas d'alerte physique majeure ✅
 
 MODÉRÉE (2%) — analyse correcte mais légères lacunes :
-  · Delta ≥ 0.10 ✅
+  · Delta ≥ seuil requis ✅
   · Analyse correcte mais quelques données manquantes
   · H2H limité ou forme partielle acceptable
   · Logique analytique convaincante malgré les lacunes
 
 BASSE (1%) — données insuffisantes ou cote très élevée :
-  · Delta ≥ 0.10 ✅ mais données importantes manquantes
+  · Delta ≥ seuil requis ✅ mais données importantes manquantes
   · OU cote > 2.50 (variance élevée)
   · OU première confrontation sans contexte suffisant
   · OU alertes physiques présentes
@@ -1723,8 +1473,8 @@ Plafonds absolus (quel que soit le niveau) :
   · Combiné → MAX 2%
 
 ⚠️⚠️⚠️ RÈGLE ABSOLUE — FORMAT DE SORTIE — VIOLATION = ÉCHEC ⚠️⚠️⚠️
-Ta réponse doit commencer DIRECTEMENT par 🔴 ou par AUCUN_MATCH.
-ZÉRO tolérance pour tout texte avant le 🔴 ou AUCUN_MATCH.
+Ta réponse doit commencer DIRECTEMENT par 🎾 ou par AUCUN_MATCH.
+ZÉRO tolérance pour tout texte avant le 🎾 ou AUCUN_MATCH.
 
 EXEMPLES DE CE QUI EST INTERDIT (ne JAMAIS écrire) :
 ❌ "Let me analyze..." 
@@ -1732,14 +1482,14 @@ EXEMPLES DE CE QUI EST INTERDIT (ne JAMAIS écrire) :
 ❌ "ÉTAPE 1..."
 ❌ "Voici mon analyse..."
 ❌ "Remaining matches..."
-❌ Tout texte, titre, bullet point AVANT le 🔴
+❌ Tout texte, titre, bullet point AVANT le 🎾
 
 SEULES RÉPONSES VALIDES :
 ✅ 🎾 <b>ACEANALYTICS TENNIS...</b>  (si value trouvée)
 ✅ AUCUN_MATCH — [explication courte]  (si aucune value)
 
 L'analyse est STRICTEMENT INTERNE — invisible — jamais dans la réponse.
-Si tu commences par autre chose que 🔴 ou AUCUN_MATCH → tu as échoué.
+Si tu commences par autre chose que 🎾 ou AUCUN_MATCH → tu as échoué.
 
 ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
 
@@ -1751,7 +1501,7 @@ ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
 [2] DÉCISION :
   Proba % → Cote Juste = 1/proba → Delta = Cote réelle - Cote Juste
 
-  ⚖️ SEUIL DE DELTA ADAPTATIF SELON LA COTE (nouveau — en test) :
+  ⚖️ SEUIL DE DELTA ADAPTATIF SELON LA COTE (règle unique — remplace tout seuil fixe) :
   Le delta minimum requis dépend de la cote, car un delta absolu de 0.10 est
   plus dur à atteindre sur un favori que sur un outsider (question de proportion).
   • Cote < 1.90 (favori)        → delta minimum requis : 0.07
@@ -1766,7 +1516,7 @@ ANALYSE EN 2 ÉTAPES (INTERNE — NE PAS AFFICHER) :
   Zéro value → AUCUN_MATCH
 
 DOUBLE VALIDATION (TOUS les marchés) :
-  1. Delta ≥ 0.10 ✅  2. Analyse [1] justifie le marché ✅
+  1. Delta ≥ seuil requis ✅  2. Analyse [1] justifie le marché ✅
   Si l'une manque → abandonné.
 
 CONFIANCE ÉLEVÉE :
@@ -1798,7 +1548,7 @@ PROCESSUS CORRECT :
 • Delta < seuil requis → NE RIEN générer pour ce match, passer au suivant
 • Si AUCUN match n'atteint son seuil → répondre UNIQUEMENT : AUCUN_MATCH + explication
 
-N'envoyer QUE les tickets validés (Delta ≥ 0.10 + analyse confirmée).
+N'envoyer QUE les tickets validés (Delta ≥ seuil requis + analyse confirmée).
 Si 0 ticket validé → répondre : AUCUN_MATCH suivi d'une explication courte (max 80 mots) :
   · Citer 1-2 matchs analysés avec le joueur favori et pourquoi pas de value
   · Mentionner le delta et la raison principale (cote trop basse, données insuffisantes)
@@ -1971,6 +1721,7 @@ def _sim_noms(a, b):
 def oddspapi_fixtures_jour():
     """Récupère les vrais matchs tennis du jour (SRL exclu). [] si erreur."""
     try:
+        _quota_inc()  # v7.2 : compter cet appel dans le quota RapidAPI
         r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/today",
                          headers=_oddspapi_headers(), params={"sportId": 12}, timeout=15)
         r.raise_for_status()
@@ -2006,9 +1757,14 @@ def oddspapi_cotes(fixture_id):
     """
     Récupère les cotes Pinnacle des marchés alternatifs d'un match.
     Retourne : {"total_sets": {"over":x,"under":y,"ligne":2.5},
-                "total_games": {"over":x,"under":y,"ligne":21.5}}
+                "total_games": {"over":x,"under":y,"ligne":~22.5}}
+    PATCH B (v7.2) : collecte TOUTES les lignes de jeux du MATCH complet
+    (18.5 à 26.5) et garde la plus proche de 22.5. Les totaux d'UN SEUL set
+    (9.5-12.5) sont exclus par le plancher — c'est eux qui polluaient via
+    la mainLine (10.5 remontait à tort comme ligne principale).
     """
     try:
+        _quota_inc()  # v7.2 : compter cet appel dans le quota RapidAPI
         r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/odds",
                          headers=_oddspapi_headers(),
                          params={"fixtureId": fixture_id, "bookmakers": ODDSPAPI_BOOKMAKER},
@@ -2026,6 +1782,7 @@ def oddspapi_cotes(fixture_id):
 
     outcomes = _oddspapi_extraire_outcomes(data)
     res = {}
+    lignes_jeux = {}          # {ligne: {"over": prix, "under": prix}}
     for o in outcomes:
         bo = str(o.get("bookmakerOutcomeId", ""))
         price = o.get("price")
@@ -2039,15 +1796,22 @@ def oddspapi_cotes(fixture_id):
         if not m:
             continue
         ligne, sens = float(m.group(1)), m.group(2)
-        if ligne == 2.5:  # Total Sets
-            res.setdefault("total_sets", {"ligne": 2.5})[sens] = price
-        elif ligne >= 10:  # Total Games (lignes hautes)
-            tg = res.setdefault("total_games", {})
-            is_main = o.get("mainLine", False)
-            if is_main or "ligne" not in tg:
-                tg["ligne"], tg[sens] = ligne, price
-            elif tg.get("ligne") == ligne:
-                tg[sens] = price
+        if ligne == MARKET_TOTAL_SETS_LIGNE:               # Total Sets O/U 2.5
+            res.setdefault("total_sets", {"ligne": MARKET_TOTAL_SETS_LIGNE})[sens] = price
+        elif MARCHES_ALT_GAMES_MIN <= ligne <= MARCHES_ALT_GAMES_MAX:
+            # Total Games de MATCH uniquement (18.5-26.5). Les totaux d'UN set
+            # (9.5-12.5) sont exclus par le plancher — c'est eux qui polluaient.
+            lignes_jeux.setdefault(ligne, {})[sens] = price
+
+    # Choisir la ligne de jeux : priorité aux lignes COMPLÈTES (over ET under),
+    # puis la plus proche de la cible ~22.5 (ligne principale de match).
+    completes = {l: v for l, v in lignes_jeux.items() if "over" in v and "under" in v}
+    candidates = completes or lignes_jeux
+    if candidates:
+        ligne_choisie = min(candidates, key=lambda l: abs(l - MARCHES_ALT_GAMES_CIBLE))
+        tg = {"ligne": ligne_choisie}
+        tg.update(candidates[ligne_choisie])
+        res["total_games"] = tg
     return res
 
 
@@ -2071,10 +1835,8 @@ def _oddspapi_extraire_outcomes(data):
 def analyser_marches_alternatifs(matchs_serres, date):
     """
     Pour chaque match serré, récupère les cotes sets/jeux Pinnacle et (si mode actif)
-    demande à Claude d'estimer s'il y a de la value sur "Over 2.5 sets" ou Total Games.
-    Retourne une liste de tickets marchés alternatifs (vide en mode observation/off).
-
-    matchs_serres : liste de dicts {joueur1, joueur2, cote_j1, cote_j2, surface, ...}
+    les prépare pour être injectées dans le prompt de Claude.
+    Retourne une liste de données de marchés alternatifs (vide en mode observation/off).
     """
     if MARCHES_ALT_MODE == "off":
         return []
@@ -2093,7 +1855,6 @@ def analyser_marches_alternatifs(matchs_serres, date):
         fid = oddspapi_trouver_fixture(j1, j2, fixtures)
         if not fid:
             if MARCHES_ALT_MODE == "observation":
-                # Diagnostic : montrer les noms OddsPapi les plus proches pour comprendre l'échec
                 proches = []
                 for f in fixtures[:400]:
                     p = f.get("participants", {})
@@ -2112,10 +1873,11 @@ def analyser_marches_alternatifs(matchs_serres, date):
                 logging.info(f"[OBS] Match trouvé (fid={fid}) pour {j1} vs {j2} mais AUCUNE cote alt récupérée (match commencé ? format ?).")
             continue
 
-        # MODE OBSERVATION : on logue ce qu'on a trouvé, sans parier
+        ts = cotes.get("total_sets", {})
+        tg = cotes.get("total_games", {})
+
+        # MODE OBSERVATION : on logue ce qu'on a trouvé, sans l'injecter à Claude
         if MARCHES_ALT_MODE == "observation":
-            ts = cotes.get("total_sets", {})
-            tg = cotes.get("total_games", {})
             logging.info(
                 f"[OBS] {j1} vs {j2} — "
                 f"Sets O/U 2.5: Over {ts.get('over','?')}/Under {ts.get('under','?')} | "
@@ -2123,13 +1885,77 @@ def analyser_marches_alternatifs(matchs_serres, date):
             )
             continue
 
-        # MODE ACTIF : demander à Claude d'estimer la value (à implémenter après validation)
-        # Pour l'instant, en mode actif, on prépare la structure mais on reste prudent :
-        # on ne génère un ticket que si la logique d'estimation est en place.
-        # (Cette partie sera complétée une fois le format validé en observation.)
-        logging.info(f"[ACTIF] Marchés alt prêts pour {j1} vs {j2} — estimation à implémenter.")
+        # MODE ACTIF : on stocke pour l'ajouter au prompt de Claude
+        if MARCHES_ALT_MODE == "actif":
+            logging.info(f"[ACTIF] Marchés alt prêts pour {j1} vs {j2} — ajout au prompt Claude.")
+            tickets_alt.append({
+                "j1": j1, 
+                "j2": j2, 
+                "cotes": cotes
+            })
 
     return tickets_alt
+
+
+def ajouter_instructions_marches_alternatifs(prompt_de_base, donnees_marches_list):
+    """
+    Intègre les instructions de raisonnement pour Claude ET lui fournit 
+    les cotes réelles formatées pour les marchés alternatifs des matchs serrés.
+    Les cotes sont celles de PINNACLE (référence sharp) — l'abonné vérifie la
+    cote Winamax avant de jouer, d'où la mise fixe réduite MARCHES_ALT_MISE%.
+    """
+    if not donnees_marches_list:
+        return prompt_de_base
+
+    str_marches = ""
+    for dm in donnees_marches_list:
+        j1, j2 = dm["j1"], dm["j2"]
+        cotes = dm["cotes"]
+        ts = cotes.get("total_sets", {})
+        tg = cotes.get("total_games", {})
+        str_marches += f"- {j1} vs {j2} | Sets O/U 2.5: Over {ts.get('over','?')}/Under {ts.get('under','?')} | Games O/U {tg.get('ligne','?')}: Over {tg.get('over','?')}/Under {tg.get('under','?')}\n"
+
+    instructions_sets = f"""
+⚠️ ANALYSE SPÉCIFIQUE : MARCHÉS "NOMBRE DE SETS" (O/U 2.5) ET "NOMBRE DE JEUX"
+Tu dois évaluer le Moneyline ET les marchés alternatifs (Sets/Jeux) de manière indépendante pour trouver la meilleure Value. Tu as le droit de proposer le marché des Sets ou des Jeux à la place du Moneyline s'il présente un meilleur edge.
+
+📊 COTES PINNACLE EXTRAITES POUR CES MATCHS SERRÉS :
+{str_marches}
+⚠️ NATURE DE CES COTES — RÈGLES SPÉCIALES (dérogation encadrée à la règle Winamax) :
+• Ces cotes viennent de PINNACLE, le bookmaker de référence le plus "sharp" : sa
+  probabilité implicite (1/cote) est la meilleure approximation de la vraie probabilité.
+• Elles servent de RÉFÉRENCE DE PROBABILITÉ pour détecter la value — PAS de cote jouable.
+• Dans le ticket, tu DOIS écrire : "Cote de référence Pinnacle X.XX — vérifier la cote
+  Winamax avant de jouer" (l'abonné valide la cote Winamax à la main).
+• MISE FIXE : {MARCHES_ALT_MISE}% (phase de test de ce segment — pas de Kelly).
+
+🎯 CRITÈRES DE VALIDATION D'UN PARI SETS/JEUX (contre un book sharp) :
+• edge = ta probabilité estimée − probabilité implicite Pinnacle (1/cote du sens choisi)
+• edge < {MARCHES_ALT_MARGE_MIN:.2f} → pas assez de value contre un book sharp → abandon
+• edge > {MARCHES_ALT_ECART_MAX:.2f} → tu diverges trop de Pinnacle → c'est probablement
+  TOI qui te trompes → abandon (même logique que le garde-fou Wang/Ruse)
+• Ta probabilité estimée ne peut JAMAIS dépasser {MARCHES_ALT_PROBA_MAX:.0%} sur ces
+  marchés dérivés (anti-surconfiance).
+
+📈 FACTEURS FAVORISANT L'OVER 2.5 SETS (Va au 3e set) :
+1. Cotes Moneyline très proches (match équilibré).
+2. Hold% (pourcentage de jeux de service gagnés) élevé pour les DEUX joueurs sur cette surface. Moins il y a de breaks, plus la probabilité d'un match accroché augmente.
+3. Historique H2H (confrontations directes) marqué par des matchs longs ou en 3 sets.
+4. Styles de jeu similaires où personne ne parvient à imposer une domination tactique claire.
+
+📉 FACTEURS FAVORISANT L'UNDER 2.5 SETS (Victoire nette en 2 sets secs) :
+1. Supériorité manifeste d'un joueur sur LA SURFACE SPÉCIFIQUE du match, même si les cotes ML globales sont proches.
+2. Écart de forme majeur récent entre les deux joueurs (l'un surperforme, l'autre sous-performe).
+3. L'un des joueurs possède un très faible Hold% au service, ce qui permet à l'autre de breaker et de conclure rapidement.
+
+🎯 RÈGLE DE SÉLECTION :
+- Calcule ton estimation de probabilité d'aller en 3 sets (Over 2.5) et compare-la à la probabilité du marché Pinnacle (1 / cote).
+- Si la Value est sur le Moneyline, propose le Moneyline.
+- Si le marché se trompe sur la durée du match (sous-estime un match accroché ou surestime la résistance de l'outsider), propose le marché alternatif adéquat.
+- PRÉCISION LIGNES DE JEUX : la ligne fournie ci-dessus est déjà une ligne de MATCH
+  complet (entre 18.5 et 26.5) — les totaux d'un seul set ont été exclus à la source.
+"""
+    return prompt_de_base + "\n" + instructions_sets
 
 
 def run_bot_autonome():
@@ -2161,12 +1987,7 @@ def run_bot_autonome():
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
     rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
-    # OddsPapi SUPPRIMÉ : ne remontait jamais Winamax (prouvé par logs) et brûlait
-    # ~25 req RapidAPI/run = 2400/mois >> quota 500/mois → tuait RapidAPI tout le mois.
-    # Sans lui : ~180 req/mois, RapidAPI vit, calendrier complet revient.
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=4)
-    # SportAPI7 SUPPRIMÉ : ses données (cotes, tournoi) n'étaient lues nulle part
-    # dans le pipeline → requêtes RapidAPI gaspillées pour rien. Odds API couvre les cotes.
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
     tournois_winamax   = charger_tournois_winamax()  # Liste éditable sur GitHub
     if not calendrier_injecte:
@@ -2244,14 +2065,22 @@ def run_bot_autonome():
                     matchs_serres.append(m)
             if matchs_serres:
                 logging.info(f"Marchés alt ({MARCHES_ALT_MODE}) : {len(matchs_serres)} match(s) serré(s) à examiner.")
-                analyser_marches_alternatifs(matchs_serres, date)
+                tickets_alt_data = analyser_marches_alternatifs(matchs_serres, date)
+
+                # Injection des instructions si mode actif et cotes trouvées
+                if MARCHES_ALT_MODE == "actif" and tickets_alt_data:
+                    prompt = ajouter_instructions_marches_alternatifs(prompt, tickets_alt_data)
             else:
                 logging.info("Marchés alt : aucun match serré aujourd'hui.")
         except Exception as e:
             logging.warning(f"Marchés alt : erreur non bloquante : {e}")
 
     # Bascule dynamique Sonnet → Opus selon richesse des données
-    nb_matchs_analyse = len(json.loads(donnees_json).get("matchs", []))
+    # PROTÉGÉ v7.2 : un JSON invalide ne plante plus le run ici
+    try:
+        nb_matchs_analyse = len(json.loads(donnees_json).get("matchs", []))
+    except Exception:
+        nb_matchs_analyse = 0
     modele_choisi = CLAUDE_OPUS if nb_matchs_analyse >= SEUIL_OPUS else CLAUDE_SONNET
     logging.info(f"Modèle Claude : {'Opus 🔥' if modele_choisi == CLAUDE_OPUS else 'Sonnet ⚡'} ({nb_matchs_analyse} matchs — seuil {SEUIL_OPUS})")
 
@@ -2284,7 +2113,10 @@ def run_bot_autonome():
 
         # Vérifier AUCUN_MATCH uniquement si le texte commence par AUCUN_MATCH
         if texte.startswith("AUCUN_MATCH"):
-            nb = len(json.loads(donnees_json).get("matchs", []))
+            try:
+                nb = len(json.loads(donnees_json).get("matchs", []))
+            except Exception:
+                nb = 0
             # Extraire l'explication de Claude (500 premiers chars après AUCUN_MATCH)
             explication = ""
             idx = texte.find("AUCUN_MATCH")
@@ -2319,10 +2151,13 @@ def run_bot_autonome():
             if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
                                                "kelly 0%", "mise : 0%", "mise 0%"]):
                 return False
-            # Rejeter les cotes inventées/estimées
-            if any(sig in t_lower for sig in ["cote estimée", "estimée", "non disponible précisément",
-                                               "cote approximative", "estimation de cote",
-                                               "cote non disponible", "cote handicap estimée"]):
+            # Rejeter les cotes inventées/estimées — SAUF référence Pinnacle assumée
+            # (marchés alternatifs : "cote de référence pinnacle" est légitime)
+            est_ref_pinnacle = "référence pinnacle" in t_lower or "reference pinnacle" in t_lower
+            if not est_ref_pinnacle and any(sig in t_lower for sig in
+                    ["cote estimée", "estimée", "non disponible précisément",
+                     "cote approximative", "estimation de cote",
+                     "cote non disponible", "cote handicap estimée"]):
                 logging.info("Ticket rejeté — cote estimée/inventée détectée.")
                 return False
             # FILTRE HORAIRE : extraire l'heure du ticket (ligne HEURE) et vérifier la fenêtre.
@@ -2397,7 +2232,7 @@ def run_bot_autonome():
             if not (t.startswith("🎾") or t.startswith("🔴")):
                 continue  # Pas un ticket structuré valide
             if not _ticket_valide(t):
-                logging.info("Ticket rejeté (delta < 0.10 ou abandon explicite) — non envoyé.")
+                logging.info("Ticket rejeté (delta < seuil ou abandon explicite) — non envoyé.")
                 continue
             tickets_valides.append(t)
         tickets = tickets_valides
@@ -2441,8 +2276,11 @@ def run_bot_autonome():
                 if i < len(tickets):
                     time.sleep(1)
 
+        # CORRIGÉ v7.2 : conserver l'ordre chronologique (historique + nouveaux).
+        # Avant : list(set) → ordre aléatoire → le [-20:] pouvait jeter les hashes
+        # récents et garder des vieux → déduplication non fiable.
         if nouveaux_hashes and not DRY_RUN:
-            sauvegarder_historique(list(hashes_connus), hist_sha)
+            sauvegarder_historique(historique + nouveaux_hashes, hist_sha)
         logging.info(f"✅ {paris_envoyes} ticket(s) envoyé(s).")
 
     except Exception as e:
@@ -2542,23 +2380,35 @@ def envoyer_recap_hebdo():
 
 
 if __name__ == "__main__":
-    args         = [a for a in sys.argv[1:] if a != "--dry-run"]
+    args = [a for a in sys.argv[1:] if a != "--dry-run"]
     if not args:
         run_bot_autonome()
     elif args[0] == "recap":
         envoyer_recap_hebdo()
-    elif args[0] == "resultat" and len(args) == 2:
+    elif args[0] == "file":
+        # Liste la file des paris en cours avec leurs numéros
+        lister_file_paris()
+    elif args[0] == "resultat" and len(args) in (2, 3):
+        # resultat v          → victoire, stats globales seulement
+        # resultat v 2        → victoire du pari n°2 de la file
+        #                        (stats segmentées + retrait de la file)
         flag = args[1].lower()
+        idx  = None
+        if len(args) == 3:
+            try:
+                idx = int(args[2])
+            except ValueError:
+                print("❌ Le numéro de pari doit être un entier (cf. 'python bot.py file').")
+                sys.exit(1)
         if flag in ("v", "victoire", "win", "1"):
-            enregistrer_resultat(True)
+            enregistrer_resultat(True, index_pari=idx)
         elif flag in ("d", "defaite", "lose", "0"):
-            enregistrer_resultat(False)
+            enregistrer_resultat(False, index_pari=idx)
         else:
-            print(f"❌ Utilise 'v' ou 'd'.")
+            print("❌ Utilise 'v' ou 'd' [+ numéro du pari dans la file].")
             sys.exit(1)
     elif args[0] in ("--help", "-h"):
         print(__doc__)
     else:
         print(f"❌ Commande inconnue.")
         sys.exit(1)
-      
