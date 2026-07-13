@@ -915,6 +915,10 @@ def enrichir_matchs_rapidapi(rapid_matchs: list, budget_requetes: int = 6) -> li
     def _get(url, params=None):
         try:
             _quota_inc("tennisapi")
+            # v7.4.1 : pause anti-rafale — les 429 du 13/07 sont arrivés sur des
+            # requêtes tirées dans la même seconde (limite de débit, pas de quota :
+            # la pagination venait de passer sans erreur une seconde avant).
+            time.sleep(1.0)
             r = requests.get(url, headers=headers, params=params, timeout=8)
             r.raise_for_status()
             return r.json()
