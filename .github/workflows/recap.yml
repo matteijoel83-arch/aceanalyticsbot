@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+# Même groupe que le bot principal : le récap attend la fin d'un run en cours
+# au lieu de lire stats.json pendant qu'il est en cours d'écriture.
+concurrency:
+  group: aceanalytics-bot
+  cancel-in-progress: false
+
 jobs:
   recap-hebdo:
     runs-on: ubuntu-latest
