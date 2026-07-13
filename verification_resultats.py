@@ -9,9 +9,20 @@ v2.1 (13/07/2026) — alignement sur bot.py v7.4 :
     Sans cela, le suivi de rentabilité construit dans bot.py restait à zéro.
   • Notification Telegram enrichie du yield global.
   • _migrer_stats complète aussi 'par_modele' (manquait en v2.0).
+
+v2.2 (13/07/2026) — protection du temps d'exécution :
+  • Constat : job GitHub Actions tué à 15m14s. Chaque vérification = un appel
+    Claude+web_search (~40-60s) ; les paris EN_COURS qui traînent sont
+    revérifiés à CHAQUE run → durée non bornée.
+  • MAX_VERIFS_PAR_RUN : plafond de vérifications par run (le reste attend
+    le run suivant, 3 occasions/jour).
+  • AGE_MAX_JOURS : un pari trop vieux est retiré de la file avec notification
+    Telegram "à régler manuellement" — SANS toucher aux stats (pas de V/D
+    deviné). Évite de payer Sonnet 3×/jour pour un match introuvable à vie.
 """
 
 import os, sys, json, logging, base64, time, re, requests
+from datetime import datetime
 import anthropic
 from logging.handlers import RotatingFileHandler
 
@@ -48,6 +59,10 @@ if MISSING:
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 CLAUDE_MODEL = "claude-sonnet-4-6"  # Sonnet pour fiabilité — vérification critique
+
+# v2.2 — bornes de temps d'exécution
+MAX_VERIFS_PAR_RUN = 8   # ~8 × 60s max ≈ 8 min — le reste attend le run suivant
+AGE_MAX_JOURS      = 3   # au-delà : retrait de la file + notification (règlement manuel)
 
 GITHUB_API     = "https://api.github.com"
 GITHUB_HEADERS = {
@@ -439,10 +454,44 @@ def main():
         logging.warning(f"{len(paris) - len(paris_uniques)} doublon(s) retiré(s) avant vérification.")
     paris = paris_uniques
 
-    restants        = []
+    # v2.2 — EXPIRATION : les paris trop vieux sortent de la file SANS verdict
+    # (aucun impact stats — à régler manuellement via 'python bot.py resultat v/d N')
+    def _age_jours(item):
+        try:
+            d = datetime.strptime(str(item.get("date", "")), "%d/%m/%Y")
+            return (datetime.now() - d).days
+        except Exception:
+            return 0  # date illisible → on ne l'expire pas (prudence)
+
+    frais, expires = [], []
+    for item in paris:
+        (expires if _age_jours(item) > AGE_MAX_JOURS else frais).append(item)
+    if expires:
+        for item in expires:
+            resume_exp = next(
+                (re.sub(r"<[^>]+>", "", l).strip() for l in item.get("pari", "").splitlines()
+                 if "MATCH" in l.upper()), item.get("date", "?"))[:150]
+            logging.warning(f"Pari expiré (> {AGE_MAX_JOURS}j) retiré de la file : {resume_exp}")
+            _envoyer_telegram(
+                f"⏰ <b>Pari expiré ({item.get('date','?')})</b> — introuvable après "
+                f"{AGE_MAX_JOURS} jours de vérifications.\n📌 {resume_exp}\n"
+                f"→ À régler manuellement : <code>python bot.py file</code> puis "
+                f"<code>resultat v/d N</code> (il a été retiré de la file automatique)."
+            )
+    paris = frais
+
+    # v2.2 — PLAFOND : borne le nombre d'appels Claude par run (durée maîtrisée).
+    # Les paris au-delà restent en file et seront vérifiés au run suivant.
+    a_verifier = paris[:MAX_VERIFS_PAR_RUN]
+    reportes   = paris[MAX_VERIFS_PAR_RUN:]
+    if reportes:
+        logging.info(f"Plafond {MAX_VERIFS_PAR_RUN} vérifications/run : "
+                     f"{len(reportes)} pari(s) reporté(s) au prochain run.")
+
+    restants        = list(reportes)  # les reportés restent en file tels quels
     stats_modifiees = False
 
-    for i, item in enumerate(paris, 1):
+    for i, item in enumerate(a_verifier, 1):
         pari_texte = item.get("pari", "")
         if not pari_texte:
             continue
@@ -454,7 +503,7 @@ def main():
         cote   = item.get("cote")       # v2.1 — écrit par bot.py v7.4
         mise   = item.get("mise_pct")   # v2.1 — écrit par bot.py v7.4
 
-        logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
+        logging.info(f"─── Ticket {i}/{len(a_verifier)} — {marche} / {niveau} ───")
         statut = interroger_claude_statut(pari_texte, item.get("date", ""))
         logging.info(f"Verdict : {statut}")
 
@@ -480,7 +529,7 @@ def main():
             restants.append(item)
             logging.info("⏳ En cours — maintenu dans la file.")
 
-        if i < len(paris):
+        if i < len(a_verifier):
             time.sleep(2)
 
     # --- Persistance stats ---
@@ -488,7 +537,8 @@ def main():
         _gh_put("stats.json", stats, "🔄 MAJ stats après vérification", sha=stats_sha)
 
     # --- Persistance file d'attente ---
-    if len(restants) != len(paris):
+    # (comparaison avec la taille d'ORIGINE : expirés + réglés déclenchent l'écriture)
+    if len(restants) != len(paris) + len(expires):
         if restants:
             _gh_put("pari_en_cours.json", restants,
                     "🧹 Nettoyage file après résultats", sha=paris_sha)
