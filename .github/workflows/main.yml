@@ -17,7 +17,7 @@ concurrency:
 jobs:
   automation-tennis:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30   # v7.4.1 : vérification (≤8 paris × ~60s) + bot avec relais Gemini ≈ 15-20 min possibles
 
     env:
       ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
@@ -31,12 +31,12 @@ jobs:
 
     steps:
       - name: "Checkout du dépôt"
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref_name }}
 
       - name: "Configuration de Python 3.12"
-        uses: actions/setup-python@v5.6.0
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
