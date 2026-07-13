@@ -1,7 +1,14 @@
 """
-verification_resultats.py — v2.0
+verification_resultats.py — v2.1
 Vérifie automatiquement les résultats des paris en cours via Claude + web_search.
 Notifie Telegram du résultat (gagné/perdu) et met à jour stats + file d'attente via API GitHub.
+
+v2.1 (13/07/2026) — alignement sur bot.py v7.4 :
+  • YIELD : lit les champs 'cote' et 'mise_pct' des paris (écrits par bot.py)
+    et accumule profit/mises dans stats.json (global 'roi' + par segment).
+    Sans cela, le suivi de rentabilité construit dans bot.py restait à zéro.
+  • Notification Telegram enrichie du yield global.
+  • _migrer_stats complète aussi 'par_modele' (manquait en v2.0).
 """
 
 import os, sys, json, logging, base64, time, re, requests
@@ -84,11 +91,19 @@ def _migrer_stats(s):
             s["par_marche"] = dict(STATS_DEFAUT["par_marche"])
         if "par_niveau" not in s:
             s["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
+    # v2.1 : par_modele pouvait manquer sur d'anciens stats.json
+    if "par_modele" not in s:
+        s["par_modele"] = dict(STATS_DEFAUT["par_modele"])
     return s
 
 
-def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre"):
-    """Met à jour les stats par marché, par niveau et par modèle."""
+def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre",
+                      mise=None, profit=None):
+    """
+    Met à jour les stats par marché, par niveau et par modèle.
+    v2.1 : accumule aussi mise/profit par segment si fournis (calcul de yield,
+    même logique que bot.py v7.4 — enregistrer_resultat).
+    """
     cle = "v" if victoire else "d"
     # Par marché
     if "par_marche" not in stats:
@@ -106,6 +121,23 @@ def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre"):
         stats["par_modele"] = dict(STATS_DEFAUT["par_modele"])
     if modele in stats["par_modele"]:
         stats["par_modele"][modele][cle] += 1
+    # v2.1 : YIELD par segment (mise et profit en unités de % de bankroll)
+    if mise is not None and profit is not None:
+        for section, cle_seg in [("par_marche", marche_cle),
+                                 ("par_niveau", niveau_cle),
+                                 ("par_modele", modele)]:
+            seg = stats.get(section, {}).get(cle_seg)
+            if isinstance(seg, dict):
+                seg["mise"]   = round(seg.get("mise", 0.0) + mise, 4)
+                seg["profit"] = round(seg.get("profit", 0.0) + profit, 4)
+    return stats
+
+
+def _maj_roi_global(stats, mise, profit):
+    """v2.1 : accumule le ROI global (même structure que bot.py v7.4)."""
+    roi = stats.setdefault("roi", {"mise_totale": 0.0, "profit": 0.0})
+    roi["mise_totale"] = round(roi.get("mise_totale", 0.0) + mise, 4)
+    roi["profit"]      = round(roi.get("profit", 0.0) + profit, 4)
     return stats
 
 # =====================================================================
@@ -208,12 +240,19 @@ def notifier_resultat(statut: str, pari_texte: str, stats: dict):
         pari_texte.strip().split("\n")[0]
     )[:200]
 
+    # v2.1 : ligne de yield global si des paris avec cote/mise ont été réglés
+    ligne_yield = ""
+    roi = stats.get("roi", {})
+    if roi.get("mise_totale"):
+        y = roi["profit"] / roi["mise_totale"] * 100
+        ligne_yield = f"\n💶 Profit : {roi['profit']:+.2f}u | Yield : {y:+.1f}%"
+
     message = (
         f"{header}\n\n"
         f"📌 {resume}\n\n"
         f"📊 <b>BILAN ACEANALYTICS 🎾 TENNIS</b>\n"
         f"{emoji} V: {stats['victoires']} | ❌ D: {stats['defaites']}\n"
-        f"📈 <b>Win Rate : {wr:.1f}%</b>"
+        f"📈 <b>Win Rate : {wr:.1f}%</b>{ligne_yield}"
     )
     _envoyer_telegram(message)
 
@@ -408,27 +447,35 @@ def main():
         if not pari_texte:
             continue
 
-        # Récupérer marché et niveau depuis pari_en_cours.json
+        # Récupérer marché, niveau, modèle ET (v2.1) cote/mise depuis la file
         marche = item.get("marche", "autre")
         niveau = item.get("niveau", "autre")
         modele = item.get("modele", "autre")
+        cote   = item.get("cote")       # v2.1 — écrit par bot.py v7.4
+        mise   = item.get("mise_pct")   # v2.1 — écrit par bot.py v7.4
 
         logging.info(f"─── Ticket {i}/{len(paris)} — {marche} / {niveau} ───")
         statut = interroger_claude_statut(pari_texte, item.get("date", ""))
         logging.info(f"Verdict : {statut}")
 
-        if statut == "GAGNE":
-            stats["victoires"] += 1
-            stats = _maj_stats_detail(stats, True, marche, niveau, modele)
+        if statut in ("GAGNE", "PERDU"):
+            victoire = statut == "GAGNE"
+            stats["victoires" if victoire else "defaites"] += 1
+            # v2.1 : YIELD — profit en unités de mise (% de bankroll),
+            # même formule que bot.py v7.4 (enregistrer_resultat)
+            profit = None
+            if cote and mise:
+                profit = round((cote - 1) * mise, 4) if victoire else round(-mise, 4)
+                stats = _maj_roi_global(stats, mise, profit)
+                logging.info(f"Yield — cote {cote} / mise {mise}% → profit {profit:+.2f}u.")
+            else:
+                logging.info("Yield — cote/mise absentes du pari (ancien format) : V/D seulement.")
+            stats = _maj_stats_detail(stats, victoire, marche, niveau, modele,
+                                      mise=mise if profit is not None else None,
+                                      profit=profit)
             stats_modifiees = True
-            logging.info("🏆 Victoire enregistrée.")
-            notifier_resultat("GAGNE", pari_texte, stats)
-        elif statut == "PERDU":
-            stats["defaites"] += 1
-            stats = _maj_stats_detail(stats, False, marche, niveau, modele)
-            stats_modifiees = True
-            logging.info("❌ Défaite enregistrée.")
-            notifier_resultat("PERDU", pari_texte, stats)
+            logging.info("🏆 Victoire enregistrée." if victoire else "❌ Défaite enregistrée.")
+            notifier_resultat(statut, pari_texte, stats)
         else:
             restants.append(item)
             logging.info("⏳ En cours — maintenu dans la file.")
