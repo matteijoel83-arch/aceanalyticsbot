@@ -6,6 +6,14 @@ on:
 permissions:
   contents: write
 
+# v7.4 : file d'attente — si deux déclenchements se chevauchent, le second
+# ATTEND la fin du premier au lieu de tourner en parallèle (évite les conflits
+# d'écriture sur stats.json / pari_en_cours.json). cancel-in-progress: false
+# garantit qu'aucun run n'est JAMAIS annulé par un autre.
+concurrency:
+  group: aceanalytics-bot
+  cancel-in-progress: false
+
 jobs:
   automation-tennis:
     runs-on: ubuntu-latest
