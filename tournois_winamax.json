@@ -1,11 +1,12 @@
 {
   "_commentaire": "Liste des tournois couverts par Winamax. Éditable directement sur GitHub : ajoute/retire un tournoi selon le calendrier de la semaine, le bot s'adapte au run suivant. Utilisé par Gemini comme guide de recherche du calendrier quand RapidAPI est indisponible.",
-  "_maj": "2026-06-28 — Wimbledon (tableau principal du 29 juin au 12 juillet). Tournois de préparation (Eastbourne, Bad Homburg, Majorque) terminés ce week-end. Qualifs Wimbledon terminées (22-25 juin). Pour le prochain Grand Chelem (US Open fin août), réajouter 'ATP US Open Q' / 'WTA US Open Q' si tu veux tester la catégorie qualif.",
+  "_maj": "2026-07-13 — Wimbledon terminé (12 juillet). Semaine post-GC : reprise sur terre battue. Tournois actifs relevés sur l'app Winamax : Båstad, Gstaad, Umag (ATP 250, terre), Athènes et Iaşi (WTA, terre). Fin août : réajouter 'US Open' + éventuellement 'US Open Q' pour la période de qualifs.",
   "tournois_actifs": [
-    "Wimbledon",
-    "US Open",
-    "Australian Open",
-    "Roland Garros"
+    "ATP Bastad",
+    "ATP Gstaad",
+    "ATP Umag",
+    "WTA Athenes",
+    "WTA Iasi"
   ],
   "categories_couvertes": [
     "Grand Chelem",
