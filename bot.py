@@ -683,13 +683,24 @@ def precollecte_rapidapi_tennis(date_fr):
         while True:
             try:
                 url = f"https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2/{tour}/fixtures/{date_api}"
-                _quota_inc("tennisapi")
-                r   = requests.get(url, headers=headers, timeout=10, params={
+                params_fx = {
                     "include":  "tournament,round",
                     "filter":   "PlayerGroup:singles",
                     "pageSize": 100,
                     "pageNo":   page,
-                })
+                }
+                # v7.4.2 : pause anti-rafale sur la pagination aussi (429 WTA p2
+                # constaté le 14/07 — les pages partaient dans la même seconde,
+                # tronquant le calendrier WTA).
+                time.sleep(1.0)
+                _quota_inc("tennisapi")
+                r = requests.get(url, headers=headers, timeout=10, params=params_fx)
+                if r.status_code == 429:
+                    # Débit, pas forcément quota : 1 nouvel essai après pause
+                    logging.warning(f"RapidAPI {tour.upper()} p{page} : 429 — pause 3s puis nouvel essai.")
+                    time.sleep(3)
+                    _quota_inc("tennisapi")
+                    r = requests.get(url, headers=headers, timeout=10, params=params_fx)
                 r.raise_for_status()
                 data = r.json()
 
@@ -2306,7 +2317,14 @@ def run_bot_autonome():
                     continue
                 cote_favori = min(cotes_valides)
                 if MARCHES_ALT_COTE_MIN <= cote_favori <= MARCHES_ALT_COTE_MAX:
-                    matchs_serres.append(m)
+                    # v7.4.2 : mémoriser l'écart de cotes pour prioriser les
+                    # plus serrés (le plafond d'appels sacrifiait le mauvais
+                    # match — constat 14/07 : Budkov Kjaer 2.0/1.8, le plus
+                    # équilibré des cinq, était le seul ignoré).
+                    matchs_serres.append((abs(c1 - c2), m))
+            # Trier du plus serré au moins serré AVANT le plafond d'appels
+            matchs_serres.sort(key=lambda t: t[0])
+            matchs_serres = [m for _, m in matchs_serres]
             if matchs_serres:
                 logging.info(f"Marchés alt ({MARCHES_ALT_MODE}) : {len(matchs_serres)} match(s) serré(s) à examiner.")
                 tickets_alt_data = analyser_marches_alternatifs(matchs_serres, date, fixtures_oddspapi)
