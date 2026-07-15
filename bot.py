@@ -317,20 +317,53 @@ def lister_file_paris():
 
 
 def _detecter_marche(ticket_texte):
-    """Détecte le type de marché depuis le texte du ticket (noms Winamax)."""
+    """
+    Détecte le type de marché depuis le texte du ticket (noms Winamax).
+    v7.5.1 : classification basée PRIORITAIREMENT sur la ligne PRONO — le texte
+    complet (POURQUOI, H2H...) peut contenir des motifs trompeurs. Constat réel
+    (15/07) : un ticket 'Vainqueur' classé à tort 'score_exact' parce que le
+    POURQUOI mentionnait 'H2H 2-1', capté par l'ancien test '2-0'/'2-1' sur
+    tout le texte.
+    """
+    # Isoler la ligne PRONO (celle qui décrit RÉELLEMENT le pari joué)
+    m = re.search(r"prono\s*:?\s*(?:</b>)?\s*(.+)", ticket_texte, re.IGNORECASE)
+    ligne_prono = m.group(1).strip().lower() if m else ""
+
+    def _classer(t):
+        if "combiné" in t or "combine" in t:
+            return "combine"
+        if "tiebreak" in t or "tie-break" in t:
+            return "tiebreak"
+        # Écart de jeux / écart de set = handicap (vérifier AVANT "jeux" pour over_under)
+        if "écart de jeux" in t or "ecart de jeux" in t or "écart de set" in t or \
+           "ecart de set" in t or "handicap" in t:
+            return "handicap"
+        # Nombre de jeux / nombre de sets = over/under
+        if "nombre de jeux" in t or "nombre de set" in t or "over" in t or "under" in t:
+            return "over_under"
+        if "score exact" in t or "2-0" in t or "2-1" in t:
+            return "score_exact"
+        if "moneyline" in t or "vainqueur" in t or "gagne" in t or "victoire" in t:
+            return "moneyline"
+        return None
+
+    # 1) Classification sur la ligne PRONO uniquement (fiable, pas de bruit)
+    resultat = _classer(ligne_prono) if ligne_prono else None
+    if resultat:
+        return resultat
+    # 2) Repli sur le texte complet SANS le test '2-0'/'2-1' (trop permissif
+    #    hors du contexte PRONO — peut matcher un H2H, une date, etc.)
     t = ticket_texte.lower()
     if "combiné" in t or "combine" in t:
         return "combine"
     if "tiebreak" in t or "tie-break" in t:
         return "tiebreak"
-    # Écart de jeux / écart de set = handicap (vérifier AVANT "jeux" pour over_under)
     if "écart de jeux" in t or "ecart de jeux" in t or "écart de set" in t or \
        "ecart de set" in t or "handicap" in t:
         return "handicap"
-    # Nombre de jeux / nombre de sets = over/under
     if "nombre de jeux" in t or "nombre de set" in t or "over" in t or "under" in t:
         return "over_under"
-    if "score exact" in t or "2-0" in t or "2-1" in t:
+    if "score exact" in t:
         return "score_exact"
     if "moneyline" in t or "vainqueur" in t or "gagne" in t or "victoire" in t:
         return "moneyline"
