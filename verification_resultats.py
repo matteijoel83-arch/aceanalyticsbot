@@ -95,8 +95,26 @@ STATS_DEFAUT = {
     "par_modele": {
         "opus":   {"v": 0, "d": 0},
         "sonnet": {"v": 0, "d": 0},
+    },
+    "par_surface": {
+        "terre":  {"v": 0, "d": 0},
+        "dur":    {"v": 0, "d": 0},
+        "gazon":  {"v": 0, "d": 0},
+        "autre":  {"v": 0, "d": 0},
     }
 }
+
+
+def _normaliser_surface(surface_brute):
+    """Même logique que bot.py v7.5 — segment de mesure, aucune décision d'analyse."""
+    s = str(surface_brute or "").lower()
+    if "clay" in s or "terre" in s:
+        return "terre"
+    if "grass" in s or "gazon" in s:
+        return "gazon"
+    if "hard" in s or "dur" in s:
+        return "dur"
+    return "autre"
 
 
 def _migrer_stats(s):
@@ -109,13 +127,16 @@ def _migrer_stats(s):
     # v2.1 : par_modele pouvait manquer sur d'anciens stats.json
     if "par_modele" not in s:
         s["par_modele"] = dict(STATS_DEFAUT["par_modele"])
+    # v2.2 : par_surface (aligné sur bot.py v7.5)
+    if "par_surface" not in s:
+        s["par_surface"] = dict(STATS_DEFAUT["par_surface"])
     return s
 
 
 def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre",
-                      mise=None, profit=None):
+                      mise=None, profit=None, surface="autre"):
     """
-    Met à jour les stats par marché, par niveau et par modèle.
+    Met à jour les stats par marché, par niveau, par modèle et (v2.2) par surface.
     v2.1 : accumule aussi mise/profit par segment si fournis (calcul de yield,
     même logique que bot.py v7.4 — enregistrer_resultat).
     """
@@ -136,11 +157,17 @@ def _maj_stats_detail(stats, victoire, marche, niveau, modele="autre",
         stats["par_modele"] = dict(STATS_DEFAUT["par_modele"])
     if modele in stats["par_modele"]:
         stats["par_modele"][modele][cle] += 1
+    # v2.2 : Par surface (terre/dur/gazon/autre)
+    if "par_surface" not in stats:
+        stats["par_surface"] = dict(STATS_DEFAUT["par_surface"])
+    surface_cle = surface if surface in stats["par_surface"] else "autre"
+    stats["par_surface"][surface_cle][cle] += 1
     # v2.1 : YIELD par segment (mise et profit en unités de % de bankroll)
     if mise is not None and profit is not None:
         for section, cle_seg in [("par_marche", marche_cle),
                                  ("par_niveau", niveau_cle),
-                                 ("par_modele", modele)]:
+                                 ("par_modele", modele),
+                                 ("par_surface", surface_cle)]:
             seg = stats.get(section, {}).get(cle_seg)
             if isinstance(seg, dict):
                 seg["mise"]   = round(seg.get("mise", 0.0) + mise, 4)
@@ -497,11 +524,12 @@ def main():
             continue
 
         # Récupérer marché, niveau, modèle ET (v2.1) cote/mise depuis la file
-        marche = item.get("marche", "autre")
-        niveau = item.get("niveau", "autre")
-        modele = item.get("modele", "autre")
-        cote   = item.get("cote")       # v2.1 — écrit par bot.py v7.4
-        mise   = item.get("mise_pct")   # v2.1 — écrit par bot.py v7.4
+        marche  = item.get("marche", "autre")
+        niveau  = item.get("niveau", "autre")
+        modele  = item.get("modele", "autre")
+        cote    = item.get("cote")       # v2.1 — écrit par bot.py v7.4
+        mise    = item.get("mise_pct")   # v2.1 — écrit par bot.py v7.4
+        surface = _normaliser_surface(item.get("surface"))  # v2.2 — écrit par bot.py v7.5
 
         logging.info(f"─── Ticket {i}/{len(a_verifier)} — {marche} / {niveau} ───")
         statut = interroger_claude_statut(pari_texte, item.get("date", ""))
@@ -521,7 +549,7 @@ def main():
                 logging.info("Yield — cote/mise absentes du pari (ancien format) : V/D seulement.")
             stats = _maj_stats_detail(stats, victoire, marche, niveau, modele,
                                       mise=mise if profit is not None else None,
-                                      profit=profit)
+                                      profit=profit, surface=surface)
             stats_modifiees = True
             logging.info("🏆 Victoire enregistrée." if victoire else "❌ Défaite enregistrée.")
             notifier_resultat(statut, pari_texte, stats)
