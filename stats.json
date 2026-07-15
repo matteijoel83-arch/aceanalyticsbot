@@ -4,14 +4,14 @@
   "defaites": 15,
   "par_marche": {
     "moneyline": {
-      "v": 16,
-      "d": 13
+      "v": 17,
+      "d": 13,
+      "mise": 1.0,
+      "profit": -1.0
     },
     "score_exact": {
-      "v": 2,
-      "d": 2,
-      "mise": 1.0,
-      "profit": 1.5
+      "v": 1,
+      "d": 2
     },
     "over_under": {
       "v": 0,
@@ -47,7 +47,7 @@
       "v": 7,
       "d": 8,
       "mise": 1.0,
-      "profit": 1.5
+      "profit": -1.0
     }
   },
   "par_modele": {
@@ -55,7 +55,7 @@
       "v": 8,
       "d": 9,
       "mise": 1.0,
-      "profit": 1.5
+      "profit": -1.0
     },
     "sonnet": {
       "v": 0,
@@ -67,7 +67,7 @@
       "v": 0,
       "d": 1,
       "mise": 1.0,
-      "profit": 1.5
+      "profit": -1.0
     },
     "dur": {
       "v": 0,
@@ -84,6 +84,6 @@
   },
   "roi": {
     "mise_totale": 1.0,
-    "profit": 1.5
+    "profit": -1.0
   }
 }
