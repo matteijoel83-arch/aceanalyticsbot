@@ -591,6 +591,36 @@ def sauvegarder_pari_pour_suivi(pari_info):
     _gh_put("pari_en_cours.json", paris, "📌 Ajout pari", sha=sha)
 
 
+def sauvegarder_ticket_rejete(ticket_texte, raison, date):
+    """
+    v7.5.2 — MESURE PURE : archive un ticket rejeté par les garde-fous
+    (delta insuffisant, écart modèle-marché, cote estimée, hors fenêtre...)
+    dans tickets_rejetes.json. Ne touche JAMAIS stats.json, n'envoie AUCUNE
+    notification Telegram, et n'influence AUCUNE décision d'analyse.
+    But : dans quelques semaines, un règlement séparé (comme 'regler' pour
+    les vrais paris) dira si les garde-fous rejettent net plus de gagnants
+    que de perdants — donnée qu'on n'avait qu'au jugé jusqu'ici (cf. le rejet
+    Etcheverry/Merida Aguilar du 15/07, qui aurait gagné).
+    """
+    if DRY_RUN:
+        return
+    marche = _detecter_marche(ticket_texte)
+    niveau = _detecter_niveau(ticket_texte)
+    entree = {
+        "pari":         ticket_texte,
+        "date":         date,
+        "raison_rejet": raison or "inconnue",
+        "marche":       marche,
+        "niveau":       niveau,
+    }
+    rejets, sha = _gh_get("tickets_rejetes.json")
+    if not isinstance(rejets, list):
+        rejets = []
+    rejets.append(entree)
+    # Plafond large (300) — fichier de mesure, pas de file d'action à vider vite
+    _gh_put("tickets_rejetes.json", rejets[-300:], "🔍 Ticket rejeté archivé", sha=sha)
+
+
 # Liste de secours si le fichier GitHub est absent (catégories Winamax larges)
 TOURNOIS_WINAMAX_DEFAUT = [
     "Wimbledon", "US Open", "Australian Open", "Roland Garros",
@@ -2476,11 +2506,13 @@ def run_bot_autonome():
             return debut <= hm <= fin
 
         def _ticket_valide(t):
+            """v7.5.2 : retourne (bool, raison) — la raison alimente le
+            suivi des tickets rejetés (mesure pure, voir tickets_rejetes.json)."""
             t_lower = t.lower()
             # Signaux d'abandon explicites dans le texte
             if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
                                                "kelly 0%", "mise : 0%", "mise 0%"]):
-                return False
+                return False, "abandon explicite dans le texte"
             # Rejeter les cotes inventées/estimées — SAUF référence Pinnacle assumée
             # (marchés alternatifs : "cote de référence pinnacle" est légitime)
             est_ref_pinnacle = "référence pinnacle" in t_lower or "reference pinnacle" in t_lower
@@ -2489,7 +2521,7 @@ def run_bot_autonome():
                      "cote approximative", "estimation de cote",
                      "cote non disponible", "cote handicap estimée"]):
                 logging.info("Ticket rejeté — cote estimée/inventée détectée.")
-                return False
+                return False, "cote estimée/inventée"
             # FILTRE HORAIRE : extraire l'heure du ticket (ligne HEURE) et vérifier la fenêtre.
             # Empêche de parier sur un match déjà joué (ex: 09:00 en session soir 22:50→05:00).
             mh = re.search(r"heure\s*:?\s*</b>?\s*(\d{1,2})[h:](\d{2})", t_lower)
@@ -2499,7 +2531,7 @@ def run_bot_autonome():
                 hm = f"{int(mh.group(1)):02d}:{mh.group(2)}"
                 if not _heure_dans_fenetre(hm, heure, heure_fin):
                     logging.warning(f"Ticket rejeté — match à {hm} hors fenêtre {heure}→{heure_fin} (déjà joué ou trop tard).")
-                    return False
+                    return False, f"hors fenêtre horaire ({hm})"
             # Extraire le delta de la ligne VALUE : "delta +0.07" ou "delta -0.05"
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
             if m:
@@ -2520,7 +2552,7 @@ def run_bot_autonome():
                     seuil_delta = 0.10
                 if delta < seuil_delta:
                     logging.info(f"Ticket rejeté — delta {delta:+.2f} < seuil {seuil_delta:.2f} (cote {cote_ticket}).")
-                    return False  # Delta insuffisant pour cette cote → abandon
+                    return False, f"delta {delta:+.2f} < seuil {seuil_delta:.2f}"  # Delta insuffisant pour cette cote → abandon
             # GARDE-FOU ÉCART MODÈLE-MARCHÉ (validé par les cas Wang et Ruse) :
             # Un faux delta géant apparaît quand Claude (surtout Opus) surestime trop
             # la proba d'un outsider vs le marché. Ex Wang : bot 45% vs marché 26% → +73%.
@@ -2554,15 +2586,23 @@ def run_bot_autonome():
                             f"bot {proba_bot*100:.0f}% vs marché {proba_marche*100:.0f}% "
                             f"(+{ecart_relatif*100:.0f}%, seuil {seuil*100:.0f}%). {raison}."
                         )
-                        return False
-            return True
+                        return False, f"écart modèle-marché +{ecart_relatif*100:.0f}% ({raison})"
+            return True, None
 
         tickets_valides = []
         for t in tickets:
             if not (t.startswith("🎾") or t.startswith("🔴")):
                 continue  # Pas un ticket structuré valide
-            if not _ticket_valide(t):
+            valide, raison_rejet = _ticket_valide(t)
+            if not valide:
                 logging.info("Ticket rejeté (delta < seuil ou abandon explicite) — non envoyé.")
+                # v7.5.2 : trace le rejet pour mesure future — AUCUN impact sur
+                # les stats officielles, AUCUN envoi Telegram, juste un journal
+                # pour un jour évaluer si les garde-fous rejettent net plus de
+                # gagnants que de perdants (voir historique Etcheverry/Merida
+                # Aguilar du 15/07 — un rejet peut être une fausse alerte, la
+                # question est de savoir si c'est la tendance ou l'exception).
+                sauvegarder_ticket_rejete(t, raison_rejet, date)
                 continue
             tickets_valides.append(t)
         tickets = tickets_valides
