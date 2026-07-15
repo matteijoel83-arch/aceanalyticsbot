@@ -433,6 +433,133 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
         return "EN_COURS"
 
 # =====================================================================
+# 4bis. VÉRIFICATION DÉTERMINISTE VIA ODDSPAPI (v2.3, priorité sur Claude)
+# =====================================================================
+# Constat du 15/07/2026 : Claude+web_search a annoncé "GAGNE" en citant un
+# score INVENTÉ ("Altmaier bat Darderi 6-2 7-5" sourcé "ATP Tour officiel")
+# alors que Darderi avait réellement gagné 6-4 6-4 (confirmé Winamax/app).
+# La garde-fou "PREUVE DE FIN" ne protège pas contre une citation qui SONNE
+# vraie mais est fausse — c'est une limite structurelle du web_search LLM.
+#
+# Pour les paris MONEYLINE réglés le jour même, on utilise à la place le
+# score OddsPapi — la même source de données que la commande 'regler' de
+# bot.py, donc déterministe et déjà validée en production. Claude+web_search
+# ne sert plus alors que de FILET DE SECOURS quand OddsPapi n'a pas le match
+# (autre jour, tournoi non couvert) ou pour les marchés non-Moneyline
+# (score exact, écart de jeux...) que ce contrôle ne couvre pas encore.
+
+ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"
+RAPIDAPI_KEY  = os.environ.get("RAPIDAPI_KEY")  # optionnel — repli Claude si absent
+
+
+def _sim_noms_verif(a, b):
+    """Similarité de noms tolérante à l'ordre/virgules (même logique que bot.py)."""
+    from difflib import SequenceMatcher
+    def norm(x):
+        x = str(x).lower().replace(",", " ").replace("-", " ")
+        return " ".join(sorted(w for w in x.split() if w))
+    na, nb = norm(a), norm(b)
+    score = SequenceMatcher(None, na, nb).ratio()
+    mots_a, mots_b = set(na.split()), set(nb.split())
+    communs = mots_a & mots_b
+    if communs:
+        score = max(score, len(communs) / max(len(mots_a), len(mots_b)))
+    return score
+
+
+def _oddspapi_fixtures_today_verif():
+    """Fixtures du jour (mêmes règles que bot.py : SRL exclu). [] si erreur."""
+    if not RAPIDAPI_KEY:
+        return []
+    try:
+        r = requests.get(
+            f"https://{ODDSPAPI_HOST}/fixtures/today",
+            headers={"X-RapidAPI-Key": RAPIDAPI_KEY, "X-RapidAPI-Host": ODDSPAPI_HOST},
+            params={"sportId": 12}, timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logging.info(f"OddsPapi (vérif déterministe) indisponible : {e}")
+        return []
+    fixtures = data if isinstance(data, list) else data.get("fixtures", data.get("data", []))
+    if not isinstance(fixtures, list):
+        return []
+    return [f for f in fixtures
+            if "srl" not in str((f.get("tournament") or {}).get("tournamentName", "")).lower()]
+
+
+def _extraire_match_et_prono(pari_texte):
+    """Extrait (joueur1, joueur2, texte_ligne_prono) depuis un ticket."""
+    txt = re.sub(r"<[^>]+>", "", pari_texte)
+    mm = re.search(r"matchs?\s*:?\s*(.+?)\s+vs\s+(.+)", txt, re.IGNORECASE)
+    pm = re.search(r"prono\s*:?\s*(.+)", txt, re.IGNORECASE)
+    j1 = mm.group(1).strip()[:50] if mm else None
+    j2 = mm.group(2).strip().split("\n")[0][:50] if mm else None
+    prono = pm.group(1).strip().split("\n")[0][:100] if pm else ""
+    return j1, j2, prono
+
+
+def _est_pari_moneyline_simple(prono_texte, marche_detectee):
+    """True si le pari est un Moneyline simple ('X (Vainqueur)') — seul cas
+    où 'qui a gagné le match' suffit à trancher le pari sans ambiguïté."""
+    if marche_detectee != "moneyline":
+        return False
+    p = prono_texte.lower()
+    # Exclure toute trace d'un autre marché qui aurait pu glisser dans la ligne
+    return not any(x in p for x in ["over", "under", "écart", "ecart", "handicap",
+                                     "score", "combin", "tiebreak", "set"])
+
+
+def verifier_moneyline_oddspapi(item, marche_detectee, fixtures):
+    """
+    Retourne 'GAGNE' / 'PERDU' / None (None = inconclusif, repli sur Claude).
+    Ne s'applique qu'aux paris Moneyline réglés le jour même de leur émission
+    ET dont le match est trouvé Finished chez OddsPapi.
+    """
+    if item.get("date") != datetime.now().strftime("%d/%m/%Y"):
+        return None  # seul le jour même est couvert par /fixtures/today
+    j1, j2, prono = _extraire_match_et_prono(item.get("pari", ""))
+    if not j1 or not j2 or not _est_pari_moneyline_simple(prono, marche_detectee):
+        return None
+
+    meilleur, score_max = None, 0.0
+    for f in fixtures:
+        p = f.get("participants", {})
+        n1, n2 = str(p.get("participant1Name", "")), str(p.get("participant2Name", ""))
+        s = max((_sim_noms_verif(j1, n1) + _sim_noms_verif(j2, n2)) / 2,
+               (_sim_noms_verif(j1, n2) + _sim_noms_verif(j2, n1)) / 2)
+        if s > score_max:
+            score_max, meilleur = s, f
+    if not meilleur or score_max < 0.7:
+        return None
+
+    statut = str((meilleur.get("status") or {}).get("statusName") or "")
+    resultat = (meilleur.get("scores") or {}).get("result") or {}
+    if statut != "Finished" or not resultat:
+        return None  # pas encore terminé → Claude tranchera plus tard
+
+    p = meilleur.get("participants", {})
+    n1, n2 = p.get("participant1Name", ""), p.get("participant2Name", "")
+    s1, s2 = resultat.get("participant1Score"), resultat.get("participant2Score")
+    if s1 is None or s2 is None or s1 == s2:
+        return None
+    vainqueur = n1 if s1 > s2 else n2
+
+    # Le joueur pronostiqué est-il j1 ou j2 du ticket ? Puis : a-t-il gagné ?
+    score_j1 = max(_sim_noms_verif(prono, j1), _sim_noms_verif(j1, prono))
+    score_j2 = max(_sim_noms_verif(prono, j2), _sim_noms_verif(j2, prono))
+    joueur_pronostique = j1 if score_j1 >= score_j2 else j2
+    a_gagne = _sim_noms_verif(joueur_pronostique, vainqueur) >= 0.6
+
+    logging.info(
+        f"OddsPapi (déterministe) — {n1} vs {n2} : score final {s1}-{s2}, "
+        f"vainqueur '{vainqueur}'. Pronostiqué : '{joueur_pronostique}' → "
+        f"{'GAGNE' if a_gagne else 'PERDU'}."
+    )
+    return "GAGNE" if a_gagne else "PERDU"
+
+# =====================================================================
 # 5. LOGIQUE PRINCIPALE
 # =====================================================================
 
@@ -518,6 +645,10 @@ def main():
     restants        = list(reportes)  # les reportés restent en file tels quels
     stats_modifiees = False
 
+    # v2.3 : fixtures OddsPapi du jour, récupérées UNE fois pour tout le run
+    # (sert au contrôle déterministe des paris Moneyline réglés aujourd'hui)
+    fixtures_jour = _oddspapi_fixtures_today_verif()
+
     for i, item in enumerate(a_verifier, 1):
         pari_texte = item.get("pari", "")
         if not pari_texte:
@@ -532,8 +663,16 @@ def main():
         surface = _normaliser_surface(item.get("surface"))  # v2.2 — écrit par bot.py v7.5
 
         logging.info(f"─── Ticket {i}/{len(a_verifier)} — {marche} / {niveau} ───")
-        statut = interroger_claude_statut(pari_texte, item.get("date", ""))
-        logging.info(f"Verdict : {statut}")
+
+        # v2.3 : contrôle DÉTERMINISTE en priorité (score OddsPapi réel) pour
+        # les Moneyline du jour même — élimine le risque d'hallucination du
+        # web_search LLM constaté le 15/07 (score inventé, source citée fictive).
+        statut = verifier_moneyline_oddspapi(item, marche, fixtures_jour)
+        if statut:
+            logging.info(f"Verdict (OddsPapi déterministe) : {statut}")
+        else:
+            statut = interroger_claude_statut(pari_texte, item.get("date", ""))
+            logging.info(f"Verdict (Claude + web_search) : {statut}")
 
         if statut in ("GAGNE", "PERDU"):
             victoire = statut == "GAGNE"
