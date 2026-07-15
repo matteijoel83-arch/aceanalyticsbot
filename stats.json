@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "victoires": 20,
-  "defaites": 14,
+  "victoires": 19,
+  "defaites": 15,
   "par_marche": {
     "moneyline": {
-      "v": 17,
-      "d": 12
+      "v": 16,
+      "d": 13
     },
     "score_exact": {
       "v": 2,
@@ -44,16 +44,16 @@
       "d": 4
     },
     "basse": {
-      "v": 8,
-      "d": 7,
+      "v": 7,
+      "d": 8,
       "mise": 1.0,
       "profit": 1.5
     }
   },
   "par_modele": {
     "opus": {
-      "v": 9,
-      "d": 8,
+      "v": 8,
+      "d": 9,
       "mise": 1.0,
       "profit": 1.5
     },
@@ -64,8 +64,8 @@
   },
   "par_surface": {
     "terre": {
-      "v": 1,
-      "d": 0,
+      "v": 0,
+      "d": 1,
       "mise": 1.0,
       "profit": 1.5
     },
