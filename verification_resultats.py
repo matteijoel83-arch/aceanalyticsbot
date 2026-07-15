@@ -23,6 +23,7 @@ v2.2 (13/07/2026) — protection du temps d'exécution :
 
 import os, sys, json, logging, base64, time, re, requests
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import anthropic
 from logging.handlers import RotatingFileHandler
 
@@ -59,6 +60,14 @@ if MISSING:
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 CLAUDE_MODEL = "claude-sonnet-4-6"  # Sonnet pour fiabilité — vérification critique
+
+
+def _maintenant_paris():
+    """v2.4 : heure de PARIS, pas UTC — le runner GitHub Actions est en UTC,
+    or toutes les dates des paris (JJ/MM/AAAA) sont en heure française.
+    Sans ça : contrôle 'jour même' raté entre minuit et 2h Paris, et
+    expiration à 3 jours décalée. bot.py utilise déjà ZoneInfo partout."""
+    return datetime.now(ZoneInfo("Europe/Paris"))
 
 # v2.2 — bornes de temps d'exécution
 MAX_VERIFS_PAR_RUN = 8   # ~8 × 60s max ≈ 8 min — le reste attend le run suivant
@@ -467,6 +476,23 @@ def _sim_noms_verif(a, b):
     return score
 
 
+def _quota_oddspapi_compter(n=1):
+    """v2.4 : incrémente oddspapi_mois dans quota_rapidapi.json — les requêtes
+    de CE script étaient invisibles du compteur (~90/mois non comptées).
+    Écriture directe simple : ce script tourne AVANT bot.py dans le même job
+    GitHub Actions (séquentiel), donc pas de conflit d'écriture possible."""
+    try:
+        mois_actuel = _maintenant_paris().strftime("%Y-%m")
+        data, sha = _gh_get("quota_rapidapi.json")
+        if not isinstance(data, dict) or data.get("mois") != mois_actuel:
+            data = {"mois": mois_actuel, "tennisapi_mois": 0, "oddspapi_mois": 0,
+                    "jour": _maintenant_paris().strftime("%Y-%m-%d"), "tennisapi_jour": 0}
+        data["oddspapi_mois"] = data.get("oddspapi_mois", 0) + n
+        _gh_put("quota_rapidapi.json", data, "📊 Quota OddsPapi (vérification)", sha=sha)
+    except Exception as e:
+        logging.warning(f"Comptage quota vérification échoué (non bloquant) : {e}")
+
+
 def _oddspapi_fixtures_today_verif():
     """Fixtures du jour (mêmes règles que bot.py : SRL exclu). [] si erreur."""
     if not RAPIDAPI_KEY:
@@ -517,7 +543,7 @@ def verifier_moneyline_oddspapi(item, marche_detectee, fixtures):
     Ne s'applique qu'aux paris Moneyline réglés le jour même de leur émission
     ET dont le match est trouvé Finished chez OddsPapi.
     """
-    if item.get("date") != datetime.now().strftime("%d/%m/%Y"):
+    if item.get("date") != _maintenant_paris().strftime("%d/%m/%Y"):
         return None  # seul le jour même est couvert par /fixtures/today
     j1, j2, prono = _extraire_match_et_prono(item.get("pari", ""))
     if not j1 or not j2 or not _est_pari_moneyline_simple(prono, marche_detectee):
@@ -541,8 +567,12 @@ def verifier_moneyline_oddspapi(item, marche_detectee, fixtures):
 
     p = meilleur.get("participants", {})
     n1, n2 = p.get("participant1Name", ""), p.get("participant2Name", "")
-    s1, s2 = resultat.get("participant1Score"), resultat.get("participant2Score")
-    if s1 is None or s2 is None or s1 == s2:
+    try:
+        s1 = int(resultat.get("participant1Score"))
+        s2 = int(resultat.get("participant2Score"))
+    except (TypeError, ValueError):
+        return None  # scores absents ou illisibles → repli Claude
+    if s1 == s2:
         return None
     vainqueur = n1 if s1 > s2 else n2
 
@@ -613,7 +643,7 @@ def main():
     def _age_jours(item):
         try:
             d = datetime.strptime(str(item.get("date", "")), "%d/%m/%Y")
-            return (datetime.now() - d).days
+            return (_maintenant_paris().replace(tzinfo=None) - d).days
         except Exception:
             return 0  # date illisible → on ne l'expire pas (prudence)
 
@@ -646,8 +676,16 @@ def main():
     stats_modifiees = False
 
     # v2.3 : fixtures OddsPapi du jour, récupérées UNE fois pour tout le run
-    # (sert au contrôle déterministe des paris Moneyline réglés aujourd'hui)
-    fixtures_jour = _oddspapi_fixtures_today_verif()
+    # (sert au contrôle déterministe des paris Moneyline réglés aujourd'hui).
+    # v2.4 : fetch PARESSEUX — seulement si au moins un pari peut en profiter
+    # (Moneyline daté d'aujourd'hui), sinon la requête était gaspillée.
+    fixtures_jour = []
+    date_paris = _maintenant_paris().strftime("%d/%m/%Y")
+    if any(it.get("marche") == "moneyline" and it.get("date") == date_paris
+           for it in a_verifier):
+        fixtures_jour = _oddspapi_fixtures_today_verif()
+        if fixtures_jour:
+            _quota_oddspapi_compter(1)  # v2.4 : cette requête compte aussi
 
     for i, item in enumerate(a_verifier, 1):
         pari_texte = item.get("pari", "")
