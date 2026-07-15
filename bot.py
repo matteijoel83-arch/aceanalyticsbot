@@ -146,6 +146,12 @@ STATS_DEFAUT  = {
     "par_modele": {
         "opus":   {"v": 0, "d": 0},
         "sonnet": {"v": 0, "d": 0},
+    },
+    "par_surface": {
+        "terre":  {"v": 0, "d": 0},
+        "dur":    {"v": 0, "d": 0},
+        "gazon":  {"v": 0, "d": 0},
+        "autre":  {"v": 0, "d": 0},
     }
 }
 TICKET_SEP    = "[SEPARATEUR]"
@@ -224,6 +230,8 @@ def _migrer_stats(s):
             s["par_niveau"] = dict(STATS_DEFAUT["par_niveau"])
     if "par_modele" not in s:
         s["par_modele"] = dict(STATS_DEFAUT["par_modele"])
+    if "par_surface" not in s:
+        s["par_surface"] = dict(STATS_DEFAUT["par_surface"])
     return s
 
 
@@ -268,7 +276,8 @@ def enregistrer_resultat(victoire, index_pari=None):
                 roi["profit"]      = round(roi.get("profit", 0.0) + profit, 4)
             for champ, section in [("marche", "par_marche"),
                                    ("niveau", "par_niveau"),
-                                   ("modele", "par_modele")]:
+                                   ("modele", "par_modele"),
+                                   ("surface", "par_surface")]:
                 val = p.get(champ)
                 if val and val in s.get(section, {}):
                     s[section][val][cle] += 1
@@ -348,6 +357,23 @@ def _detecter_niveau(ticket_texte):
         return "moderee"
     if "basse" in t:
         return "basse"
+    return "autre"
+
+
+def _normaliser_surface(surface_brute):
+    """
+    Normalise un champ 'surface' (venant de RapidAPI ou Gemini, en FR ou EN,
+    ex: 'Clay', 'Terre battue', 'Hard', 'Gazon') vers terre/dur/gazon/autre.
+    v7.5 : suivi du yield par surface (Terre/Dur/Gazon) — aucune décision
+    d'analyse n'en dépend, c'est un segment de MESURE uniquement.
+    """
+    s = str(surface_brute or "").lower()
+    if "clay" in s or "terre" in s:
+        return "terre"
+    if "grass" in s or "gazon" in s:
+        return "gazon"
+    if "hard" in s or "dur" in s:
+        return "dur"
     return "autre"
 
 
@@ -2384,8 +2410,17 @@ def run_bot_autonome():
             idx = texte.find("AUCUN_MATCH")
             if idx != -1:
                 suite = texte[idx + len("AUCUN_MATCH"):].strip()
-                # Nettoyer et limiter à 200 chars
-                explication = re.sub(r'<[^>]+>', '', suite)[:200].strip()
+                # v7.4.3 : synthèse BRÈVE et propre — l'ancien [:200] tranchait
+                # en plein mot ("Martineau/" — Telegram 14/07). On garde 1-2 phrases
+                # complètes : coupe à la dernière fin de phrase avant ~220 chars.
+                explication = re.sub(r'<[^>]+>', '', suite).strip()
+                if len(explication) > 220:
+                    coupe = explication[:220]
+                    pos_phrase = max(coupe.rfind(". "), coupe.rfind("! "), coupe.rfind("? "))
+                    if pos_phrase > 80:
+                        explication = coupe[:pos_phrase + 1]
+                    else:
+                        explication = coupe[:coupe.rfind(" ")].rstrip(",;:—-") + "…"
                 if explication:
                     explication = f"\n\n💬 <i>{explication}</i>"
             _envoyer_notification_sans_ticket(
@@ -2512,6 +2547,19 @@ def run_bot_autonome():
         paris_envoyes   = 0
         stats_cached    = charger_stats()
 
+        # v7.5 : lookup surface par match (mesure seule — n'influence AUCUNE
+        # décision d'analyse). Reparse défensif de donnees_json, indépendant
+        # de matchs_debug qui peut ne pas exister si son bloc try a échoué.
+        surface_par_match = {}
+        try:
+            for m in json.loads(donnees_json).get("matchs", []):
+                j1n = str(m.get("joueur1", "")).lower()
+                j2n = str(m.get("joueur2", "")).lower()
+                if j1n and j2n:
+                    surface_par_match[(j1n, j2n)] = m.get("surface", "")
+        except Exception:
+            pass
+
         for i, ticket in enumerate(tickets, 1):
             h = _hash_ticket(ticket)
             if h in hashes_connus:
@@ -2540,6 +2588,11 @@ def run_bot_autonome():
                     pari_rec["cote"] = float(mcote.group(1).replace(",", "."))
                 if mmise:
                     pari_rec["mise_pct"] = float(mmise.group(1).replace(",", "."))
+                # v7.5 : surface du match (segment de mesure — voir _normaliser_surface)
+                for (j1n, j2n), surf in surface_par_match.items():
+                    if j1n in tpl or j2n in tpl:
+                        pari_rec["surface"] = _normaliser_surface(surf)
+                        break
                 # v7.4 : CLV — joindre la moneyline Pinnacle du moment si dispo
                 for dm in tickets_alt_data:
                     if dm["j1"].lower() in tpl or dm["j2"].lower() in tpl:
@@ -2720,6 +2773,23 @@ def envoyer_recap_hebdo():
         if détails_m:
             lignes.append("\n🤖 <b>Par modèle :</b>")
             lignes.extend(détails_m)
+
+    # v7.5 : détail par surface (Terre/Dur/Gazon) — mesure pure, aucune
+    # décision d'analyse n'en dépend actuellement.
+    par_surface = s.get("par_surface", {})
+    if par_surface:
+        détails_s = []
+        for surface, vd in par_surface.items():
+            v, d = vd.get("v", 0), vd.get("d", 0)
+            if v + d > 0:
+                wr_s = v / (v + d) * 100
+                extra = ""
+                if vd.get("mise"):
+                    extra = f" · yield {vd.get('profit', 0) / vd['mise'] * 100:+.0f}%"
+                détails_s.append(f"  • {surface.capitalize()} : {v}V/{d}D ({wr_s:.0f}%){extra}")
+        if détails_s:
+            lignes.append("\n🎾 <b>Par surface :</b>")
+            lignes.extend(détails_s)
 
     # Quota RapidAPI du mois
     quota, _ = _gh_get("quota_rapidapi.json")
