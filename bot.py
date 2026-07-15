@@ -1459,7 +1459,14 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 # =====================================================================
 
 def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
-    session = "MATIN" if heure < "14:00" else "APRÈS-MIDI"
+    # v7.5.3 : SOIR existait dans run_bot_autonome mais pas ici — après 19h,
+    # Claude recevait "Session APRÈS-MIDI" à tort.
+    if heure < "14:00":
+        session = "MATIN"
+    elif heure < "19:00":
+        session = "APRÈS-MIDI"
+    else:
+        session = "SOIR"
     try:
         avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
     except Exception:
@@ -1772,7 +1779,20 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
     # FILTRE DE DATE : retirer tout match dont la date n'est pas celle du jour.
     # Protège contre le bug où Gemini remonte des matchs d'un autre jour
     # (ex: 1er tour Wimbledon programmé lundi, daté à tort d'aujourd'hui).
+    # v7.5.3 : en fenêtre NOCTURNE (session SOIR, ex: 19:30→05:00), le
+    # LENDEMAIN est aussi accepté pour les matchs d'après minuit — sinon le
+    # filtre date rejetait silencieusement tous les matchs 00:00-05:00
+    # (typiquement les Challengers américains) que la fenêtre autorisait.
+    fenetre_nocturne = heure_fin < heure_debut  # ex: 22:50 → 05:00
     if date_jour:
+        date_lendemain = None
+        if fenetre_nocturne:
+            try:
+                d = datetime.strptime(date_jour, "%d/%m/%Y")
+                date_lendemain = (d + timedelta(days=1)).strftime("%d/%m/%Y")
+            except Exception:
+                pass
+
         def _bonne_date(m):
             dm = str(m.get("date_match", "")).strip()
             if not dm:
@@ -1782,7 +1802,15 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
             if not md:
                 return True  # format inattendu → garder, ne pas casser
             date_normalisee = f"{md.group(1)}/{md.group(2)}/{md.group(3)}"
-            return date_normalisee == date_jour
+            if date_normalisee == date_jour:
+                return True
+            # Lendemain accepté UNIQUEMENT si fenêtre nocturne ET heure ≤ heure_fin
+            # (un match du lendemain à 14:00 reste hors session, il sera rejoué demain)
+            if date_lendemain and date_normalisee == date_lendemain:
+                mh = re.search(r"(\d{2}):(\d{2})", str(m.get("heure_match", "")))
+                if mh and mh.group(0) <= heure_fin:
+                    return True
+            return False
         avant = len(matchs)
         matchs = [m for m in matchs if _bonne_date(m)]
         retires_date = avant - len(matchs)
@@ -1791,8 +1819,6 @@ def filtrer_json_par_fenetre(donnees_json, heure_debut, heure_fin, date_jour=Non
                 f"Filtre DATE : {retires_date} match(s) à une date ≠ {date_jour} retiré(s) "
                 f"(probable hallucination de date par Gemini)."
             )
-
-    fenetre_nocturne = heure_fin < heure_debut  # ex: 22:50 → 05:00
 
     def _dans_fenetre(hm):
         m = re.search(r"(\d{2}):(\d{2})", str(hm))
