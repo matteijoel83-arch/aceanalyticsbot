@@ -1310,33 +1310,60 @@ que tu trouves vite : fais une recherche DÉDIÉE par donnée manquante.
 Un match avec stats complètes permet à l'analyste de décider ; un match sans stats
 est inexploitable. La qualité des stats = la qualité de l'analyse finale.
 
-PRIORITÉ 1 — Pour CHAQUE match, faire une recherche dédiée par donnée, dans l'ordre :
-1. Hold% des DEUX joueurs (donnée la plus importante) :
-   → tennisabstract.com OU ultimatetennisstatistics.com OU tennisratio.com OU matchstat.com
-   → Chercher : "Prénom Nom hold% tennisabstract" ou "Nom serve stats UTS"
-   → Recherche SÉPARÉE pour J1 puis pour J2 si besoin — ne pas se contenter d'un seul
-   → Si introuvable après recherche réelle → "non trouvé" (ne PAS inventer)
+⚠️⚠️ RÈGLE FONDAMENTALE — TOUTE STAT DOIT ÊTRE FILTRÉE PAR SURFACE ⚠️⚠️
+Une stat "toutes surfaces confondues" est TROMPEUSE et pire qu'une absence de stat.
+Raison mesurée : sur gazon même un serveur moyen tient son service au-dessus de 85%,
+alors que sur terre les taux de hold chutent pour tout le monde. Un Hold% de 76% sur
+TERRE peut donc valoir MIEUX qu'un Hold% de 85% sur GAZON. Comparer deux joueurs avec
+des moyennes toutes surfaces revient à comparer des pommes et des poires.
+→ Pour CHAQUE match, tu cherches les stats UNIQUEMENT sur la surface de CE match
+  (indiquée dans le calendrier ci-dessus : Terre / Dur / Gazon), sur 52 semaines.
+→ Sur tennisabstract.com et ultimatetennisstatistics.com, ce filtre par surface
+  existe explicitement — utilise-le. Requête type : "Nom Prénom tennisabstract clay"
+  ou "Nom ultimate tennis statistics clay serve return".
+→ Si tu ne trouves QUE la moyenne toutes surfaces → écris "non trouvé", PAS la moyenne.
+  Une donnée hors-surface est une donnée FAUSSE pour cette analyse.
+→ Indique TOUJOURS la taille d'échantillon (nb de matchs sur cette surface / 52 sem).
+  Moins de 5 matchs sur la surface = échantillon non significatif, signale-le.
 
-2. Forme récente des DEUX joueurs (5 derniers matchs, surface incluse) :
+PRIORITÉ 1 — Pour CHAQUE match, recherche dédiée par donnée, SUR LA SURFACE DU MATCH :
+1. % de points gagnés au SERVICE et au RETOUR des DEUX joueurs (LE PLUS IMPORTANT) :
+   → tennisabstract.com OU ultimatetennisstatistics.com (filtre surface obligatoire)
+   → Ce sont les deux entrées du modèle probabiliste — priorité absolue sur tout le reste
+   → Chercher : "Nom tennisabstract [clay/grass/hard] serve return points won"
+
+2. Hold% et Break% des DEUX joueurs SUR CETTE SURFACE :
+   → mêmes sources, filtre surface obligatoire
+   → Hold% + Break% = Indice Combiné (>105% = niveau élite, <95% = vulnérable)
+
+3. Forme récente des DEUX joueurs (5 derniers matchs) :
    → flashscore.fr OU sofascore.com OU matchstat.com
    → Si déjà fourni dans le calendrier → NE PAS re-chercher
-   → Chercher la forme sur GAZON en priorité (surface actuelle)
+   → Privilégier les matchs joués SUR LA SURFACE DU MATCH ANALYSÉ
 
-3. H2H direct entre les deux joueurs (confrontations passées + surface) :
+4. H2H direct entre les deux joueurs (confrontations passées + surface) :
    → flashscore.fr OU tennisabstract.com OU atptour.com/wtatennis.com
    → Recherche dédiée "Joueur1 vs Joueur2 head to head"
+   → Préciser combien de ces duels ont eu lieu SUR LA SURFACE DU MATCH
    → Si première confrontation → l'indiquer explicitement (pas "non trouvé")
 
-4. Stats avancées par surface si disponibles (Break%, Return%, Win% gazon) :
-   → ultimatetennisstatistics.com OU tennisabstract.com
+PRIORITÉ 1-BIS — CHARGE PHYSIQUE, EN CHIFFRES (pas en prose) :
+Pour CHAQUE joueur, remplis les champs fatigue_j1 / fatigue_j2 avec des NOMBRES :
+   → minutes_7j : total de minutes jouées sur les 7 derniers jours (flashscore
+     affiche la durée de chaque match — additionne-les)
+   → nb_matchs_7j : nombre de matchs disputés sur 7 jours
+   → heures_depuis_dernier_match : heures écoulées depuis la FIN de son dernier match
+   → nb_3sets_consecutifs : nombre de matchs en 3 sets consécutifs récents
+⚠️ Si une valeur est introuvable, mets 0 (le code traitera 0 comme "inconnu").
+⛔ Ne mets JAMAIS de phrase dans ces champs : ce sont des nombres, exploités
+   directement par le code. Une phrase les rend inutilisables.
 
 PRIORITÉ 2 — Contexte (1 recherche globale chacun, pas par match) :
 5. Blessures/forfaits du jour :
    → eurosport.fr OU tennis.com OU atptour.com
 6. Points ATP/WTA à défendre + classement actuel :
    → atptour.com OU wtatennis.com
-7. Charge physique — heures jouées 72h, matchs enchaînés :
-   → flashscore.fr OU sofascore.com
+7. (Charge physique : déjà couverte en PRIORITÉ 1-BIS, en chiffres.)
 
 PRIORITÉ 3 — Vérification cotes matchs secondaires :
 7. Pour tout match SANS cote dans le calendrier, chercher la cote Winamax réelle sur :
@@ -1347,6 +1374,7 @@ PRIORITÉ 3 — Vérification cotes matchs secondaires :
    → Introuvable → source_cote = "non trouvée" (NE JAMAIS inventer une cote)
 
 SOURCES PAR TYPE (utilise ces sites réels — ne jamais inventer une valeur non trouvée) :
+• Service/Retour % par surface → tennisabstract.com · ultimatetennisstatistics.com (filtre surface)
 • Hold% / Break% / Return%  → tennisabstract.com · ultimatetennisstatistics.com · tennisratio.com · matchstat.com
 • Forme récente + scores    → flashscore.fr · sofascore.com · matchstat.com
 • Stats par surface (Elo)   → tennisabstract.com (Elo par surface) · ultimatetennisstatistics.com
@@ -1388,8 +1416,25 @@ FORMAT JSON STRICT :
     "cote_j1": 1.XX, "cote_j2": 1.XX, "source_cote": "Winamax/non trouvée",
     "forme_j1": ["V","D"], "forme_j2": ["V","D"],
     "details_forme_j1": "résumé", "details_forme_j2": "résumé",
-    "hold_pct_j1": "XX% ou non trouvé", "hold_pct_j2": "XX% ou non trouvé",
-    "h2h_recents": "résumé", "charge_physique_j1": "résumé", "charge_physique_j2": "résumé",
+    "hold_pct_j1": "XX% SUR LA SURFACE DU MATCH ou non trouvé",
+    "hold_pct_j2": "XX% SUR LA SURFACE DU MATCH ou non trouvé",
+    "stats_surface_j1": {{
+      "serve_pts_won": "XX% ou non trouvé", "return_pts_won": "XX% ou non trouvé",
+      "break_pct": "XX% ou non trouvé", "echantillon": "N matchs sur cette surface/52sem"
+    }},
+    "stats_surface_j2": {{
+      "serve_pts_won": "XX% ou non trouvé", "return_pts_won": "XX% ou non trouvé",
+      "break_pct": "XX% ou non trouvé", "echantillon": "N matchs sur cette surface/52sem"
+    }},
+    "h2h_recents": "résumé",
+    "fatigue_j1": {{
+      "minutes_7j": 0, "nb_matchs_7j": 0, "heures_depuis_dernier_match": 0,
+      "nb_3sets_consecutifs": 0
+    }},
+    "fatigue_j2": {{
+      "minutes_7j": 0, "nb_matchs_7j": 0, "heures_depuis_dernier_match": 0,
+      "nb_3sets_consecutifs": 0
+    }},
     "alertes_physiques": "résumé ou Aucune", "absence_recente": "résumé ou Aucune",
     "contexte_psychologique": "résumé", "contexte": "résumé"
   }}],
@@ -1458,6 +1503,77 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
 # 11. PROMPT CLAUDE
 # =====================================================================
 
+# Écart maximal toléré entre l'estimation de Claude et le modèle (points de %).
+# ⚠️ SEUIL PROVISOIRE : aucune donnée réelle ne l'a encore calibré. Il est
+# volontairement GÉNÉREUX — le modèle est i.i.d. (il ignore momentum, pression,
+# contexte), donc Claude a de vraies raisons de s'en écarter. Il n'attrape que
+# les cas flagrants type Altmaier. Chaque comparaison est loguée : c'est ce
+# journal qui permettra de le calibrer sur des faits plutôt qu'au jugé.
+BC_ECART_MAX_POINTS = 20.0
+
+
+def construire_bloc_modele(donnees_json):
+    """
+    Calcule la proba de référence Barnett-Clarke + le contexte fatigue de chaque
+    match, et les met en forme pour le prompt de Claude.
+    Retourne (texte_pour_prompt, {(j1,j2): proba_ref}) — le dict sert au garde-fou.
+    """
+    try:
+        matchs = json.loads(donnees_json).get("matchs", [])
+    except Exception:
+        return "", {}
+
+    blocs, refs = [], {}
+    for m in matchs:
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        if not j1 or not j2:
+            continue
+        morceaux = []
+        proba, detail = bc_reference_match(m)
+        if proba is not None:
+            refs[(j1.lower(), j2.lower())] = proba
+            morceaux.append(
+                f"📐 RÉFÉRENCE CHIFFRÉE : {detail}\n"
+                f"   → cote juste modèle : {j1} {1/proba:.2f} / {j2} {1/(1-proba):.2f}"
+            )
+        else:
+            morceaux.append(f"📐 RÉFÉRENCE CHIFFRÉE : indisponible ({detail}).")
+        txt_fat, _ = bc_indice_fatigue(m)
+        if txt_fat:
+            morceaux.append("🔋 CHARGE PHYSIQUE :\n" + txt_fat)
+        if morceaux:
+            blocs.append(f"— {j1} vs {j2} —\n" + "\n".join(morceaux))
+
+    if not blocs:
+        return "", refs
+
+    entete = f"""
+=== MODÈLE PROBABILISTE DE RÉFÉRENCE (Barnett-Clarke) ===
+Pour les matchs ci-dessous, une probabilité a été calculée EN PYTHON à partir des
+seuls % de points gagnés au service et au retour SUR LA SURFACE, par dérivation
+analytique point → jeu → set → match. Aucune narration, aucun H2H, aucun ressenti.
+
+COMMENT T'EN SERVIR :
+• C'est ton POINT DE DÉPART, pas ton point d'arrivée. Le modèle suppose les points
+  indépendants : il ignore le momentum, la pression, le contexte, la fatigue.
+• Tu PEUX t'en écarter — mais uniquement avec une justification CHIFFRÉE (une stat
+  qu'il n'a pas vue), jamais avec un récit ("il mène le H2H", "il a de l'envie").
+• Un écart de plus de {BC_ECART_MAX_POINTS:.0f} points sans justification chiffrée sera REJETÉ par le code.
+• "RÉFÉRENCE CHIFFRÉE : indisponible" → tu analyses comme avant, mais la règle
+  anti-surestimation s'applique en plein : sans chiffres de surface, tu t'alignes
+  sur le marché.
+
+⚠️ LEÇON DU 15/07 (Altmaier vs Darderi, perdu 6-4 6-4) : le bot avait les Hold%
+(76,5% contre 78,4% en faveur de Darderi, mieux classé et tenant du titre) et a
+quand même parié Altmaier sur la foi d'un H2H de 3 matchs et de "la pression des
+points à défendre", en déclarant "aucune donnée manquante". C'est EXACTEMENT ce que
+ce modèle existe pour empêcher. Les chiffres d'abord, le récit ensuite — et le récit
+ne renverse les chiffres que s'il est lui-même chiffré.
+
+"""
+    return entete + "\n\n".join(blocs) + "\n", refs
+
+
 def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
     # v7.5.3 : SOIR existait dans run_bot_autonome mais pas ici — après 19h,
     # Claude recevait "Session APRÈS-MIDI" à tort.
@@ -1467,6 +1583,7 @@ def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
         session = "APRÈS-MIDI"
     else:
         session = "SOIR"
+    bloc_modele, _refs = construire_bloc_modele(donnees_json)
     try:
         avertissements = json.loads(donnees_json).get("avertissements", "Aucun")
     except Exception:
@@ -1476,6 +1593,7 @@ def construire_prompt_claude(date, heure, donnees_json, heure_fin="23:59"):
 
 DONNÉES COLLECTÉES (source unique — ne pas chercher sur internet) :
 {donnees_json}
+{bloc_modele}
 
 ⚠️ AVERTISSEMENTS : {avertissements}
 → Données manquantes importantes → abandonner le match.
@@ -1752,6 +1870,353 @@ def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
 
     logging.info(f"Filtrage horaire : {len(matchs_filtres)}/{len(rapid_matchs)} matchs dans la fenêtre {heure_debut}→{heure_fin}.")
     return matchs_filtres
+
+
+# =====================================================================
+# 11-BIS. MODÈLE PROBABILISTE POINT-PAR-POINT (Barnett-Clarke)
+# =====================================================================
+# v7.6 — Calcule une probabilité de victoire de RÉFÉRENCE à partir des seules
+# statistiques service/retour par surface. Aucune calibration, aucun coefficient
+# ajusté : c'est de la probabilité pure (Barnett & Clarke, 2005), dérivée
+# analytiquement du point → jeu → tie-break → set → match.
+#
+# POURQUOI : constat du 15/07 (Altmaier). Claude annonçait "45%" sur la foi d'un
+# H2H de 3 matchs, en déclarant lui-même "aucune donnée manquante" — ce qui
+# désactivait le garde-fou (seuil 30% au lieu de 10%). Le contrôle était donc
+# DÉCLARATIF : Claude choisissait la sévérité qu'on lui appliquait.
+# Ici, Python calcule une proba de référence à partir des CHIFFRES. Claude doit
+# justifier tout écart. Le contrôle devient CALCULÉ.
+#
+# LIMITE ASSUMÉE : le modèle suppose les points indépendants et identiquement
+# distribués (i.i.d.). Il ignore donc le momentum, la pression et la fatigue
+# intra-match. C'est une référence de base, PAS une vérité — d'où le fait qu'on
+# autorise Claude à s'en écarter avec justification chiffrée.
+
+# Moyennes du circuit : % de points gagnés au service, par surface.
+# ⚠️ PARAMÈTRES APPROCHÉS — dérivés d'une étude PLOS One sur 4 669 points de
+# Grand Chelem 2021 (efficacité 1ère balle : 69% terre / 75% gazon / 75% dur ;
+# 2ème balle ~55% quelle que soit la surface) combinée à ~62% de 1ères balles
+# en jeu, et recoupés avec la moyenne tour ~63% (Berkeley Sports Analytics).
+# Ces constantes sont VOLONTAIREMENT isolées ici pour être corrigées dès qu'une
+# source fiable par surface sera disponible.
+# Note : une erreur sur ces moyennes décale p_A ET p_B dans le même sens, donc
+# s'annule en grande partie sur la probabilité de match (c'est l'ÉCART qui pèse).
+BC_SERVE_MOYEN_SURFACE = {
+    "terre": 0.635,
+    "dur":   0.655,
+    "gazon": 0.675,
+    "autre": 0.650,
+}
+
+
+def bc_proba_point_service(serve_pts_won, return_pts_won_adversaire, surface="autre"):
+    """
+    Probabilité que le serveur gagne un point, ajustée par la qualité du retourneur.
+    Formule de combinaison (Barnett & Clarke) :
+        p = f_serveur - g_retourneur + g_moyen
+    où g_moyen = 1 - f_moyen (par surface).
+    Vérification : deux joueurs moyens → p = f_moyen (le modèle ne dérive pas).
+    """
+    f_moyen = BC_SERVE_MOYEN_SURFACE.get(surface, BC_SERVE_MOYEN_SURFACE["autre"])
+    g_moyen = 1.0 - f_moyen
+    p = serve_pts_won - return_pts_won_adversaire + g_moyen
+    return min(max(p, 0.01), 0.99)  # borne de sécurité numérique
+
+
+def bc_proba_jeu(p):
+    """
+    Probabilité de remporter un jeu de service. Forme close exacte.
+    Décomposition : 40-0 + 40-15 + 40-30 + (deuce × proba de conclure depuis deuce).
+    Le terme deuce vaut p²/(p²+q²), et p²+q² = 1-2pq.
+    Contrôles : bc_proba_jeu(0.5) = 0.5 exactement ; bc_proba_jeu(0.65) ≈ 0.830
+    (cohérent avec la relation ATP connue : 65% de points au service ≈ 83% de hold).
+    """
+    q = 1.0 - p
+    denom = 1.0 - 2.0 * p * q
+    if denom <= 0:
+        return 1.0 if p > 0.5 else 0.0
+    return (p**4
+            + 4.0 * p**4 * q
+            + 10.0 * p**4 * q**2
+            + 20.0 * p**5 * q**3 / denom)
+
+
+def bc_proba_tiebreak(pa, pb):
+    """
+    Probabilité que A remporte un tie-break (premier à 7, écart de 2).
+    Rotation de service réelle : A sert le point 1, puis les services vont par
+    paires (B-B, A-A, B-B, ...). Récursion mémoïsée sur le score.
+    pa = proba que A gagne un point sur SON service ; pb = idem pour B.
+    """
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def t(a, b):
+        if a >= 7 and a - b >= 2:
+            return 1.0
+        if b >= 7 and b - a >= 2:
+            return 0.0
+        # Sécurité : au-delà de 6-6, l'écart de 2 finit toujours par arriver ;
+        # on borne la récursion pour éviter une profondeur infinie théorique.
+        if a > 30 or b > 30:
+            return 0.5
+        m = a + b                      # numéro du point à jouer (0-indexé)
+        a_sert = ((m + 1) // 2) % 2 == 0
+        p_a_gagne_le_point = pa if a_sert else (1.0 - pb)
+        return (p_a_gagne_le_point * t(a + 1, b)
+                + (1.0 - p_a_gagne_le_point) * t(a, b + 1))
+
+    return t(0, 0)
+
+
+def bc_proba_set(pa, pb, a_sert_premier=True):
+    """
+    Probabilité que A remporte un set (premier à 6 jeux, écart de 2, tie-break à 6-6).
+    Récursion mémoïsée sur le score en jeux, avec alternance réelle du service.
+    """
+    from functools import lru_cache
+
+    ga = bc_proba_jeu(pa)          # proba que A tienne son service
+    gb = bc_proba_jeu(pb)          # proba que B tienne le sien
+    tb = bc_proba_tiebreak(pa, pb)
+
+    @lru_cache(maxsize=None)
+    def s(a, b, a_sert):
+        if a >= 6 and a - b >= 2:
+            return 1.0
+        if b >= 6 and b - a >= 2:
+            return 0.0
+        if a == 6 and b == 6:
+            return tb
+        if a_sert:
+            return ga * s(a + 1, b, False) + (1.0 - ga) * s(a, b + 1, False)
+        return gb * s(a, b + 1, True) + (1.0 - gb) * s(a + 1, b, True)
+
+    return s(0, 0, a_sert_premier)
+
+
+def bc_proba_match(pa, pb, best_of=3):
+    """
+    Probabilité que A remporte le match.
+    Le tirage au sort du premier serveur est inconnu → on moyenne les deux cas.
+    best_of=3 : premier à 2 sets. best_of=5 : premier à 3 sets.
+    Hypothèse standard : sets indépendants et de même probabilité.
+    """
+    s = 0.5 * (bc_proba_set(pa, pb, True) + bc_proba_set(pa, pb, False))
+    if best_of == 5:
+        # 3-0 + 3-1 + 3-2
+        return s**3 * (1.0 + 3.0 * (1.0 - s) + 6.0 * (1.0 - s)**2)
+    # 2-0 + 2-1
+    return s**2 * (3.0 - 2.0 * s)
+
+
+def bc_dominance_ratio(serve_pts_won, return_pts_won):
+    """
+    Dominance Ratio (Tennis Abstract) — définition EXACTE :
+        DR = % de points gagnés au RETOUR ÷ % de points perdus au SERVICE
+           = g / (1 - f)
+    ⚠️ Ce n'est PAS "crée plus de balles de break qu'il n'en concède" (glose
+    répandue mais fausse) : le DR compare des POINTS, pas des balles de break.
+
+    Lecture (le seuil 1.00 est la moyenne du circuit PAR CONSTRUCTION, puisque
+    le retourneur moyen gagne exactement ce que le serveur moyen concède) :
+      DR > 1.20 : rouleau compresseur
+      DR > 1.00 : domine — produit plus au retour qu'il ne fuit au service
+      DR < 1.00 : subit — s'en sort surtout grâce aux points clés (variance)
+    Le DR n'apporte AUCUNE information au modèle Barnett-Clarke (qui exploite f
+    et g directement, et plus finement). Son intérêt est d'être LISIBLE : une
+    seule valeur résume l'ascendant, utilisable dans le tableau comparatif.
+    """
+    pts_perdus_service = 1.0 - serve_pts_won
+    if pts_perdus_service <= 0:
+        return None
+    return return_pts_won / pts_perdus_service
+
+
+def bc_indice_combine(hold_pct, break_pct):
+    """
+    Indice Combiné = Hold% + Break%. > 105% = niveau élite, < 95% = vulnérable.
+    Retourne None si l'une des deux stats manque (on n'invente pas).
+    """
+    if hold_pct is None or break_pct is None:
+        return None
+    return hold_pct + break_pct
+
+
+def bc_coherence_hold(serve_pts_won, hold_pct_annonce, tolerance=0.08):
+    """
+    Contrôle de cohérence : le Hold% annoncé par Gemini est-il compatible avec
+    le % de points gagnés au service ? bc_proba_jeu(f) donne le hold attendu
+    contre un retourneur moyen. Un écart important signale une stat incohérente
+    — typiquement un Hold% pris sur une AUTRE surface que le service%.
+    Retourne (True/False, hold_attendu) ou (None, None) si non calculable.
+    """
+    if serve_pts_won is None or hold_pct_annonce is None:
+        return None, None
+    attendu = bc_proba_jeu(serve_pts_won)
+    return abs(attendu - hold_pct_annonce) <= tolerance, attendu
+
+
+# --- FATIGUE (v7.6) ------------------------------------------------------
+# ⚠️ CHOIX ASSUMÉ : la fatigue n'entre PAS dans le calcul de probabilité.
+# Raison : la recherche établit la fatigue PHYSIOLOGIQUE (force max -14% après
+# match, récupération à 72h ; qualités explosives dégradées après un tournoi de
+# 3 jours) mais PAS son effet chiffré sur l'issue d'un match ATP. Une étude sur
+# 3 matchs de 2h en 3 jours ne trouve aucune baisse notable de performance chez
+# des joueurs bien récupérés — et les pros ont des staffs dédiés. Aucun
+# coefficient crédible n'existe : en inventer un ("-0.5% de service par 100
+# minutes") fabriquerait de la fausse précision et corromprait le modèle.
+# Ce qu'on fait à la place : mesurer la fatigue de façon DÉTERMINISTE et la
+# donner à Claude comme CONTEXTE, + s'en servir comme plafond de confiance.
+# Les seuils de récupération ci-dessous sont, eux, documentés (48-72h).
+FATIGUE_RECUP_INCOMPLETE_H = 24   # < 24h : récupération clairement incomplète
+FATIGUE_RECUP_PARTIELLE_H  = 48   # 24-48h : partielle
+FATIGUE_RECUP_COMPLETE_H   = 72   # > 72h : considérée complète
+
+
+def _bc_parse_nombre(valeur):
+    """Extrait un nombre ('240 min', '3', 240) → 240.0. None si illisible."""
+    if valeur is None:
+        return None
+    if isinstance(valeur, (int, float)):
+        return float(valeur)
+    txt = str(valeur).strip().lower()
+    if not txt or "non trouv" in txt or txt in ("?", "-"):
+        return None
+    m = re.search(r"(\d+(?:[.,]\d+)?)", txt)
+    return float(m.group(1).replace(",", ".")) if m else None
+
+
+def bc_indice_fatigue(m):
+    """
+    Mesure DESCRIPTIVE de l'asymétrie de fatigue entre les deux joueurs.
+    Ne renvoie AUCUNE probabilité — uniquement des faits chiffrés et des
+    drapeaux, à charge pour Claude de les pondérer et pour le garde-fou de
+    plafonner la confiance.
+    Retourne (texte_pour_prompt, dict_drapeaux) ou (None, {}) si données absentes.
+    """
+    f1 = m.get("fatigue_j1") or {}
+    f2 = m.get("fatigue_j2") or {}
+    min1, min2 = _bc_parse_nombre(f1.get("minutes_7j")), _bc_parse_nombre(f2.get("minutes_7j"))
+    h1, h2 = _bc_parse_nombre(f1.get("heures_depuis_dernier_match")), _bc_parse_nombre(f2.get("heures_depuis_dernier_match"))
+    n1, n2 = _bc_parse_nombre(f1.get("nb_matchs_7j")), _bc_parse_nombre(f2.get("nb_matchs_7j"))
+
+    if all(x is None for x in (min1, min2, h1, h2, n1, n2)):
+        return None, {}
+
+    j1, j2 = m.get("joueur1", "J1"), m.get("joueur2", "J2")
+    drapeaux = {}
+    lignes = []
+
+    if min1 is not None and min2 is not None:
+        ecart = min1 - min2
+        lignes.append(f"Minutes jouées sur 7j : {j1} {min1:.0f} min · {j2} {min2:.0f} min "
+                      f"(écart {ecart:+.0f} min)")
+        # Asymétrie forte = simple signalement, PAS un ajustement de proba
+        base = min(min1, min2)
+        if base > 0 and max(min1, min2) / base >= 2.0:
+            plus_charge = j1 if min1 > min2 else j2
+            drapeaux["asymetrie_forte"] = plus_charge
+            lignes.append(f"⚠️ {plus_charge} a joué au moins 2× plus de minutes que son adversaire.")
+
+    for joueur, h in ((j1, h1), (j2, h2)):
+        if h is None:
+            continue
+        if h < FATIGUE_RECUP_INCOMPLETE_H:
+            drapeaux.setdefault("recup_incomplete", []).append(joueur)
+            lignes.append(f"⚠️ {joueur} : {h:.0f}h depuis son dernier match — récupération "
+                          f"incomplète (documenté : la force max n'est récupérée qu'à ~72h).")
+        elif h < FATIGUE_RECUP_PARTIELLE_H:
+            lignes.append(f"{joueur} : {h:.0f}h de repos — récupération partielle.")
+        else:
+            lignes.append(f"{joueur} : {h:.0f}h de repos — récupération considérée complète.")
+
+    if n1 is not None and n2 is not None:
+        lignes.append(f"Matchs sur 7j : {j1} {n1:.0f} · {j2} {n2:.0f}")
+
+    lignes.append("→ Ces éléments sont du CONTEXTE, pas un ajustement de probabilité : "
+                  "aucun coefficient fiable ne relie la fatigue à l'issue d'un match ATP. "
+                  "Ils justifient de la PRUDENCE (confiance revue à la baisse), jamais de "
+                  "survaloriser le joueur frais au-delà de ce que disent ses chiffres.")
+    return "\n".join(lignes), drapeaux
+
+
+def _bc_parse_pct(valeur):
+    """Extrait un pourcentage ('64.2%', '64,2', 64.2) → 0.642. None si illisible."""
+    if valeur is None:
+        return None
+    if isinstance(valeur, (int, float)):
+        v = float(valeur)
+        return v / 100.0 if v > 1.5 else v
+    txt = str(valeur).strip().lower()
+    if not txt or "non trouv" in txt or "?" == txt:
+        return None
+    m = re.search(r"(\d+(?:[.,]\d+)?)", txt)
+    if not m:
+        return None
+    v = float(m.group(1).replace(",", "."))
+    return v / 100.0 if v > 1.5 else v
+
+
+def bc_reference_match(m):
+    """
+    Calcule la probabilité de référence de J1 à partir des stats de surface d'un
+    match du JSON Gemini. Retourne (proba_j1, details_texte) ou (None, raison).
+    N'invente RIEN : si une des 4 stats manque, on renvoie None et le modèle se tait.
+    """
+    s1 = m.get("stats_surface_j1") or {}
+    s2 = m.get("stats_surface_j2") or {}
+    f1 = _bc_parse_pct(s1.get("serve_pts_won"))
+    g1 = _bc_parse_pct(s1.get("return_pts_won"))
+    f2 = _bc_parse_pct(s2.get("serve_pts_won"))
+    g2 = _bc_parse_pct(s2.get("return_pts_won"))
+    if None in (f1, g1, f2, g2):
+        return None, "stats service/retour par surface incomplètes"
+
+    # PORTIER 1 — plausibilité brute. Une stat hors de ces bornes n'est pas une
+    # stat de tennis : c'est une hallucination ou un champ mal rempli.
+    if not (0.45 <= f1 <= 0.85 and 0.45 <= f2 <= 0.85):
+        return None, f"service% implausible ({f1:.0%} / {f2:.0%}) — donnée rejetée"
+    if not (0.15 <= g1 <= 0.55 and 0.15 <= g2 <= 0.55):
+        return None, f"retour% implausible ({g1:.0%} / {g2:.0%}) — donnée rejetée"
+
+    # PORTIER 2 — cohérence interne. Si le Hold% annoncé ne colle pas au hold
+    # qu'implique le service%, les deux stats viennent probablement de surfaces
+    # différentes (le bug qu'on vient de corriger dans la collecte). On refuse.
+    for hold_brut, f_joueur, nom in ((m.get("hold_pct_j1"), f1, m.get("joueur1", "J1")),
+                                     (m.get("hold_pct_j2"), f2, m.get("joueur2", "J2"))):
+        hold = _bc_parse_pct(hold_brut)
+        coherent, attendu = bc_coherence_hold(f_joueur, hold)
+        if coherent is False:
+            return None, (f"incohérence {nom} : service {f_joueur:.0%} implique un hold "
+                          f"~{attendu:.0%}, mais {hold:.0%} annoncé — stats de surfaces "
+                          f"différentes ? Modèle désactivé sur ce match.")
+
+    # PORTIER 3 — échantillon. Moins de 5 matchs sur la surface = du bruit.
+    for s, nom in ((s1, m.get("joueur1", "J1")), (s2, m.get("joueur2", "J2"))):
+        n = _bc_parse_nombre(s.get("echantillon"))
+        if n is not None and n < 5:
+            return None, f"échantillon trop faible ({nom} : {n:.0f} matchs sur la surface)"
+
+    surface = _normaliser_surface(m.get("surface"))
+    pa = bc_proba_point_service(f1, g2, surface)   # J1 sert contre J2
+    pb = bc_proba_point_service(f2, g1, surface)   # J2 sert contre J1
+    proba_j1 = bc_proba_match(pa, pb, best_of=3)
+
+    dr1 = bc_dominance_ratio(f1, g1)
+    dr2 = bc_dominance_ratio(f2, g2)
+    j1, j2 = m.get("joueur1", "J1"), m.get("joueur2", "J2")
+    details = (
+        f"Modèle Barnett-Clarke ({surface}) — "
+        f"{j1} : {f1:.1%} service / {g1:.1%} retour"
+        f"{f' / DR {dr1:.2f}' if dr1 else ''} · "
+        f"{j2} : {f2:.1%} service / {g2:.1%} retour"
+        f"{f' / DR {dr2:.2f}' if dr2 else ''} "
+        f"→ points au service {pa:.1%} vs {pb:.1%} "
+        f"→ hold {bc_proba_jeu(pa):.1%} vs {bc_proba_jeu(pb):.1%} "
+        f"→ proba match {j1} {proba_j1:.1%}"
+    )
+    return proba_j1, details
 
 
 # =====================================================================
@@ -2387,6 +2852,13 @@ def run_bot_autonome():
     except Exception:
         pass
 
+    # v7.6 : références du modèle, réutilisées par le garde-fou plus bas
+    _, bc_refs = construire_bloc_modele(donnees_json)
+    if bc_refs:
+        logging.info(f"Modèle Barnett-Clarke : {len(bc_refs)} match(s) avec référence chiffrée.")
+    else:
+        logging.info("Modèle Barnett-Clarke : aucune référence (stats de surface absentes).")
+
     # ----- FIXTURES ODDSPAPI (1 seul appel, réutilisé pour heures + marchés alt)
     fixtures_oddspapi = []
     if MARCHES_ALT_MODE != "off" and RAPIDAPI_KEY:
@@ -2405,12 +2877,41 @@ def run_bot_autonome():
         matchs_debug  = donnees_debug.get("matchs", [])
         logging.info(f"DEBUG — {len(matchs_debug)} match(s) transmis à Claude :")
         for i, m in enumerate(matchs_debug, 1):
+            s1 = m.get("stats_surface_j1") or {}
+            s2 = m.get("stats_surface_j2") or {}
             logging.info(
                 f"  [{i}] {m.get('joueur1','?')} vs {m.get('joueur2','?')} "
                 f"| {m.get('heure_match','?')} | {m.get('surface','?')} "
                 f"| Cotes {m.get('cote_j1','?')} / {m.get('cote_j2','?')} "
                 f"| Hold J1: {m.get('hold_pct_j1','?')} / J2: {m.get('hold_pct_j2','?')}"
             )
+            # v7.6 : tracer les NOUVELLES données — sans ça, impossible de savoir
+            # si Gemini les remonte, donc impossible de décider si le modèle
+            # Barnett-Clarke est viable ou s'il faut alléger le schéma.
+            logging.info(
+                f"       ↳ [BC] service/retour {m.get('surface','?')} — "
+                f"J1 : {s1.get('serve_pts_won','∅')} / {s1.get('return_pts_won','∅')} "
+                f"(éch. {s1.get('echantillon','∅')}) · "
+                f"J2 : {s2.get('serve_pts_won','∅')} / {s2.get('return_pts_won','∅')} "
+                f"(éch. {s2.get('echantillon','∅')})"
+            )
+            proba_ref, detail_ref = bc_reference_match(m)
+            if proba_ref is not None:
+                logging.info(f"       ↳ [BC] {detail_ref}")
+                try:
+                    c1 = float(m.get("cote_j1") or 0)
+                    if c1 > 1:
+                        logging.info(
+                            f"       ↳ [BC] modèle {proba_ref:.1%} vs marché "
+                            f"{1/c1:.1%} → écart {(proba_ref - 1/c1)*100:+.1f} pts"
+                        )
+                except (TypeError, ValueError):
+                    pass
+            else:
+                logging.info(f"       ↳ [BC] modèle silencieux : {detail_ref}")
+            txt_fat, drapeaux_fat = bc_indice_fatigue(m)
+            if txt_fat:
+                logging.info(f"       ↳ [FATIGUE] drapeaux : {drapeaux_fat or 'aucun'}")
     except Exception as e:
         logging.warning(f"DEBUG log matchs : {e}")
 
@@ -2613,6 +3114,41 @@ def run_bot_autonome():
                             f"(+{ecart_relatif*100:.0f}%, seuil {seuil*100:.0f}%). {raison}."
                         )
                         return False, f"écart modèle-marché +{ecart_relatif*100:.0f}% ({raison})"
+
+            # GARDE-FOU BARNETT-CLARKE (v7.6) — le contrôle passe du DÉCLARATIF au CALCULÉ.
+            # Avant : le seuil dépendait du champ "données manquantes" que Claude
+            # remplissait LUI-MÊME (Altmaier : "aucune donnée manquante" → seuil
+            # relâché à 30% → ticket accepté). Ici, Python compare l'estimation de
+            # Claude à une probabilité dérivée des chiffres. Claude ne choisit plus
+            # la sévérité qu'on lui applique.
+            for (rj1, rj2), proba_ref in bc_refs.items():
+                if rj1 not in t_lower and rj2 not in t_lower:
+                    continue
+                # À quel joueur se rapporte le pari ? Celui nommé dans le PRONO.
+                mprono = re.search(r"prono\s*:?\s*(?:</b>)?\s*(.+)", t_lower)
+                if not mprono:
+                    break
+                prono_txt = mprono.group(1)
+                if rj1 in prono_txt:
+                    ref_pari = proba_ref
+                elif rj2 in prono_txt:
+                    ref_pari = 1.0 - proba_ref
+                else:
+                    break  # pari sur un marché non-vainqueur → hors périmètre
+                if mp:  # proba annoncée par Claude, déjà extraite plus haut
+                    ecart_pts = (proba_bot - ref_pari) * 100
+                    logging.info(
+                        f"[BC] Claude {proba_bot:.1%} vs modèle {ref_pari:.1%} "
+                        f"→ écart {ecart_pts:+.1f} pts (seuil {BC_ECART_MAX_POINTS:.0f})"
+                    )
+                    if ecart_pts > BC_ECART_MAX_POINTS:
+                        logging.warning(
+                            f"Ticket rejeté — Claude surestime de {ecart_pts:+.1f} pts "
+                            f"vs le modèle chiffré ({proba_bot:.1%} contre {ref_pari:.1%}). "
+                            f"C'est le motif Altmaier : le récit écrase les chiffres."
+                        )
+                        return False, f"écart modèle Barnett-Clarke {ecart_pts:+.1f} pts"
+                break
             return True, None
 
         tickets_valides = []
