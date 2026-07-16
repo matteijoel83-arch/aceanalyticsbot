@@ -5,5 +5,12 @@
     "raison_rejet": "écart modèle-marché +12% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alejandro Tabilo vs Lautaro Midon\n🏆 <b>COMPÉTITION :</b> Nordea Open - Bastad\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Lautaro Midon vainqueur\n📈 <b>COTE :</b> 3.50\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 33% → juste 3.03 → réelle 3.50 → delta +0.47 ✅ → Kelly 3.7% plafonné 1%\n📌 <b>POURQUOI ?</b> Tabilo enchaîne 4 défaites et joue son 1er match sur terre après une saison catastrophique sur gazon. Midon arrive lancé (4 victoires à Bastad), en pleine confiance avec le rythme. Le favori \"sur réputation\" est un piège face à un joueur qui monte. Cote >2.50 = variance élevée, mise réduite.\n⚠️ <b>DONNÉES MANQUANTES :</b> Hold% Midon, forme détaillée Tabilo sur terre 2026",
+    "date": "16/07/2026",
+    "raison_rejet": "écart modèle-marché +16% (données manquantes + survalorisation)",
+    "marche": "moneyline",
+    "niveau": "elevee"
   }
 ]
