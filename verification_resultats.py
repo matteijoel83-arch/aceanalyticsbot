@@ -497,16 +497,28 @@ def _oddspapi_fixtures_today_verif():
     """Fixtures du jour (mêmes règles que bot.py : SRL exclu). [] si erreur."""
     if not RAPIDAPI_KEY:
         return []
-    try:
-        r = requests.get(
-            f"https://{ODDSPAPI_HOST}/fixtures/today",
-            headers={"X-RapidAPI-Key": RAPIDAPI_KEY, "X-RapidAPI-Host": ODDSPAPI_HOST},
-            params={"sportId": 12}, timeout=15,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        logging.info(f"OddsPapi (vérif déterministe) indisponible : {e}")
+    # v2.5 : réessai sur 429 (même correctif que bot.py v7.6.2 — limite de débit
+    # RapidAPI, pas de quota). Enjeu ici : si ce fetch échoue, le règlement
+    # retombe sur Claude+web_search, donc sur le risque d'hallucination du 15/07.
+    data = None
+    for tentative in (1, 2):
+        try:
+            r = requests.get(
+                f"https://{ODDSPAPI_HOST}/fixtures/today",
+                headers={"X-RapidAPI-Key": RAPIDAPI_KEY, "X-RapidAPI-Host": ODDSPAPI_HOST},
+                params={"sportId": 12}, timeout=15,
+            )
+            r.raise_for_status()
+            data = r.json()
+            break
+        except Exception as e:
+            if tentative == 1 and "429" in str(e):
+                logging.info("OddsPapi (vérif) : 429 — pause 4s puis nouvel essai.")
+                time.sleep(4)
+                continue
+            logging.info(f"OddsPapi (vérif déterministe) indisponible : {e}")
+            return []
+    if data is None:
         return []
     fixtures = data if isinstance(data, list) else data.get("fixtures", data.get("data", []))
     if not isinstance(fixtures, list):
