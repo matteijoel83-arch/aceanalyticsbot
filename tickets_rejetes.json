@@ -12,5 +12,12 @@
     "raison_rejet": "écart modèle-marché +16% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Raphael Collignon vs Valentin Vacherot\n🏆 <b>COMPÉTITION :</b> EFG Swiss Open - Gstaad (ATP 250, Terre)\n⏰ <b>HEURE :</b> 13:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Collignon vainqueur\n📈 <b>COTE :</b> 1.64\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 61.8% → juste 1.62 → réelle 1.64 → delta +0.02 ❌\n\n⚠️ Sur le Moneyline, le delta est insuffisant (0.02 < 0.07 requis). Ce ticket est abandonné.",
+    "date": "17/07/2026",
+    "raison_rejet": "delta +0.02 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
