@@ -348,7 +348,7 @@ INSTRUCTIONS_VERIFICATION = (
     "\nTa réponse doit être COURTE et se terminer OBLIGATOIREMENT par DEUX lignes,"
     "\nchacune seule sur sa ligne, dans CET ORDRE EXACT :"
     "\nPREUVE DE FIN: [score final cité, ex: Flashscore Terminé 6-4 6-2] ou 'aucune'"
-    "\nVERDICT: GAGNE   (ou PERDU, ou EN_COURS)"
+    "\nVERDICT: GAGNE   (ou PERDU, ou EN_COURS, ou ANNULE si forfait/abandon)"
     "\n\n⛔ INTERDICTIONS :"
     "\n- NE PAS faire de tableaux markdown, d'analyse longue, d'emojis décoratifs."
     "\n- NE PAS écrire 'RÉSULTAT', 'ANALYSE' ou autre en guise de conclusion."
@@ -359,13 +359,23 @@ INSTRUCTIONS_VERIFICATION = (
     "\nLe pronostic était Victoire Navarro → non validé."
     "\nPREUVE DE FIN: Flashscore affiche Terminé, score final 6-4 6-2"
     "\nVERDICT: PERDU"
+    "\n\n⛔ FORFAIT / ABANDON — VERDICT: ANNULE (règle du 17/07/2026) :"
+    "\nUn match gagné par FORFAIT (walkover, w.o., 'forfait', joueur déclaré forfait"
+    "\navant le match, AUCUN jeu joué) n'est PAS une victoire : le bookmaker rembourse"
+    "\nla mise. → VERDICT: ANNULE"
+    "\nUn match interrompu par ABANDON (retirement, 'ab.', joueur qui se retire en"
+    "\ncours de match) → VERDICT: ANNULE également (les conditions de remboursement"
+    "\ndépendent du set en cours et du type de tournoi — un humain tranchera)."
+    "\nMatch annulé, reporté, ou interrompu définitivement → VERDICT: ANNULE"
+    "\n⚠️ Ne JAMAIS conclure GAGNE sur un forfait ou un abandon, même si ton joueur"
+    "\nest déclaré vainqueur : l'argent n'est pas gagné pour autant."
     "\n\nRÈGLES STRICTES :"
     "\n- Match pas encore terminé OU score partiel OU doute → VERDICT: EN_COURS"
     "\n- Match terminé (preuve explicite) + pronostic validé → VERDICT: GAGNE"
     "\n- Match terminé (preuve explicite) + pronostic non validé → VERDICT: PERDU"
     "\n- Le moindre doute sur la fin du match → VERDICT: EN_COURS"
     "\n\n⚠️ RAPPEL FINAL : quoi que tu écrives avant, tu DOIS terminer par la ligne"
-    "\n'VERDICT: GAGNE/PERDU/EN_COURS'. C'est la SEULE chose que le système lit."
+    "\n'VERDICT: GAGNE/PERDU/EN_COURS/ANNULE'. C'est la SEULE chose que le système lit."
 )
 
 
@@ -406,9 +416,12 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
 
         # Parser UNIQUEMENT la ligne 'VERDICT:' (évite les faux positifs
         # quand 'PERDU'/'GAGNE' apparaît dans le raisonnement de Claude)
-        m = re.search(r"VERDICT\s*:\s*(GAGNE|PERDU|EN_COURS)", verdict)
+        m = re.search(r"VERDICT\s*:\s*(GAGNE|PERDU|EN_COURS|ANNULE)", verdict)
         if m:
             resultat = m.group(1)
+            if resultat == "ANNULE":
+                logging.info("Verdict extrait : ANNULE (forfait/abandon) — aucun impact stats.")
+                return "ANNULE"
 
             # Protection anti-faux-positif : un verdict GAGNE/PERDU exige une
             # ligne 'PREUVE DE FIN' qui n'est PAS 'aucune'. Sinon → EN_COURS.
@@ -472,7 +485,12 @@ def _sim_noms_verif(a, b):
     mots_a, mots_b = set(na.split()), set(nb.split())
     communs = mots_a & mots_b
     if communs:
-        score = max(score, len(communs) / max(len(mots_a), len(mots_b)))
+        # v2.7/v7.6.5 : diviser par le nom le plus COURT — 'Tabilo' est un
+        # sous-ensemble parfait de 'Tabilo, Alejandro' (score 1.0), alors que
+        # l'ancien /max donnait 0.5 et faisait échouer l'appariement dès que
+        # le ticket abrégeait les noms (constat du 17/07 : règlement
+        # déterministe désactivé sur le ticket Tabilo/Tirante).
+        score = max(score, len(communs) / min(len(mots_a), len(mots_b)))
     return score
 
 
@@ -574,6 +592,24 @@ def verifier_moneyline_oddspapi(item, marche_detectee, fixtures):
 
     statut = str((meilleur.get("status") or {}).get("statusName") or "")
     resultat = (meilleur.get("scores") or {}).get("result") or {}
+
+    # v2.6 : FORFAIT / ABANDON → le pari est ANNULÉ, pas gagné.
+    # Constat du 17/07 : Tabilo bat Tirante par FORFAIT (aucun jeu joué, le match
+    # n'a jamais commencé) → Winamax rembourse la mise. Le bot a pourtant compté
+    # une VICTOIRE et crédité un profit jamais encaissé, parce qu'aucun verdict
+    # "annulé" n'existait : Claude devait choisir entre GAGNE/PERDU/EN_COURS.
+    # Règles Winamax : forfait = mise remboursée. Abandon pendant le 1er set =
+    # remboursé. Abandon APRÈS le 1er set = payé si ton joueur gagne, mais
+    # UNIQUEMENT sur ATP/WTA simple (Garantie Abandon — exclut les Challengers).
+    # Trop de conditions pour trancher sans risque → on annule et on alerte.
+    if statut in ("Walkover", "Cancelled", "Postponed", "Abandoned", "Interrupted"):
+        logging.warning(f"OddsPapi : statut '{statut}' → pari ANNULÉ (mise remboursée).")
+        return "ANNULE"
+    if statut == "Retired":
+        logging.warning("OddsPapi : abandon détecté → pari ANNULÉ + règlement manuel "
+                        "(Garantie Abandon Winamax : payé seulement si ton joueur gagne "
+                        "après le 1er set, ATP/WTA simple uniquement).")
+        return "ANNULE"
     if statut != "Finished" or not resultat:
         return None  # pas encore terminé → Claude tranchera plus tard
 
@@ -723,6 +759,26 @@ def main():
         else:
             statut = interroger_claude_statut(pari_texte, item.get("date", ""))
             logging.info(f"Verdict (Claude + web_search) : {statut}")
+
+        if statut == "ANNULE":
+            # v2.6 : forfait/abandon → mise remboursée. Le pari sort de la file
+            # SANS aucun impact sur les stats : ni V, ni D, ni profit, ni mise.
+            # Un pari remboursé n'a jamais existé du point de vue du yield.
+            resume_ann = next(
+                (re.sub(r"<[^>]+>", "", l).strip() for l in pari_texte.splitlines()
+                 if "MATCH" in l.upper()), item.get("date", "?"))[:150]
+            logging.info("↩️ ANNULÉ (forfait/abandon) — retiré de la file, stats inchangées.")
+            _envoyer_telegram(
+                f"↩️ <b>PARI ANNULÉ — {item.get('date','?')}</b>\n\n"
+                f"📌 {resume_ann}\n\n"
+                f"Forfait ou abandon : la mise est remboursée par Winamax, "
+                f"le pari ne compte ni en victoire ni en défaite.\n"
+                f"⚠️ En cas d'ABANDON après le 1er set sur un tournoi ATP/WTA, la "
+                f"Garantie Abandon peut s'appliquer (pari payé) — vérifie ton compte, "
+                f"et si c'est le cas règle-le à la main : "
+                f"<code>python bot.py resultat v</code>."
+            )
+            continue  # ni stats, ni file : le pari disparaît proprement
 
         if statut in ("GAGNE", "PERDU"):
             victoire = statut == "GAGNE"
