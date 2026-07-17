@@ -326,7 +326,7 @@ def _detecter_marche(ticket_texte):
     tout le texte.
     """
     # Isoler la ligne PRONO (celle qui décrit RÉELLEMENT le pari joué)
-    m = re.search(r"prono\s*:?\s*(?:</b>)?\s*(.+)", ticket_texte, re.IGNORECASE)
+    m = re.search(r"prono\s*:\s*(?:</b>)?\s*(.+)", ticket_texte, re.IGNORECASE)
     ligne_prono = m.group(1).strip().lower() if m else ""
 
     def _classer(t):
@@ -565,7 +565,7 @@ def _signature_pari(pari_info):
     txt = re.sub(r"<[^>]+>", "", pari_info.get("pari", "")).lower()
     # Extraire match et prono des lignes du ticket
     match_m = re.search(r"match\s*:?\s*(.+)", txt)
-    prono_m = re.search(r"prono\s*:?\s*(.+)", txt)
+    prono_m = re.search(r"prono\s*:\s*(.+)", txt)
     match_s = match_m.group(1).strip()[:60] if match_m else ""
     prono_s = prono_m.group(1).strip()[:40] if prono_m else ""
     return f"{pari_info.get('date','')}|{match_s}|{prono_s}"
@@ -2715,6 +2715,61 @@ def _oddspapi_extraire_outcomes(data):
     return out
 
 
+def corriger_heures_avec_calendrier(donnees_json, rapid_matchs):
+    """
+    v7.6.4 — REPLI d'heures quand OddsPapi est indisponible (429 persistant).
+    Constat du 17/07 : ticket Tabilo/Tirante annoncé à 19:00 alors que le match
+    se jouait à 16:00 FR. Même valeur fantaisiste (19:00) que le bug Coppejans
+    du 10/07 : Gemini invente une heure de soirée générique quand il ne sait pas.
+    Le garde-fou existant (corriger_heures_avec_oddspapi) ne s'exécutait pas
+    faute de fixtures — le 429 OddsPapi neutralisait donc AUSSI les heures.
+    Or le calendrier RapidAPI porte déjà l'heure de chaque match : s'il l'ignore,
+    on la lui réimpose. Coût : 0 requête.
+    Hiérarchie de confiance : OddsPapi (epoch réel) > RapidAPI > Gemini.
+
+    Appariement par JETONS plutôt que par ratio : le format des noms RapidAPI
+    n'est pas garanti ("Tabilo A." vs "Alejandro Tabilo" donne un ratio ~0.6,
+    sous tout seuil raisonnable). On exige un jeton commun POUR CHAQUE joueur,
+    ce qui reste discriminant tout en absorbant les abréviations.
+    """
+    if not rapid_matchs:
+        return donnees_json
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+
+    def _jetons(nom):
+        return {t for t in re.sub(r"[^a-zà-ÿ ]", " ", str(nom).lower()).split() if len(t) >= 3}
+
+    def _meme_match(a1, a2, b1, b2):
+        ja1, ja2, jb1, jb2 = _jetons(a1), _jetons(a2), _jetons(b1), _jetons(b2)
+        direct = bool(ja1 & jb1) and bool(ja2 & jb2)
+        croise = bool(ja1 & jb2) and bool(ja2 & jb1)
+        return direct or croise
+
+    corriges = 0
+    for m in data.get("matchs", []):
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        rm = next((r for r in rapid_matchs
+                   if _meme_match(j1, j2, r.get("joueur1", ""), r.get("joueur2", ""))), None)
+        if not rm:
+            continue
+        mh = re.search(r"(\d{1,2}):(\d{2})", str(rm.get("heure", "")))
+        if not mh:
+            continue
+        h_propre = f"{int(mh.group(1)):02d}:{mh.group(2)}"
+        if m.get("heure_match") != h_propre:
+            logging.info(f"Heure corrigée (calendrier RapidAPI) : {j1} vs {j2} "
+                         f"{m.get('heure_match','?')} → {h_propre}")
+            m["heure_match"] = h_propre
+            corriges += 1
+    if corriges:
+        logging.info(f"Heures — repli calendrier RapidAPI : {corriges} match(s) corrigé(s) "
+                     f"(OddsPapi indisponible).")
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def corriger_heures_avec_oddspapi(donnees_json, fixtures):
     """
     v7.4 : écrase l'heure Gemini par le startTime OddsPapi (epoch, déterministe)
@@ -2987,11 +3042,15 @@ def run_bot_autonome():
     fixtures_oddspapi = []
     if MARCHES_ALT_MODE != "off" and RAPIDAPI_KEY:
         fixtures_oddspapi = oddspapi_fixtures_jour()
-        if fixtures_oddspapi:
-            # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini
-            donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
-            # Re-filtrer par fenêtre : une heure corrigée peut sortir de la session
-            donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+    if fixtures_oddspapi:
+        # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini
+        donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
+    else:
+        # v7.6.4 : OddsPapi muet (429) → l'heure du calendrier RapidAPI fait foi,
+        # sinon on publie l'heure inventée par Gemini (bug Tabilo/Tirante 17/07).
+        donnees_json = corriger_heures_avec_calendrier(donnees_json, rapid_matchs)
+    # Re-filtrer par fenêtre : une heure corrigée peut sortir de la session
+    donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
 
     # v7.6.3 : références du modèle, réutilisées par le garde-fou plus bas.
     # Calculées APRÈS la correction d'heures et le filtrage final — avant ce
@@ -3276,7 +3335,7 @@ def run_bot_autonome():
                 if not (_score_nom(rj1, t_lower) or _score_nom(rj2, t_lower)):
                     continue
                 # À quel joueur se rapporte le pari ? Celui nommé dans le PRONO.
-                mprono = re.search(r"prono\s*:?\s*(?:</b>)?\s*(.+)", t_lower)
+                mprono = re.search(r"prono\s*:\s*(?:</b>)?\s*(.+)", t_lower)
                 if not mprono:
                     break
                 prono_txt = mprono.group(1)
