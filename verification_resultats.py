@@ -531,7 +531,7 @@ def _extraire_match_et_prono(pari_texte):
     """Extrait (joueur1, joueur2, texte_ligne_prono) depuis un ticket."""
     txt = re.sub(r"<[^>]+>", "", pari_texte)
     mm = re.search(r"matchs?\s*:?\s*(.+?)\s+vs\s+(.+)", txt, re.IGNORECASE)
-    pm = re.search(r"prono\s*:?\s*(.+)", txt, re.IGNORECASE)
+    pm = re.search(r"prono\s*:\s*(.+)", txt, re.IGNORECASE)
     j1 = mm.group(1).strip()[:50] if mm else None
     j2 = mm.group(2).strip().split("\n")[0][:50] if mm else None
     prono = pm.group(1).strip().split("\n")[0][:100] if pm else ""
@@ -632,7 +632,7 @@ def main():
     def _sig(item):
         txt = re.sub(r"<[^>]+>", "", item.get("pari", "")).lower()
         mm = re.search(r"match\s*:?\s*(.+)", txt)
-        pm = re.search(r"prono\s*:?\s*(.+)", txt)
+        pm = re.search(r"prono\s*:\s*(.+)", txt)
         ms = mm.group(1).strip()[:60] if mm else ""
         ps = pm.group(1).strip()[:40] if pm else ""
         return f"{item.get('date','')}|{ms}|{ps}"
