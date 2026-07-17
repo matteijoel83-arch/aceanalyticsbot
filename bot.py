@@ -2205,13 +2205,21 @@ def bc_reference_match(m):
 
     dr1 = bc_dominance_ratio(f1, g1)
     dr2 = bc_dominance_ratio(f2, g2)
+    # Indice Combiné (Hold% + Break%) : >105% élite, <95% vulnérable.
+    # Purement lisible — n'entre pas dans le calcul, qui exploite f et g.
+    ic1 = bc_indice_combine(_bc_parse_pct(m.get("hold_pct_j1")),
+                            _bc_parse_pct(s1.get("break_pct")))
+    ic2 = bc_indice_combine(_bc_parse_pct(m.get("hold_pct_j2")),
+                            _bc_parse_pct(s2.get("break_pct")))
     j1, j2 = m.get("joueur1", "J1"), m.get("joueur2", "J2")
     details = (
         f"Modèle Barnett-Clarke ({surface}) — "
         f"{j1} : {f1:.1%} service / {g1:.1%} retour"
-        f"{f' / DR {dr1:.2f}' if dr1 else ''} · "
+        f"{f' / DR {dr1:.2f}' if dr1 else ''}"
+        f"{f' / indice {ic1:.0%}' if ic1 else ''} · "
         f"{j2} : {f2:.1%} service / {g2:.1%} retour"
-        f"{f' / DR {dr2:.2f}' if dr2 else ''} "
+        f"{f' / DR {dr2:.2f}' if dr2 else ''}"
+        f"{f' / indice {ic2:.0%}' if ic2 else ''} "
         f"→ points au service {pa:.1%} vs {pb:.1%} "
         f"→ hold {bc_proba_jeu(pa):.1%} vs {bc_proba_jeu(pb):.1%} "
         f"→ proba match {j1} {proba_j1:.1%}"
