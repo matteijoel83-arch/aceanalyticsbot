@@ -1283,7 +1283,10 @@ def collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs=None,
             f"   → coteur.com/cotes-tennis en priorité (spécialisé bookmakers français, affiche Winamax)\n"
             f"   → puis flashscore.fr (onglet cotes) ou sportytrader.com/fr/cotes/tennis/\n"
             f"   → Si cote Winamax trouvée → source_cote = 'Winamax (Coteur/Flashscore/Sportytrader)'\n"
-            f"   → Si seulement une autre cote bookmaker EU → source_cote = nom du bookmaker\n"
+            f"   → ⛔ Une cote d'un AUTRE bookmaker (bet365, Betclic, Unibet...) ne compte PAS :\n"
+            f"     si le tournoi n'est pas proposé par Winamax (beaucoup de Challengers ne le\n"
+            f"     sont pas), le match est INJOUABLE pour nos abonnés → source_cote = nom du\n"
+            f"     bookmaker trouvé, et le match sera écarté automatiquement par le code.\n"
             f"   → Si AUCUNE cote réelle → source_cote = 'non trouvée' (le match sera écarté)\n"
             f"⛔ INTERDIT d'inventer ou d'estimer une cote. Cote RÉELLE lue sur le site UNIQUEMENT.\n"
             f"4. PRIORITÉ À L'EXHAUSTIVITÉ : liste d'abord TOUS les matchs avec leur cote.\n"
@@ -2368,11 +2371,100 @@ def filtrer_json_sans_cote(donnees_json):
         except (TypeError, ValueError):
             return False
 
-    gardes = [m for m in matchs
-              if _cote_ok(m.get("cote_j1")) and _cote_ok(m.get("cote_j2"))]
-    retires = len(matchs) - len(gardes)
+    def _source_winamax(m):
+        # v7.6.1 : une cote NUMÉRIQUEMENT valide ne suffit pas — elle doit venir
+        # de WINAMAX. Constat du 17/07 : ticket Galan/Coppejans envoyé sur le
+        # Bunschoten Challenger, tournoi ABSENT de Winamax (cote trouvée chez un
+        # autre bookmaker) → pari injouable pour les abonnés. Le prompt
+        # autorisait ce repli ("autre cote bookmaker EU") : plus maintenant.
+        return "winamax" in str(m.get("source_cote", "")).lower()
+
+    gardes, sans_cote, hors_winamax = [], 0, []
+    for m in matchs:
+        if not (_cote_ok(m.get("cote_j1")) and _cote_ok(m.get("cote_j2"))):
+            sans_cote += 1
+            continue
+        if not _source_winamax(m):
+            hors_winamax.append(
+                f"{m.get('joueur1','?')} vs {m.get('joueur2','?')} "
+                f"({m.get('tournoi','?')} — source : {m.get('source_cote','absente')})")
+            continue
+        gardes.append(m)
+    if sans_cote:
+        logging.info(f"Filtre COTES : {sans_cote} match(s) sans cote retiré(s).")
+    for detail in hors_winamax:
+        logging.warning(f"Filtre WINAMAX : match écarté — cote non-Winamax : {detail}")
+    if hors_winamax:
+        logging.info(f"Filtre WINAMAX : {len(hors_winamax)} match(s) injouable(s) retiré(s), "
+                     f"{len(gardes)} gardé(s).")
+    data["matchs"] = gardes
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def filtrer_json_hors_tournois(donnees_json, tournois_actifs):
+    """
+    Filtre TOURNOIS (v7.6.1) : ne garde que les matchs des tournois listés dans
+    tournois_winamax.json (tournois_actifs) — la liste relevée chaque semaine
+    sur l'app Winamax. C'est la vérité terrain la plus fiable disponible sur ce
+    qui est RÉELLEMENT jouable.
+    Constat du 17/07 : ticket envoyé sur le Bunschoten Challenger, absent de
+    Winamax — la liste existait mais ne servait que de guide de recherche à
+    Gemini, jamais de filtre. Correction de conception.
+    Matching TOLÉRANT : "ATP Bastad" reconnaît "Nordea Open - Bastad",
+    "WTA Athenes" reconnaît "Athens Open" (accents/anglais, ratio ≥ 0.85).
+    FAIL-OPEN : liste vide/inaccessible → aucun filtrage (on ne tue pas le bot
+    sur un fichier GitHub manquant) ; le filtre source_cote reste en garde.
+    """
+    if not tournois_actifs:
+        logging.warning("Filtre TOURNOIS : liste vide/indisponible → filtre désactivé (fail-open).")
+        return donnees_json
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    import unicodedata
+    from difflib import SequenceMatcher
+
+    def _norm(txt):
+        txt = unicodedata.normalize("NFD", str(txt))
+        txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
+        return re.sub(r"[^a-z0-9 ]", " ", txt.lower())
+
+    MOTS_GENERIQUES = {"atp", "wta", "open", "masters", "cup", "tour", "tennis", "challenger"}
+
+    def _jetons(entree):
+        return [t for t in _norm(entree).split() if t and t not in MOTS_GENERIQUES]
+
+    jetons_actifs = [(_jetons(t) or [_norm(t).strip()]) for t in tournois_actifs]
+
+    def _tournoi_ok(nom_tournoi):
+        if not nom_tournoi:
+            return True  # nom absent → fail-open, le filtre source_cote tranchera
+        n = _norm(nom_tournoi)
+        mots = n.split()
+        for jets in jetons_actifs:
+            for j in jets:
+                if j in n:
+                    return True
+                if any(SequenceMatcher(None, j, m).ratio() >= 0.85 for m in mots):
+                    return True
+        return False
+
+    gardes, retires = [], []
+    for m in matchs:
+        if _tournoi_ok(m.get("tournoi", "")):
+            gardes.append(m)
+        else:
+            retires.append(f"{m.get('joueur1','?')} vs {m.get('joueur2','?')} ({m.get('tournoi','?')})")
+    for r in retires:
+        logging.warning(f"Filtre TOURNOIS : hors liste Winamax — {r}")
     if retires:
-        logging.info(f"Filtre COTES : {retires} match(s) sans cote retiré(s), {len(gardes)} gardé(s).")
+        logging.info(f"Filtre TOURNOIS : {len(retires)} match(s) hors tournois actifs retiré(s), "
+                     f"{len(gardes)} gardé(s).")
     data["matchs"] = gardes
     return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -2823,6 +2915,8 @@ def run_bot_autonome():
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+    # Filtre TOURNOIS (v7.6.1) : hors liste Winamax = injouable → retiré avant Claude
+    donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
     # Filtre COTES (v7.3) : matchs sans cote = injouables → retirés avant Claude
     donnees_json = filtrer_json_sans_cote(donnees_json)
     # Filtre ITF (v7.4) : retirer les ITF/Futures (stats introuvables, injouables)
@@ -2845,6 +2939,7 @@ def run_bot_autonome():
         # Appel SANS calendrier injecté → déclenche la mission spéciale (recherche web)
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
         donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+        donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
         donnees_json = filtrer_json_sans_cote(donnees_json)
         donnees_json = filtrer_json_itf(donnees_json)
 
