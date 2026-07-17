@@ -1,6 +1,6 @@
 {
-  "_commentaire": "Liste des tournois couverts par Winamax. Éditable directement sur GitHub : ajoute/retire un tournoi selon le calendrier de la semaine, le bot s'adapte au run suivant. Utilisé par Gemini comme guide de recherche du calendrier quand RapidAPI est indisponible.",
-  "_maj": "2026-07-13 — Wimbledon terminé (12 juillet). Semaine post-GC : reprise sur terre battue. Tournois actifs relevés sur l'app Winamax : Båstad, Gstaad, Umag (ATP 250, terre), Athènes et Iaşi (WTA, terre). Fin août : réajouter 'US Open' + éventuellement 'US Open Q' pour la période de qualifs.",
+  "_commentaire": "⚠️ FILTRE DUR depuis v7.6.1 (17/07/2026) : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. Tout le reste est écarté avant analyse. Relève cette liste sur l'app Winamax à chaque début de semaine — si un Challenger est proposé par Winamax et que tu veux le jouer, AJOUTE-LE ici explicitement (ex: 'Challenger Tampere'). Le matching est tolérant : 'ATP Bastad' reconnaît 'Nordea Open - Bastad', les accents et l'anglais sont gérés. Aussi utilisé par Gemini comme guide de recherche du calendrier.",
+  "_maj": "2026-07-17 — Passage en filtre dur suite au ticket injouable Galan/Coppejans (Bunschoten Challenger, absent de Winamax). Semaine en cours : Båstad, Gstaad, Umag (ATP 250, terre), Athènes et Iaşi (WTA, terre). Fin août : réajouter 'US Open' + éventuellement 'US Open Q' pour la période de qualifs.",
   "tournois_actifs": [
     "ATP Bastad",
     "ATP Gstaad",
@@ -8,11 +8,11 @@
     "WTA Athenes",
     "WTA Iasi"
   ],
-  "categories_couvertes": [
+  "categories_couvertes_info": [
+    "Note : cette section n'est PAS un filtre (elle guidait Gemini, et 'ATP Challenger' était ambigu — certains Challengers sont sur Winamax, pas tous). Seule 'tournois_actifs' fait foi.",
     "Grand Chelem",
     "ATP 250", "ATP 500", "ATP Masters 1000", "ATP Finals",
-    "WTA 250", "WTA 500", "WTA 1000", "WTA Finals",
-    "ATP Challenger"
+    "WTA 250", "WTA 500", "WTA 1000", "WTA Finals"
   ],
   "exclure": [
     "qualifications (sauf Grand Chelem en période de qualifs)", "ITF M15", "ITF W15", "doubles"
