@@ -1373,7 +1373,13 @@ PRIORITÉ 3 — Vérification cotes matchs secondaires :
    → coteur.com/cotes-tennis (spécialisé bookmakers français ANJ, affiche Winamax) — SOURCE PRIORITAIRE
    → flashscore.fr (onglet cotes, compare Winamax aux concurrents)
    → sportytrader.com/fr/cotes/tennis/
-   → Cote Winamax trouvée → source_cote = "Coteur"/"Flashscore"/"Sportytrader" (selon la source réelle)
+   → Cote Winamax trouvée → source_cote = "Winamax (Coteur)" / "Winamax (Flashscore)" /
+     "Winamax (Sportytrader)" selon le site où tu l'as vue. ⚠️ Le mot "Winamax" est
+     OBLIGATOIRE dans source_cote : le code écarte automatiquement tout match dont la
+     source ne le contient pas.
+   → Si le site n'affiche QUE d'autres bookmakers pour ce match (tournoi absent de
+     Winamax, fréquent sur les Challengers) → source_cote = nom du bookmaker vu
+     (ex: "bet365") — le match sera écarté, c'est voulu : il est injouable.
    → Introuvable → source_cote = "non trouvée" (NE JAMAIS inventer une cote)
 
 SOURCES PAR TYPE (utilise ces sites réels — ne jamais inventer une valeur non trouvée) :
@@ -2519,14 +2525,36 @@ def oddspapi_fixtures_jour(exclure_termines=True):
     exclure_termines=False : garde tout, y compris les terminés (commande 'regler'
     qui a justement besoin des scores finaux).
     """
-    try:
-        _quota_inc("oddspapi")  # budget séparé : 1000 req/mois
-        r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/today",
-                         headers=_oddspapi_headers(), params={"sportId": 12}, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        logging.warning(f"OddsPapi fixtures indisponible : {e}")
+    # v7.6.2 : réessai sur 429. Constat des 15 et 17/07 : trois runs d'affilée
+    # coupés par un 429 alors que le compteur n'était qu'à 38/1000 → ce n'est PAS
+    # le quota mensuel mais une limite de DÉBIT côté RapidAPI. Résultat : les
+    # marchés alternatifs étaient morts en pratique depuis 3 runs.
+    # ⚠️ Si le 429 persiste après réessai, c'est le plan RapidAPI lui-même qui
+    # est saturé → à vérifier sur le tableau de bord RapidAPI (notre compteur ne
+    # voit que NOS appels, pas la limite réelle du plan).
+    data = None
+    for tentative in (1, 2):
+        try:
+            _quota_inc("oddspapi")  # budget séparé : 1000 req/mois
+            r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/today",
+                             headers=_oddspapi_headers(), params={"sportId": 12}, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            if tentative == 2:
+                logging.info("OddsPapi : réessai réussi.")
+            break
+        except Exception as e:
+            est_429 = "429" in str(e)
+            if tentative == 1 and est_429:
+                logging.warning(f"OddsPapi fixtures : 429 (débit) — pause 4s puis nouvel essai.")
+                time.sleep(4)
+                continue
+            logging.warning(f"OddsPapi fixtures indisponible : {e}")
+            if est_429:
+                logging.warning("OddsPapi : 429 persistant après réessai — vérifier le plan "
+                                "sur le tableau de bord RapidAPI (limite réelle ≠ notre compteur).")
+            return []
+    if data is None:
         return []
     fixtures = data if isinstance(data, list) else data.get("fixtures", data.get("data", []))
     if not isinstance(fixtures, list):
@@ -2955,13 +2983,6 @@ def run_bot_autonome():
     except Exception:
         pass
 
-    # v7.6 : références du modèle, réutilisées par le garde-fou plus bas
-    _, bc_refs = construire_bloc_modele(donnees_json)
-    if bc_refs:
-        logging.info(f"Modèle Barnett-Clarke : {len(bc_refs)} match(s) avec référence chiffrée.")
-    else:
-        logging.info("Modèle Barnett-Clarke : aucune référence (stats de surface absentes).")
-
     # ----- FIXTURES ODDSPAPI (1 seul appel, réutilisé pour heures + marchés alt)
     fixtures_oddspapi = []
     if MARCHES_ALT_MODE != "off" and RAPIDAPI_KEY:
@@ -2971,6 +2992,17 @@ def run_bot_autonome():
             donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
             # Re-filtrer par fenêtre : une heure corrigée peut sortir de la session
             donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+
+    # v7.6.3 : références du modèle, réutilisées par le garde-fou plus bas.
+    # Calculées APRÈS la correction d'heures et le filtrage final — avant ce
+    # correctif, bc_refs était figé sur un état antérieur des données : le
+    # garde-fou et le prompt (qui recalcule son propre bloc sur le JSON final)
+    # pouvaient travailler sur deux ensembles de matchs différents.
+    _, bc_refs = construire_bloc_modele(donnees_json)
+    if bc_refs:
+        logging.info(f"Modèle Barnett-Clarke : {len(bc_refs)} match(s) avec référence chiffrée.")
+    else:
+        logging.info("Modèle Barnett-Clarke : aucune référence (stats de surface absentes).")
 
     prompt = construire_prompt_claude(date, heure, donnees_json, heure_fin)
 
@@ -3224,20 +3256,41 @@ def run_bot_autonome():
             # relâché à 30% → ticket accepté). Ici, Python compare l'estimation de
             # Claude à une probabilité dérivée des chiffres. Claude ne choisit plus
             # la sévérité qu'on lui applique.
+            # v7.6.2 : matching TOLÉRANT des noms. Bug constaté le 17/07 : le
+            # modèle connaît "Adolfo Daniel Vallejo" (nom du JSON), Claude écrit
+            # "Vallejo vainqueur" dans le PRONO → `rj1 in prono_txt` était FAUX
+            # → le code sortait par `break` SANS vérifier. Le garde-fou était
+            # donc silencieusement inerte dès que Claude abrégeait un nom (soit
+            # presque toujours). On score chaque joueur sur ses jetons, le nom de
+            # famille pesant le plus, et on prend le meilleur des deux — ce qui
+            # gère aussi les prénoms partagés ("Daniel" Galan vs "Daniel" Vallejo).
+            def _score_nom(nom, texte):
+                jetons = [j for j in nom.split() if len(j) >= 3]
+                if not jetons:
+                    return 0
+                score = 10 if jetons[-1] in texte else 0   # nom de famille = discriminant
+                score += sum(1 for j in jetons[:-1] if j in texte)
+                return score
+
             for (rj1, rj2), proba_ref in bc_refs.items():
-                if rj1 not in t_lower and rj2 not in t_lower:
+                if not (_score_nom(rj1, t_lower) or _score_nom(rj2, t_lower)):
                     continue
                 # À quel joueur se rapporte le pari ? Celui nommé dans le PRONO.
                 mprono = re.search(r"prono\s*:?\s*(?:</b>)?\s*(.+)", t_lower)
                 if not mprono:
                     break
                 prono_txt = mprono.group(1)
-                if rj1 in prono_txt:
+                s1, s2 = _score_nom(rj1, prono_txt), _score_nom(rj2, prono_txt)
+                if s1 > s2:
                     ref_pari = proba_ref
-                elif rj2 in prono_txt:
+                elif s2 > s1:
                     ref_pari = 1.0 - proba_ref
                 else:
-                    break  # pari sur un marché non-vainqueur → hors périmètre
+                    # Aucun joueur identifiable dans le PRONO (marché alternatif
+                    # type "Over 2.5 sets", ou libellé inattendu) → hors périmètre.
+                    logging.info("[BC] garde-fou non applicable : aucun joueur "
+                                 f"identifié dans le prono ({prono_txt[:60]!r}).")
+                    break
                 if mp:  # proba annoncée par Claude, déjà extraite plus haut
                     ecart_pts = (proba_bot - ref_pari) * 100
                     logging.info(
