@@ -2514,7 +2514,12 @@ def _sim_noms(a, b):
     communs = mots_a & mots_b
     if communs:
         # proportion de mots communs
-        score = max(score, len(communs) / max(len(mots_a), len(mots_b)))
+        # v2.7/v7.6.5 : diviser par le nom le plus COURT — 'Tabilo' est un
+        # sous-ensemble parfait de 'Tabilo, Alejandro' (score 1.0), alors que
+        # l'ancien /max donnait 0.5 et faisait échouer l'appariement dès que
+        # le ticket abrégeait les noms (constat du 17/07 : règlement
+        # déterministe désactivé sur le ticket Tabilo/Tirante).
+        score = max(score, len(communs) / min(len(mots_a), len(mots_b)))
     return score
 
 
