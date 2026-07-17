@@ -19,5 +19,12 @@
     "raison_rejet": "delta +0.02 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Rublev vs Baez\n🏆 <b>COMPÉTITION :</b> Nordea Open - Bastad\n⏰ <b>HEURE :</b> 17:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Baez (Vainqueur)\n📈 <b>COTE :</b> 2.50\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 51% → juste 1.96 → réelle 2.50 → delta +0.54 ✅ → Kelly 17% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle donne match quasi 50/50 (Rublev 48.4%), mais marché installe Rublev favori net à 1.50. Baez mène H2H (victoire ici à Bastad), a plus de matchs sur terre (27 vs 16) et un DR identique. Cote 2.50 offre grosse value. Proba plafonnée à 51% par prudence (variance élevée).\n⚠️ <b>DONNÉES MANQUANTES :</b> Forme 5 matchs non trouvée pour les deux joueurs",
+    "date": "17/07/2026",
+    "raison_rejet": "écart modèle-marché +27% (données manquantes + survalorisation)",
+    "marche": "moneyline",
+    "niveau": "elevee"
   }
 ]
