@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Adolfo Daniel Vallejo vs Stefano Travaglia\n🏆 <b>COMPÉTITION :</b> Nordea Open - Bastad (ATP 250, Terre)\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Vallejo vainqueur\n📈 <b>COTE :</b> 1.34\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70.3% → juste 1.42 → réelle 1.34 → delta +0.08 ✅ → Kelly ~1%\n📌 <b>POURQUOI ?</b> Le modèle Barnett-Clarke donne Vallejo à 70.3% sur terre (DR 1.18 vs 1.07). Ses stats de surface sont supérieures sur les deux piliers : service (62.1% vs 60.2%) et retour (44.6% vs 42.5%). Deux victoires convaincantes à Bastad confirmées. Confiance abaissée à BASSE : cote serrée (delta 0.08, seuil 0.07) + abandon récent.\n⚠️ <b>DONNÉES MANQUANTES :</b> H2H inexistant (première confrontation). Pas de statistiques Elo récent.",
+    "date": "17/07/2026",
+    "marche": "moneyline",
+    "niveau": "basse",
+    "modele": "sonnet",
+    "cote": 1.34,
+    "mise_pct": 1.0,
+    "surface": "terre"
+  }
+]
