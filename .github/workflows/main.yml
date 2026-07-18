@@ -28,6 +28,11 @@ jobs:
       GITHUB_REPO:         ${{ github.repository }}
       ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
       RAPIDAPI_KEY:        ${{ secrets.RAPIDAPI_KEY }}
+      # v7.7 : clé du compte OddsPapi DIRECT (api.oddspapi.io, pool séparé de
+      # RapidAPI). Repli fixtures/cotes sur 429, et 2e voie déterministe de
+      # règlement dans verification_resultats.py.
+      # ⚠️ Sans cette ligne, le secret existe mais le script ne le voit pas.
+      ODDSPAPI_KEY:        ${{ secrets.ODDSPAPI_KEY }}
 
     steps:
       - name: "Checkout du dépôt"
