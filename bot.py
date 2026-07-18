@@ -2597,7 +2597,13 @@ def oddspapi_fixtures_jour(exclure_termines=True):
                 logging.warning("OddsPapi : 429 persistant après réessai — bascule sur l'API directe.")
             # v7.7 : REPLI API directe (pool séparé) — ne consomme le nouveau
             # quota que si RapidAPI a réellement échoué.
-            data = _oddspapi_fixtures_direct()
+            # v7.7.1 : blindé — un échec du REPLI ne doit jamais tuer le run
+            # (constat 18/07 : NameError dans le repli → bot entier down).
+            try:
+                data = _oddspapi_fixtures_direct()
+            except Exception as e_direct:
+                logging.warning(f"Repli OddsPapi direct échoué : {e_direct}")
+                data = None
             break
     if data is None:
         return []
@@ -2634,7 +2640,7 @@ def _oddspapi_fixtures_direct():
     L'API directe renvoie les champs à PLAT (participant1Name, statusName) et
     exige une fenêtre from/to < 48h. [] si indisponible.
     """
-    maintenant = _maintenant_paris()
+    maintenant = datetime.now(ZoneInfo("Europe/Paris"))
     depuis = maintenant.strftime("%Y-%m-%dT00:00:00Z")
     jusqua = maintenant.strftime("%Y-%m-%dT23:59:59Z")
     brut = _oddspapi_direct_get("/v4/fixtures", {
@@ -2714,9 +2720,13 @@ def oddspapi_cotes(fixture_id):
         # structure players.0.price que _oddspapi_extraire_outcomes sait déjà lire
         # (récursif). fixtureId de l'API directe (préfixe 'id...') diffère de RapidAPI,
         # mais ce repli n'est atteint QUE si le fixture vient déjà de la voie directe.
-        data = _oddspapi_direct_get("/v4/odds", {
-            "fixtureId": fixture_id, "bookmaker": ODDSPAPI_BOOKMAKER,
-        })
+        try:
+            data = _oddspapi_direct_get("/v4/odds", {
+                "fixtureId": fixture_id, "bookmaker": ODDSPAPI_BOOKMAKER,
+            })
+        except Exception as e_direct:
+            logging.warning(f"Repli cotes direct échoué : {e_direct}")
+            data = None
         if data is None:
             return {}
 
