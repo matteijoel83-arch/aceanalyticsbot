@@ -3279,6 +3279,31 @@ def run_bot_autonome():
                 if delta < seuil_delta:
                     logging.info(f"Ticket rejeté — delta {delta:+.2f} < seuil {seuil_delta:.2f} (cote {cote_ticket}).")
                     return False, f"delta {delta:+.2f} < seuil {seuil_delta:.2f}"  # Delta insuffisant pour cette cote → abandon
+            # v7.6.6 : référence Barnett-Clarke du joueur PARIÉ, calculée EN AMONT
+            # des deux garde-fous ci-dessous (l'un s'en sert pour se calmer, l'autre
+            # pour trancher). Le matching de noms est tolérant (Claude abrège).
+            def _score_nom(nom, texte):
+                jetons = [j for j in nom.split() if len(j) >= 3]
+                if not jetons:
+                    return 0
+                score = 10 if jetons[-1] in texte else 0   # nom de famille = discriminant
+                score += sum(1 for j in jetons[:-1] if j in texte)
+                return score
+
+            bc_ref_pari = None  # proba de référence BC pour le joueur pronostiqué
+            _mprono_bc = re.search(r"prono\s*:\s*(?:</b>)?\s*(.+)", t_lower)
+            if _mprono_bc:
+                _prono_bc = _mprono_bc.group(1)
+                for (rj1, rj2), proba_ref in bc_refs.items():
+                    if not (_score_nom(rj1, t_lower) or _score_nom(rj2, t_lower)):
+                        continue
+                    _s1, _s2 = _score_nom(rj1, _prono_bc), _score_nom(rj2, _prono_bc)
+                    if _s1 > _s2:
+                        bc_ref_pari = proba_ref
+                    elif _s2 > _s1:
+                        bc_ref_pari = 1.0 - proba_ref
+                    break
+
             # GARDE-FOU ÉCART MODÈLE-MARCHÉ (validé par les cas Wang et Ruse) :
             # Un faux delta géant apparaît quand Claude (surtout Opus) surestime trop
             # la proba d'un outsider vs le marché. Ex Wang : bot 45% vs marché 26% → +73%.
@@ -3305,6 +3330,24 @@ def run_bot_autonome():
                         contenu_dm = dm_match.group(1).strip()
                         donnees_manquantes = bool(contenu_dm) and not contenu_dm.startswith("aucune")
                     seuil = 0.10 if donnees_manquantes else 0.30
+                    # v7.6.6 : le durcissement à 10% suppose que Claude s'écarte du
+                    # marché SANS appui. Mais si le modèle Barnett-Clarke CORROBORE
+                    # Claude (les deux proches, ≤ 8 pts), l'écart au marché n'est plus
+                    # une survalorisation : c'est de la value chiffrée. Le modèle EST
+                    # la donnée qui "manquait" → on lève le durcissement.
+                    # Cas réel du 18/07 (Collignon) : Claude 71%, modèle 70.8%, marché
+                    # 64% → l'ancien code rejetait un pari que le modèle validait.
+                    # (Le garde-fou Barnett-Clarke ci-dessous, lui, reste actif et
+                    # rejette toujours un Claude qui s'écarte DU MODÈLE — cas Altmaier.)
+                    if (donnees_manquantes and bc_ref_pari is not None
+                            and abs(proba_bot - bc_ref_pari) <= 0.08
+                            and bc_ref_pari > proba_marche):
+                        logging.info(
+                            f"[écart-marché] durcissement levé : le modèle BC corrobore "
+                            f"Claude ({proba_bot:.0%} vs modèle {bc_ref_pari:.0%}, tous deux "
+                            f"> marché {proba_marche:.0%}) → seuil normal 30%."
+                        )
+                        seuil = 0.30
                     if ecart_relatif > seuil:
                         raison = "données manquantes + survalorisation" if donnees_manquantes else "faux delta probable (cf. Wang/Ruse)"
                         logging.warning(
@@ -3325,17 +3368,7 @@ def run_bot_autonome():
             # "Vallejo vainqueur" dans le PRONO → `rj1 in prono_txt` était FAUX
             # → le code sortait par `break` SANS vérifier. Le garde-fou était
             # donc silencieusement inerte dès que Claude abrégeait un nom (soit
-            # presque toujours). On score chaque joueur sur ses jetons, le nom de
-            # famille pesant le plus, et on prend le meilleur des deux — ce qui
-            # gère aussi les prénoms partagés ("Daniel" Galan vs "Daniel" Vallejo).
-            def _score_nom(nom, texte):
-                jetons = [j for j in nom.split() if len(j) >= 3]
-                if not jetons:
-                    return 0
-                score = 10 if jetons[-1] in texte else 0   # nom de famille = discriminant
-                score += sum(1 for j in jetons[:-1] if j in texte)
-                return score
-
+            # presque toujours). _score_nom est défini plus haut (v7.6.6).
             for (rj1, rj2), proba_ref in bc_refs.items():
                 if not (_score_nom(rj1, t_lower) or _score_nom(rj2, t_lower)):
                     continue
