@@ -91,6 +91,38 @@ MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation val
 
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
 ODDSPAPI_BOOKMAKER = "pinnacle"               # bookmaker de référence (le plus sharp)
+
+# v7.7 : API OddsPapi DIRECTE (compte propre, pool de requêtes SÉPARÉ de RapidAPI).
+# Utilisée UNIQUEMENT en repli quand RapidAPI répond 429/erreur — préserve le
+# quota RapidAPI et n'entame le pool direct que si nécessaire. Auth = apiKey en
+# query (≠ headers RapidAPI), hôte api.oddspapi.io, endpoints /v4/*.
+ODDSPAPI_DIRECT_KEY  = os.environ.get("ODDSPAPI_KEY")
+ODDSPAPI_DIRECT_HOST = "https://api.oddspapi.io"
+
+
+def _oddspapi_direct_get(chemin, params, timeout=15):
+    """GET sur l'API OddsPapi directe (repli). apiKey en query. None si absent/429."""
+    if not ODDSPAPI_DIRECT_KEY:
+        return None
+    params = dict(params or {})
+    params["apiKey"] = ODDSPAPI_DIRECT_KEY
+    for tentative in (1, 2):
+        try:
+            _quota_inc("oddspapi_direct")  # compteur séparé du pool RapidAPI
+            r = requests.get(f"{ODDSPAPI_DIRECT_HOST}{chemin}", params=params, timeout=timeout)
+            if r.status_code == 429 and tentative == 1:
+                logging.info("OddsPapi DIRECT : 429 — pause 2s puis nouvel essai.")
+                time.sleep(2)
+                continue
+            r.raise_for_status()
+            logging.info(f"OddsPapi DIRECT : {chemin} OK (repli RapidAPI).")
+            return r.json()
+        except Exception as e:
+            if tentative == 2:
+                logging.warning(f"OddsPapi DIRECT indisponible : {e}")
+            else:
+                time.sleep(1)
+    return None
 MARKET_TOTAL_SETS_LIGNE = 2.5                 # Over 2.5 sets = "va au 3e set"
 # PATCH B — Total Games : ne garder que les lignes de MATCH complet.
 # Les totaux d'UN SEUL set (9.5-12.5) polluaient via la mainLine (10.5).
@@ -659,7 +691,8 @@ def _quota_persister():
       - oddspapi  : 1000 req/MOIS (OddsPapi)
     Le compteur jour de tennisapi se reset chaque jour, les mois chaque mois.
     """
-    if DRY_RUN or (_QUOTA_RUN["tennisapi"] == 0 and _QUOTA_RUN["oddspapi"] == 0):
+    if DRY_RUN or (_QUOTA_RUN["tennisapi"] == 0 and _QUOTA_RUN["oddspapi"] == 0
+                   and _QUOTA_RUN.get("oddspapi_direct", 0) == 0):
         return
     now = datetime.now(ZoneInfo("Europe/Paris"))
     mois_actuel = now.strftime("%Y-%m")
@@ -674,12 +707,17 @@ def _quota_persister():
     data["tennisapi_mois"] = data.get("tennisapi_mois", 0) + _QUOTA_RUN["tennisapi"]
     data["tennisapi_jour"] = data.get("tennisapi_jour", 0) + _QUOTA_RUN["tennisapi"]
     data["oddspapi_mois"]  = data.get("oddspapi_mois", 0)  + _QUOTA_RUN["oddspapi"]
+    # v7.7 : pool OddsPapi DIRECT (compte propre, budget séparé du RapidAPI)
+    data["oddspapi_direct_mois"] = (data.get("oddspapi_direct_mois", 0)
+                                    + _QUOTA_RUN.get("oddspapi_direct", 0))
     try:
         _gh_put("quota_rapidapi.json", data, "📊 Maj quotas API", sha=sha)
         logging.info(
             f"Quotas — TennisAPI : {_QUOTA_RUN['tennisapi']} ce run, "
             f"{data['tennisapi_jour']}/50 aujourd'hui, {data['tennisapi_mois']} ce mois · "
-            f"OddsPapi : {_QUOTA_RUN['oddspapi']} ce run, {data['oddspapi_mois']}/1000 ce mois."
+            f"OddsPapi RapidAPI : {_QUOTA_RUN['oddspapi']} ce run, {data['oddspapi_mois']}/1000 ce mois · "
+            f"OddsPapi DIRECT : {_QUOTA_RUN.get('oddspapi_direct', 0)} ce run, "
+            f"{data['oddspapi_direct_mois']} ce mois."
         )
     except Exception as e:
         logging.warning(f"Quota persist échoué : {e}")
@@ -2556,9 +2594,11 @@ def oddspapi_fixtures_jour(exclure_termines=True):
                 continue
             logging.warning(f"OddsPapi fixtures indisponible : {e}")
             if est_429:
-                logging.warning("OddsPapi : 429 persistant après réessai — vérifier le plan "
-                                "sur le tableau de bord RapidAPI (limite réelle ≠ notre compteur).")
-            return []
+                logging.warning("OddsPapi : 429 persistant après réessai — bascule sur l'API directe.")
+            # v7.7 : REPLI API directe (pool séparé) — ne consomme le nouveau
+            # quota que si RapidAPI a réellement échoué.
+            data = _oddspapi_fixtures_direct()
+            break
     if data is None:
         return []
     fixtures = data if isinstance(data, list) else data.get("fixtures", data.get("data", []))
@@ -2585,6 +2625,50 @@ def oddspapi_fixtures_jour(exclure_termines=True):
     if retires:
         logging.info(f"OddsPapi : {retires} match(s) terminé(s)/en cours exclu(s), {len(jouables)} jouable(s).")
     return jouables
+
+
+def _oddspapi_fixtures_direct():
+    """
+    v7.7 — Repli fixtures via l'API OddsPapi DIRECTE, converti au format que le
+    reste du code attend (structure RapidAPI : participants.*, status.*).
+    L'API directe renvoie les champs à PLAT (participant1Name, statusName) et
+    exige une fenêtre from/to < 48h. [] si indisponible.
+    """
+    maintenant = _maintenant_paris()
+    depuis = maintenant.strftime("%Y-%m-%dT00:00:00Z")
+    jusqua = maintenant.strftime("%Y-%m-%dT23:59:59Z")
+    brut = _oddspapi_direct_get("/v4/fixtures", {
+        "sportId": 12, "from": depuis, "to": jusqua, "hasOdds": "true",
+        "bookmakers": ODDSPAPI_BOOKMAKER,
+    })
+    if not isinstance(brut, list):
+        return None
+    # Adapter chaque fixture au format RapidAPI attendu par le pipeline
+    convertis = []
+    for f in brut:
+        convertis.append({
+            "id": f.get("fixtureId"),
+            "participants": {
+                "participant1Name": f.get("participant1Name", ""),
+                "participant2Name": f.get("participant2Name", ""),
+            },
+            "status": {"statusName": _oddspapi_statut_direct(f.get("statusId"),
+                                                              f.get("statusName", ""))},
+            "trueStartTime": f.get("trueStartTime"),
+            "startTime": f.get("startTime"),
+            "tournament": {"tournamentName": f.get("tournamentName", "")},
+            "hasOdds": f.get("hasOdds", False),
+            "_source": "direct",  # marqueur pour oddspapi_cotes (choisir la bonne voie)
+        })
+    logging.info(f"OddsPapi DIRECT : {len(convertis)} fixture(s) récupéré(s) en repli.")
+    return convertis
+
+
+def _oddspapi_statut_direct(status_id, status_name):
+    """Mappe statusId (0/1/2/3) + statusName direct vers les libellés RapidAPI."""
+    if status_name in ("Pre-Game", "Ended", "In-Play"):
+        return {"Pre-Game": "Pre-Game", "Ended": "Finished", "In-Play": "Live"}[status_name]
+    return {0: "Pre-Game", 1: "Live", 2: "Finished", 3: "Cancelled"}.get(status_id, "Pre-Game")
 
 
 def oddspapi_trouver_fixture(joueur1, joueur2, fixtures):
@@ -2615,6 +2699,7 @@ def oddspapi_cotes(fixture_id):
     (9.5-12.5) sont exclus par le plancher — c'est eux qui polluaient via
     la mainLine (10.5 remontait à tort comme ligne principale).
     """
+    data = None
     try:
         _quota_inc("oddspapi")  # budget séparé : 1000 req/mois
         r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/odds",
@@ -2624,8 +2709,16 @@ def oddspapi_cotes(fixture_id):
         r.raise_for_status()
         data = r.json()
     except Exception as e:
-        logging.warning(f"OddsPapi cotes {fixture_id} : {e}")
-        return {}
+        logging.warning(f"OddsPapi cotes {fixture_id} (RapidAPI) : {e} — bascule API directe.")
+        # v7.7 : REPLI cotes via API directe. L'endpoint /v4/odds renvoie la même
+        # structure players.0.price que _oddspapi_extraire_outcomes sait déjà lire
+        # (récursif). fixtureId de l'API directe (préfixe 'id...') diffère de RapidAPI,
+        # mais ce repli n'est atteint QUE si le fixture vient déjà de la voie directe.
+        data = _oddspapi_direct_get("/v4/odds", {
+            "fixtureId": fixture_id, "bookmaker": ODDSPAPI_BOOKMAKER,
+        })
+        if data is None:
+            return {}
 
     # MODE OBSERVATION : loguer la section utile (marchés Pinnacle), pas le début
     # de la réponse (métadonnées) — le log tronqué à 1500 chars n'atteignait
