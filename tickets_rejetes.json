@@ -33,5 +33,12 @@
     "raison_rejet": "écart modèle-marché +10% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Daniel Merida Aguilar vs Damir Dzumhur\n🏆 <b>COMPÉTITION :</b> Plava Laguna Croatia Open - Umag (ATP 250)\n⏰ <b>HEURE :</b> 22:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Daniel Merida Aguilar Vainqueur\n📈 <b>COTE :</b> 1.42\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70.3% → juste 1.42 → réelle 1.42 → delta +0.00 ✅ — Attends.\n\nRecalcul : modèle donne proba 70.3% → cote juste 1/0.703 = 1.42. Cote réelle Winamax = 1.42. Delta = 0.00. Seuil requis (cote < 1.90) = 0.07. Delta 0.00 < 0.07 → ❌ Abandon.\n\nAUCUN_MATCH — Merida Aguilar domine le modèle Barnett-Clarke (70.3%, cote juste 1.42) mais la cote Winamax 1.42 reflète exactement cette probabilité : delta zéro, aucune value. Tauson vs Krejcikova : données de surface complètement absentes des deux côtés, impossible de s'écarter du marché. Rien à jouer ce soir.",
+    "date": "18/07/2026",
+    "raison_rejet": "delta +0.00 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
