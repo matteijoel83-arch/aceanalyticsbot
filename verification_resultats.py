@@ -587,6 +587,134 @@ def verdict_par_consensus(pari_texte: str, date_pari: str = "") -> str:
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"
 RAPIDAPI_KEY  = os.environ.get("RAPIDAPI_KEY")  # optionnel — repli Claude si absent
 
+# v2.8 : API OddsPapi DIRECTE (compte propre, pool de requêtes SÉPARÉ de RapidAPI).
+# Sert de 2e voie déterministe quand RapidAPI est en 429. Auth par apiKey en
+# paramètre d'URL (≠ headers RapidAPI), hôte api.oddspapi.io, endpoints /v4/*.
+# Avantage majeur : /v4/scores renvoie le score PAR SET → règlement déterministe
+# même pour les cas où RapidAPI et les LLM échouent (constat Collignon 18/07).
+ODDSPAPI_DIRECT_KEY  = os.environ.get("ODDSPAPI_KEY")   # clé du compte oddspapi.io direct
+ODDSPAPI_DIRECT_HOST = "https://api.oddspapi.io"
+ODDSPAPI_TENNIS_SPORTID = int(os.environ.get("ODDSPAPI_TENNIS_SPORTID", "12"))
+
+
+def _oddspapi_direct_get(chemin, params, timeout=15):
+    """GET sur l'API OddsPapi directe. apiKey en query. None si indisponible/429."""
+    if not ODDSPAPI_DIRECT_KEY:
+        return None
+    params = dict(params or {})
+    params["apiKey"] = ODDSPAPI_DIRECT_KEY
+    for tentative in (1, 2):
+        try:
+            r = requests.get(f"{ODDSPAPI_DIRECT_HOST}{chemin}", params=params, timeout=timeout)
+            if r.status_code == 429 and tentative == 1:
+                logging.info("OddsPapi DIRECT : 429 — pause 2s puis nouvel essai.")
+                time.sleep(2)
+                continue
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            if tentative == 2:
+                logging.info(f"OddsPapi DIRECT indisponible : {e}")
+            else:
+                time.sleep(1)
+    return None
+
+
+def verifier_moneyline_oddspapi_direct(item, marche_detectee):
+    """
+    v2.8 — Règlement déterministe via l'API OddsPapi DIRECTE (pool séparé).
+    Utilise /v4/fixtures (fenêtre 48h) pour trouver le match, puis /v4/scores
+    pour le score PAR SET. Retourne GAGNE/PERDU/ANNULE/None.
+    None = match introuvable ou pas terminé → on laissera le consensus LLM jouer.
+    """
+    if not ODDSPAPI_DIRECT_KEY:
+        return None
+    j1, j2, prono = _extraire_match_et_prono(item.get("pari", ""))
+    if not j1 or not j2 or not _est_pari_moneyline_simple(prono, marche_detectee):
+        return None
+
+    # Fenêtre : du jour du pari à +48h (borne max de l'endpoint fixtures)
+    try:
+        d = datetime.strptime(str(item.get("date", "")), "%d/%m/%Y")
+    except Exception:
+        d = _maintenant_paris().replace(tzinfo=None)
+    depuis = (d.replace(hour=0, minute=0)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    jusqua = (d.replace(hour=23, minute=59)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    fixtures = _oddspapi_direct_get("/v4/fixtures", {
+        "sportId": ODDSPAPI_TENNIS_SPORTID, "from": depuis, "to": jusqua,
+    })
+    if not isinstance(fixtures, list) or not fixtures:
+        return None
+
+    # Trouver le match par appariement de noms (statusId 2 = terminé)
+    meilleur, score_max = None, 0.0
+    for fx in fixtures:
+        n1 = str(fx.get("participant1Name") or "")
+        n2 = str(fx.get("participant2Name") or "")
+        s = max((_sim_noms_verif(j1, n1) + _sim_noms_verif(j2, n2)) / 2,
+                (_sim_noms_verif(j1, n2) + _sim_noms_verif(j2, n1)) / 2)
+        if s > score_max:
+            score_max, meilleur = s, fx
+    if not meilleur or score_max < 0.7:
+        return None
+
+    statut = str(meilleur.get("statusName") or "")
+    status_id = meilleur.get("statusId")
+    # statusId 3 = annulé ; statusName peut préciser Walkover/Retired
+    if status_id == 3 or statut in ("Cancelled", "Walkover", "Retired", "Abandoned", "Postponed"):
+        logging.warning(f"OddsPapi DIRECT : statut '{statut}' (id {status_id}) → ANNULE.")
+        return "ANNULE"
+    if status_id != 2:  # 0=pas commencé, 1=live → pas encore réglable
+        return None
+
+    # Score par set via /v4/scores
+    scores = _oddspapi_direct_get("/v4/scores", {"fixtureId": meilleur.get("fixtureId")})
+    if not isinstance(scores, dict):
+        return None
+    periodes = scores.get("scores") or {}
+    if not periodes:
+        return None
+
+    # Compter les SETS gagnés par chaque participant (période "0" = score match
+    # global chez OddsPapi ; les périodes 1,2,3... = sets individuels).
+    sets_p1, sets_p2 = 0, 0
+    for cle, per in periodes.items():
+        if str(cle) == "0":
+            continue  # période 0 = agrégat, on compte les sets réels
+        try:
+            a = int(per.get("participant1Score"))
+            b = int(per.get("participant2Score"))
+        except (TypeError, ValueError):
+            continue
+        if a > b:
+            sets_p1 += 1
+        elif b > a:
+            sets_p2 += 1
+    # Repli : si pas de sets individuels, utiliser la période 0 (sets globaux)
+    if sets_p1 == 0 and sets_p2 == 0 and "0" in periodes:
+        try:
+            sets_p1 = int(periodes["0"].get("participant1Score"))
+            sets_p2 = int(periodes["0"].get("participant2Score"))
+        except (TypeError, ValueError):
+            return None
+    if sets_p1 == sets_p2:
+        return None  # égalité impossible en tennis terminé → donnée douteuse
+
+    n1 = str(meilleur.get("participant1Name") or "")
+    n2 = str(meilleur.get("participant2Name") or "")
+    vainqueur = n1 if sets_p1 > sets_p2 else n2
+    score_j1 = max(_sim_noms_verif(prono, j1), _sim_noms_verif(j1, prono))
+    score_j2 = max(_sim_noms_verif(prono, j2), _sim_noms_verif(j2, prono))
+    joueur_pronostique = j1 if score_j1 >= score_j2 else j2
+    a_gagne = _sim_noms_verif(joueur_pronostique, vainqueur) >= 0.6
+    logging.info(
+        f"OddsPapi DIRECT (déterministe) — {n1} vs {n2} : {sets_p1}-{sets_p2} sets, "
+        f"vainqueur '{vainqueur}'. Pronostiqué '{joueur_pronostique}' → "
+        f"{'GAGNE' if a_gagne else 'PERDU'}."
+    )
+    return "GAGNE" if a_gagne else "PERDU"
+
 
 def _sim_noms_verif(a, b):
     """Similarité de noms tolérante à l'ordre/virgules (même logique que bot.py)."""
@@ -867,14 +995,21 @@ def main():
         # v2.3 : contrôle DÉTERMINISTE en priorité (score OddsPapi réel) pour
         # les Moneyline du jour même — élimine le risque d'hallucination du
         # web_search LLM constaté le 15/07 (score inventé, source citée fictive).
+        # HIÉRARCHIE DE RÈGLEMENT (du plus fiable au moins fiable) :
+        # 1. OddsPapi via RapidAPI (score officiel)
+        # 2. OddsPapi DIRECT (pool séparé, /v4/scores par set) — v2.8, contourne
+        #    le 429 RapidAPI qui a laissé le champ libre à l'hallucination LLM
+        # 3. Consensus Claude + Gemini (2 sources, doivent être d'accord) — v2.7
         statut = verifier_moneyline_oddspapi(item, marche, fixtures_jour)
         if statut:
-            logging.info(f"Verdict (OddsPapi déterministe) : {statut}")
+            logging.info(f"Verdict (OddsPapi RapidAPI déterministe) : {statut}")
         else:
-            # v2.7 : OddsPapi muet → CONSENSUS Claude + Gemini (2 sources
-            # indépendantes). Sur désaccord → EN_COURS, jamais un score deviné.
-            statut = verdict_par_consensus(pari_texte, item.get("date", ""))
-            logging.info(f"Verdict (consensus 2 sources) : {statut}")
+            statut = verifier_moneyline_oddspapi_direct(item, marche)
+            if statut:
+                logging.info(f"Verdict (OddsPapi DIRECT déterministe) : {statut}")
+            else:
+                statut = verdict_par_consensus(pari_texte, item.get("date", ""))
+                logging.info(f"Verdict (consensus 2 sources LLM) : {statut}")
 
         if statut == "ANNULE":
             # v2.6 : forfait/abandon → mise remboursée. Le pari sort de la file
