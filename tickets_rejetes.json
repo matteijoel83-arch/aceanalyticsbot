@@ -26,5 +26,12 @@
     "raison_rejet": "écart modèle-marché +27% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Raphael Collignon vs Juan Manuel Cerundolo\n🏆 <b>COMPÉTITION :</b> EFG Swiss Open - Gstaad (ATP 250, Terre)\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Raphael Collignon Vainqueur\n📈 <b>COTE :</b> 1.56\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70.8% → juste 1.41 → réelle 1.56 → delta +0.15 ✅ → Kelly ~2%\n📌 <b>POURQUOI ?</b> Barnett-Clarke donne Collignon à 70.8% sur terre grâce à des stats de surface nettement supérieures (DR 1.21 vs 1.08, hold 75% vs 65.8%). Malgré le H2H 3-0 en faveur de Cerundolo, ses chiffres service/retour sur terre cette saison parlent clairement pour Collignon. Fatigue comparable (22h vs 20h).\n⚠️ <b>DONNÉES MANQUANTES :</b> Elo surface récent non fourni. Avertissement \"données incertaines\" émis — mise réduite à 2% (MODÉRÉE).",
+    "date": "18/07/2026",
+    "raison_rejet": "écart modèle-marché +10% (données manquantes + survalorisation)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
