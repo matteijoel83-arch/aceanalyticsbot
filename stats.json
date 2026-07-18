@@ -1,13 +1,13 @@
 {
   "version": 2,
   "victoires": 20,
-  "defaites": 16,
+  "defaites": 17,
   "par_marche": {
     "moneyline": {
       "v": 18,
-      "d": 14,
-      "mise": 3.0,
-      "profit": -1.66
+      "d": 15,
+      "mise": 5.0,
+      "profit": -3.66
     },
     "score_exact": {
       "v": 1,
@@ -41,7 +41,9 @@
     },
     "moderee": {
       "v": 8,
-      "d": 4
+      "d": 5,
+      "mise": 2.0,
+      "profit": -2.0
     },
     "basse": {
       "v": 8,
@@ -59,17 +61,17 @@
     },
     "sonnet": {
       "v": 1,
-      "d": 1,
-      "mise": 1.0,
-      "profit": 0.34
+      "d": 2,
+      "mise": 3.0,
+      "profit": -1.66
     }
   },
   "par_surface": {
     "terre": {
       "v": 1,
-      "d": 2,
-      "mise": 3.0,
-      "profit": -1.66
+      "d": 3,
+      "mise": 5.0,
+      "profit": -3.66
     },
     "dur": {
       "v": 0,
@@ -85,7 +87,7 @@
     }
   },
   "roi": {
-    "mise_totale": 3.0,
-    "profit": -1.66
+    "mise_totale": 5.0,
+    "profit": -3.66
   }
 }
