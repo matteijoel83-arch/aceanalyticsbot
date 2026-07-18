@@ -27,6 +27,15 @@ from zoneinfo import ZoneInfo
 import anthropic
 from logging.handlers import RotatingFileHandler
 
+# v2.7 : Gemini comme SECONDE source de vérification (consensus avec Claude).
+# Import tolérant : si la lib n'est pas installée, on retombe sur Claude seul.
+try:
+    from google import genai
+    from google.genai import types
+    _GEMINI_DISPO = True
+except Exception:
+    _GEMINI_DISPO = False
+
 # =====================================================================
 # 1. CONFIGURATION & LOGGING
 # =====================================================================
@@ -60,6 +69,17 @@ if MISSING:
 
 client       = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 CLAUDE_MODEL = "claude-sonnet-4-6"  # Sonnet pour fiabilité — vérification critique
+
+# v2.7 : client Gemini (2e source). GEMINI_API_KEY optionnel — sans lui,
+# le consensus se dégrade proprement en "Claude seul".
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+gemini_client = None
+if _GEMINI_DISPO and GEMINI_API_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        logging.warning(f"Gemini indisponible pour la vérification : {e}")
+GEMINI_MODEL = "gemini-3.5-flash"
 
 
 def _maintenant_paris():
@@ -455,6 +475,100 @@ def interroger_claude_statut(pari_texte: str, date_pari: str = "") -> str:
         return "EN_COURS"
 
 # =====================================================================
+# 4ter. VÉRIFICATION VIA GEMINI + google_search (2e source, v2.7)
+# =====================================================================
+# Constat des 15/07 (Altmaier) et 18/07 (Collignon) : Claude+web_search a
+# HALLUCINÉ un score final plausible mais faux, en citant "ATP Tour officiel".
+# Le garde-fou PREUVE DE FIN ne protège pas contre une citation inventée.
+# Parade : demander le MÊME résultat à Gemini (google_search RÉEL) et n'accepter
+# un verdict que si les DEUX sources sont d'accord. Sur désaccord → EN_COURS
+# (règlement manuel), jamais un score deviné.
+
+def interroger_gemini_statut(pari_texte: str, date_pari: str = "") -> str:
+    """2e source de vérification. Retourne GAGNE/PERDU/EN_COURS/ANNULE.
+    EN_COURS par défaut si Gemini indisponible ou réponse ambiguë."""
+    if gemini_client is None:
+        return "INDISPONIBLE"
+    resume = _extraire_resume_ticket(pari_texte)
+    contexte_date = f"\nDate du match : {date_pari}" if date_pari else ""
+    prompt = (
+        "Tu vérifies le résultat RÉEL d'un pari tennis. Cherche le score FINAL "
+        "officiel via google_search (Flashscore, Sofascore, ATP/WTA, BBC Sport).\n"
+        f"{contexte_date}\n{resume}\n\n"
+        "RÈGLES :\n"
+        "- Match pas terminé, score partiel, ou doute → EN_COURS\n"
+        "- Forfait (walkover, aucun jeu joué) ou abandon → ANNULE\n"
+        "- Vérifie le PRONOSTIC EXACT (le bon joueur, le bon marché)\n"
+        "- Attention aux homonymes : bon tournoi, bonne date, bon adversaire\n\n"
+        "Réponds en 2 lignes maximum, en terminant OBLIGATOIREMENT par :\n"
+        "PREUVE: [score final cité] ou aucune\n"
+        "VERDICT: GAGNE (ou PERDU, ou EN_COURS, ou ANNULE)"
+    )
+    try:
+        rep = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.0,
+            ),
+        )
+        texte = (rep.text or "").strip().upper()
+        logging.info(f"Verdict Gemini brut : '{texte[-160:]}'")
+        m = re.search(r"VERDICT\s*:\s*(GAGNE|PERDU|EN_COURS|ANNULE)", texte)
+        if not m:
+            return "EN_COURS"
+        resultat = m.group(1)
+        # Même exigence de preuve que pour Claude sur GAGNE/PERDU
+        if resultat in ("GAGNE", "PERDU"):
+            preuve = re.search(r"PREUVE\s*:\s*(.+)", texte)
+            ptxt = preuve.group(1).strip() if preuve else ""
+            if not ptxt or "AUCUNE" in ptxt[:20] or not any(
+                    x in ptxt for x in ["6-", "7-", "6/", "7/", "TERMIN", "FINAL", "FINISHED"]):
+                return "EN_COURS"
+        return resultat
+    except Exception as e:
+        logging.warning(f"Gemini vérification échouée : {e}")
+        return "INDISPONIBLE"
+
+
+def verdict_par_consensus(pari_texte: str, date_pari: str = "") -> str:
+    """
+    v2.7 — Règle un pari par CONSENSUS de deux sources indépendantes quand
+    OddsPapi est muet. Claude+web_search ET Gemini+google_search doivent être
+    D'ACCORD pour clôturer un pari en GAGNE/PERDU. Toute divergence → EN_COURS.
+    """
+    v_claude = interroger_claude_statut(pari_texte, date_pari)
+    v_gemini = interroger_gemini_statut(pari_texte, date_pari)
+    logging.info(f"Consensus — Claude: {v_claude} | Gemini: {v_gemini}")
+
+    # Gemini indisponible (pas de clé/lib) → on retombe sur Claude seul, MAIS
+    # uniquement pour EN_COURS/ANNULE (sûrs). Un GAGNE/PERDU de Claude SEUL
+    # reste autorisé par rétrocompatibilité — c'est le comportement d'avant v2.7,
+    # avec le risque connu. Si tu veux le durcir, mets GEMINI_API_KEY en secret.
+    if v_gemini == "INDISPONIBLE":
+        logging.info("Gemini indisponible → Claude seul (comportement d'avant v2.7).")
+        return v_claude
+
+    # ANNULE prime dès qu'une source le détecte (forfait = fait objectif)
+    if "ANNULE" in (v_claude, v_gemini):
+        return "ANNULE"
+
+    # Accord parfait GAGNE/PERDU → on clôture
+    if v_claude == v_gemini and v_claude in ("GAGNE", "PERDU"):
+        return v_claude
+
+    # Tout le reste (désaccord, l'un EN_COURS, GAGNE vs PERDU...) → prudence
+    if v_claude != v_gemini and {v_claude, v_gemini} & {"GAGNE", "PERDU"}:
+        logging.warning(
+            f"⚠️ DÉSACCORD Claude ({v_claude}) vs Gemini ({v_gemini}) → EN_COURS. "
+            f"C'est exactement le cas qui a corrompu les stats les 15 et 18/07 : "
+            f"on NE tranche PAS, un humain règlera à la main."
+        )
+    return "EN_COURS"
+
+
+# =====================================================================
 # 4bis. VÉRIFICATION DÉTERMINISTE VIA ODDSPAPI (v2.3, priorité sur Claude)
 # =====================================================================
 # Constat du 15/07/2026 : Claude+web_search a annoncé "GAGNE" en citant un
@@ -757,8 +871,10 @@ def main():
         if statut:
             logging.info(f"Verdict (OddsPapi déterministe) : {statut}")
         else:
-            statut = interroger_claude_statut(pari_texte, item.get("date", ""))
-            logging.info(f"Verdict (Claude + web_search) : {statut}")
+            # v2.7 : OddsPapi muet → CONSENSUS Claude + Gemini (2 sources
+            # indépendantes). Sur désaccord → EN_COURS, jamais un score deviné.
+            statut = verdict_par_consensus(pari_texte, item.get("date", ""))
+            logging.info(f"Verdict (consensus 2 sources) : {statut}")
 
         if statut == "ANNULE":
             # v2.6 : forfait/abandon → mise remboursée. Le pari sort de la file
