@@ -2944,19 +2944,25 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
         j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
         fx = oddspapi_trouver_fixture(j1, j2, fixtures)
         if not fx:
-            logging.info(f"Marchés alt : '{j1} vs {j2}' non apparié dans les {len(fixtures)} fixtures OddsPapi — cotes alt indisponibles.")
-            if MARCHES_ALT_MODE == "observation":
-                proches = []
-                for f in fixtures[:400]:
-                    p = f.get("participants", {})
-                    n1 = str(p.get("participant1Name", ""))
-                    n2 = str(p.get("participant2Name", ""))
-                    s = max((_sim_noms(j1, n1) + _sim_noms(j2, n2)) / 2,
-                            (_sim_noms(j1, n2) + _sim_noms(j2, n1)) / 2)
-                    proches.append((s, f"{n1} vs {n2}"))
-                proches.sort(reverse=True)
-                top = proches[0] if proches else (0, "aucun")
-                logging.info(f"[OBS] Pas de correspondance pour '{j1} vs {j2}' — meilleur candidat OddsPapi : '{top[1]}' (score {top[0]:.2f})")
+            # v7.7.2 : diagnostic d'appariement en TOUT mode (constat 19/07 :
+            # 'Rublev vs Darderi' non apparié dans 81 fixtures alors que la
+            # finale de Gstaad y est forcément — il faut VOIR les noms réels et
+            # le score pour régler le seuil ou l'adaptateur).
+            proches = []
+            for f in fixtures[:400]:
+                p = f.get("participants", {})
+                n1 = str(p.get("participant1Name", ""))
+                n2 = str(p.get("participant2Name", ""))
+                s = max((_sim_noms(j1, n1) + _sim_noms(j2, n2)) / 2,
+                        (_sim_noms(j1, n2) + _sim_noms(j2, n1)) / 2)
+                proches.append((s, f"{n1} vs {n2}"))
+            proches.sort(reverse=True)
+            top = proches[0] if proches else (0, "aucun")
+            logging.info(
+                f"Marchés alt : '{j1} vs {j2}' non apparié dans les {len(fixtures)} "
+                f"fixtures OddsPapi — meilleur candidat : '{top[1]}' (score {top[0]:.2f}, "
+                f"seuil 0.70). Cotes alt indisponibles pour ce match."
+            )
             continue
         # FILTRE hasOdds (v7.3.2) : si le fixture annonce explicitement qu'il n'a
         # PAS de cotes, inutile d'appeler /fixtures/odds (constat run 10/07 :
