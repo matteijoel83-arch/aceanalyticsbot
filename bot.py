@@ -2944,6 +2944,7 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
         j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
         fx = oddspapi_trouver_fixture(j1, j2, fixtures)
         if not fx:
+            logging.info(f"Marchés alt : '{j1} vs {j2}' non apparié dans les {len(fixtures)} fixtures OddsPapi — cotes alt indisponibles.")
             if MARCHES_ALT_MODE == "observation":
                 proches = []
                 for f in fixtures[:400]:
@@ -2969,8 +2970,7 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
         appels_cotes += 1
         cotes = oddspapi_cotes(fid)
         if not cotes:
-            if MARCHES_ALT_MODE == "observation":
-                logging.info(f"[OBS] Match trouvé (fid={fid}) pour {j1} vs {j2} mais AUCUNE cote alt récupérée (match commencé ? format ?).")
+            logging.info(f"Marchés alt : fixture trouvé (fid={fid}) pour '{j1} vs {j2}' mais AUCUNE cote sets/jeux extraite (match commencé, ou format Pinnacle non reconnu).")
             continue
 
         ts = cotes.get("total_sets", {})
@@ -2987,7 +2987,14 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
 
         # MODE ACTIF : on stocke pour l'ajouter au prompt de Claude
         if MARCHES_ALT_MODE == "actif":
-            logging.info(f"[ACTIF] Marchés alt prêts pour {j1} vs {j2} — ajout au prompt Claude.")
+            ts_a = cotes.get("total_sets", {})
+            tg_a = cotes.get("total_games", {})
+            logging.info(
+                f"[ACTIF] Cotes Pinnacle lues pour {j1} vs {j2} — "
+                f"Sets O/U 2.5: Over {ts_a.get('over','?')}/Under {ts_a.get('under','?')} | "
+                f"Games O/U {tg_a.get('ligne','?')}: Over {tg_a.get('over','?')}/Under {tg_a.get('under','?')} "
+                f"→ ajout au prompt Claude."
+            )
             tickets_alt.append({
                 "j1": j1, 
                 "j2": j2, 
