@@ -1506,6 +1506,17 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.1,
+                    # v7.7.3 : plafond de recherches relevé 10 → 24. Constat du
+                    # 20/07 : un lundi avec 5 tournois actifs et 57 matchs en
+                    # fenêtre, Gemini n'en documentait que 2. Notre schéma exige
+                    # ~12 données par match ; à 10 recherches max, la couverture
+                    # était PHYSIQUEMENT bornée à 2-3 matchs par run. Le bot
+                    # n'était pas sélectif — il était aveugle sur le reste.
+                    # Coût : latence + qq centimes Gemini par run. À surveiller :
+                    # la ligne "Gemini OK — N match(s)" doit monter.
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        maximum_remote_calls=24
+                    ),
                 ),
             )
         except Exception as e:
