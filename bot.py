@@ -1893,6 +1893,13 @@ HTML uniquement <b>texte</b>. JAMAIS **texte**. POURQUOI max 60 mots.
 🧮 <b>VALUE :</b> [X% → juste Y.YY → réelle Z.ZZ → delta +D.DD ✅ → Kelly W%]
 📌 <b>POURQUOI ?</b> [Max 60 mots]
 ⚠️ <b>DONNÉES MANQUANTES :</b> [Stats absentes ou Aucune]
+
+⚠️ RÈGLE COTE PINNACLE (v7.8) : si le match a source_cote contenant "Pinnacle"
+(cote complétée par le repli, pas vue sur Winamax), tu DOIS ajouter cette ligne
+à la fin du ticket, telle quelle :
+⚠️ <b>COTE PINNACLE</b> — vérifier la cote Winamax avant de miser (peut différer)
+Et tu appliques le seuil de delta OUTSIDER (le plus strict) quel que soit le
+profil : la cote Winamax réelle peut être moins bonne que la Pinnacle affichée.
 """
 
 def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
@@ -2434,6 +2441,11 @@ def filtrer_json_sans_cote(donnees_json):
             return False
 
     def _source_winamax(m):
+        # v7.8 : les cotes complétées par le repli Pinnacle sont acceptées —
+        # la jouabilité est garantie par le filtre TOURNOIS, et le marquage
+        # "à vérifier sur Winamax" figure sur le ticket.
+        if m.get("cote_pinnacle_repli"):
+            return True
         # v7.6.1 : une cote NUMÉRIQUEMENT valide ne suffit pas — elle doit venir
         # de WINAMAX. Constat du 17/07 : ticket Galan/Coppejans envoyé sur le
         # Bunschoten Challenger, tournoi ABSENT de Winamax (cote trouvée chez un
@@ -2464,6 +2476,86 @@ def filtrer_json_sans_cote(donnees_json):
         logging.info(f"Filtre WINAMAX : {len(hors_winamax)} match(s) injouable(s) retiré(s), "
                      f"{len(gardes)} gardé(s).")
     data["matchs"] = gardes
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+COMPLETION_PINNACLE_MAX = 3   # plafond de lookups par run (budget direct : 250/mois)
+
+
+def completer_cotes_pinnacle(donnees_json, fixtures):
+    """
+    v7.8 — REPLI DE COTES : un match validé par le filtre TOURNOIS (donc jouable
+    sur Winamax — la liste est relevée chaque semaine sur l'app) mais dont Gemini
+    n'a pas trouvé la cote Winamax n'est plus JETÉ : on récupère sa moneyline
+    Pinnacle (oddspapi_cotes, qui gère déjà RapidAPI→direct) et on le garde,
+    marqué explicitement "Pinnacle (repli)".
+    POURQUOI : constat du 20/07 — couverture bornée à 2-3 matchs/run parce que
+    Gemini ne parvient à vérifier une cote Coteur/Winamax que pour une poignée de
+    matchs, quel que soit son budget de recherche. Le filtre TOURNOIS garantit
+    déjà la jouabilité ; la cote Winamax exacte sera vérifiée par le parieur
+    (marquage sur le ticket). Pinnacle est de toute façon la référence sharp.
+    GARDE-FOUS : plafond COMPLETION_PINNACLE_MAX lookups/run · alignement des
+    joueurs par similarité de noms (l'ordre fixture peut différer) · sanity
+    checks (cotes 1.01-25, somme des probas implicites 100-115%).
+    """
+    if not fixtures:
+        return donnees_json
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    def _cote_valide(c):
+        try:
+            return 1.01 <= float(c) <= 25.0
+        except (TypeError, ValueError):
+            return False
+
+    lookups = 0
+    for m in matchs:
+        deja_ok = (_cote_valide(m.get("cote_j1")) and _cote_valide(m.get("cote_j2"))
+                   and "winamax" in str(m.get("source_cote", "")).lower())
+        if deja_ok:
+            continue
+        if lookups >= COMPLETION_PINNACLE_MAX:
+            logging.info(f"Repli Pinnacle : plafond {COMPLETION_PINNACLE_MAX} lookups atteint — matchs restants non complétés.")
+            break
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        fx = oddspapi_trouver_fixture(j1, j2, fixtures)
+        if not fx:
+            logging.info(f"Repli Pinnacle : '{j1} vs {j2}' sans cote et non apparié dans les fixtures — restera écarté par le filtre COTES.")
+            continue
+        fid = fx.get("fixtureId") or fx.get("id")
+        if not fid:
+            continue
+        lookups += 1
+        cotes = oddspapi_cotes(fid)
+        ml = (cotes or {}).get("moneyline", {})
+        c_home, c_away = ml.get("home"), ml.get("away")
+        if not (_cote_valide(c_home) and _cote_valide(c_away)):
+            logging.info(f"Repli Pinnacle : '{j1} vs {j2}' apparié (fid={fid}) mais moneyline absente/invalide ({ml}) — écarté.")
+            continue
+        somme_probas = 1.0 / float(c_home) + 1.0 / float(c_away)
+        if not (1.00 <= somme_probas <= 1.15):
+            logging.warning(f"Repli Pinnacle : '{j1} vs {j2}' probas implicites suspectes ({somme_probas:.2f}) — écarté.")
+            continue
+        # Alignement : home = participant1 du fixture, mais est-ce joueur1 du match ?
+        parts = fx.get("participants", {})
+        n1 = str(parts.get("participant1Name", ""))
+        n2 = str(parts.get("participant2Name", ""))
+        direct = (_sim_noms(j1, n1) + _sim_noms(j2, n2)) / 2
+        croise = (_sim_noms(j1, n2) + _sim_noms(j2, n1)) / 2
+        if croise > direct:
+            c_home, c_away = c_away, c_home  # l'ordre du fixture est inversé
+        m["cote_j1"], m["cote_j2"] = float(c_home), float(c_away)
+        m["source_cote"] = "Pinnacle (repli — cote Winamax à vérifier avant mise)"
+        m["cote_pinnacle_repli"] = True
+        logging.info(f"Repli Pinnacle : '{j1} vs {j2}' complété — cotes {c_home}/{c_away} "
+                     f"(alignement {'croisé' if croise > direct else 'direct'}, marge {somme_probas:.2f}).")
+    data["matchs"] = matchs
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -3288,11 +3380,19 @@ def run_bot_autonome():
         logging.info(f"Calendrier API vide → Gemini cherchera lui-même ({len(tournois_winamax)} tournois Winamax).")
     donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin, tournois_winamax)
 
+    # ----- FIXTURES ODDSPAPI (v7.8 : fetch AVANCÉ ici — 1 seul appel, réutilisé
+    # par le repli Pinnacle, les heures autoritaires et les marchés alternatifs)
+    fixtures_oddspapi = []
+    if RAPIDAPI_KEY:
+        fixtures_oddspapi = oddspapi_fixtures_jour()
+
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
     # Filtre TOURNOIS (v7.6.1) : hors liste Winamax = injouable → retiré avant Claude
     donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
+    # REPLI PINNACLE (v7.8) : compléter la cote des matchs jouables sans cote Winamax
+    donnees_json = completer_cotes_pinnacle(donnees_json, fixtures_oddspapi)
     # Filtre COTES (v7.3) : matchs sans cote = injouables → retirés avant Claude
     donnees_json = filtrer_json_sans_cote(donnees_json)
     # Filtre ITF (v7.4) : retirer les ITF/Futures (stats introuvables, injouables)
@@ -3316,6 +3416,7 @@ def run_bot_autonome():
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
         donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
         donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
+        donnees_json = completer_cotes_pinnacle(donnees_json, fixtures_oddspapi)
         donnees_json = filtrer_json_sans_cote(donnees_json)
         donnees_json = filtrer_json_itf(donnees_json)
 
@@ -3331,10 +3432,7 @@ def run_bot_autonome():
     except Exception:
         pass
 
-    # ----- FIXTURES ODDSPAPI (1 seul appel, réutilisé pour heures + marchés alt)
-    fixtures_oddspapi = []
-    if MARCHES_ALT_MODE != "off" and RAPIDAPI_KEY:
-        fixtures_oddspapi = oddspapi_fixtures_jour()
+    # ----- FIXTURES : déjà récupérés en amont (v7.8) — réutilisation directe
     if fixtures_oddspapi:
         # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini
         donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
