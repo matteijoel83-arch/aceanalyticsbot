@@ -1,7 +1,17 @@
 """
-verification_resultats.py — v2.1
-Vérifie automatiquement les résultats des paris en cours via Claude + web_search.
-Notifie Telegram du résultat (gagné/perdu) et met à jour stats + file d'attente via API GitHub.
+verification_resultats.py — v2.8
+Règle automatiquement les résultats des paris en cours et met à jour stats +
+file d'attente via API GitHub. Notifie Telegram (gagné/perdu/annulé).
+
+HIÉRARCHIE DE RÈGLEMENT (du plus fiable au moins fiable) :
+  1. OddsPapi via RapidAPI — score officiel déterministe
+  2. OddsPapi DIRECT (/v4/scores par set) — pool séparé, contourne le 429 RapidAPI
+  3. Consensus Claude+web_search ET Gemini+google_search — doivent être D'ACCORD,
+     sinon EN_COURS (règlement manuel, jamais un score deviné)
+Verdicts : GAGNE / PERDU / EN_COURS / ANNULE (forfait/abandon = mise remboursée).
+
+⚠️ L'en-tête indiquait "v2.1" par erreur jusqu'au 21/07 alors que le code avait
+évolué jusqu'en v2.8 — corrigé pour éviter toute confusion sur la version réelle.
 
 v2.1 (13/07/2026) — alignement sur bot.py v7.4 :
   • YIELD : lit les champs 'cote' et 'mise_pct' des paris (écrits par bot.py)
