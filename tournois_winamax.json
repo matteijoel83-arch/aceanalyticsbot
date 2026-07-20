@@ -1,15 +1,15 @@
 {
-  "_commentaire": "⚠️ FILTRE DUR depuis v7.6.1 (17/07/2026) : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. Tout le reste est écarté avant analyse. Relève cette liste sur l'app Winamax à chaque début de semaine — si un Challenger est proposé par Winamax et que tu veux le jouer, AJOUTE-LE ici explicitement (ex: 'Challenger Tampere'). Le matching est tolérant : 'ATP Bastad' reconnaît 'Nordea Open - Bastad', les accents et l'anglais sont gérés. Aussi utilisé par Gemini comme guide de recherche du calendrier.",
-  "_maj": "2026-07-17 — Passage en filtre dur suite au ticket injouable Galan/Coppejans (Bunschoten Challenger, absent de Winamax). Semaine en cours : Båstad, Gstaad, Umag (ATP 250, terre), Athènes et Iaşi (WTA, terre). Fin août : réajouter 'US Open' + éventuellement 'US Open Q' pour la période de qualifs.",
+  "_commentaire": "⚠️ FILTRE DUR depuis v7.6.1 (17/07/2026) : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. Tout le reste est écarté avant analyse. Relève cette liste sur l'app Winamax à chaque début de semaine — si un Challenger est proposé par Winamax et que tu veux le jouer, AJOUTE-LE ici explicitement. Le matching est tolérant : accents et noms commerciaux gérés ('ATP Kitzbuhel' reconnaît 'Generali Open - Kitzbuhel'). Aussi utilisé par Gemini comme guide de recherche du calendrier.",
+  "_maj": "2026-07-20 — Nouvelle semaine relevée sur l'app Winamax : Estoril et Kitzbühel (ATP 250, terre), Prague et Hambourg (WTA, terre), Iaşi conservé (finale Sherif/Badosa ce jour). Retirés : Båstad, Gstaad, Umag, Athènes (terminés). Fin août : réajouter 'US Open' + éventuellement 'US Open Q'.",
   "tournois_actifs": [
-    "ATP Bastad",
-    "ATP Gstaad",
-    "ATP Umag",
-    "WTA Athenes",
-    "WTA Iasi"
+    "ATP Estoril",
+    "ATP Kitzbuhel",
+    "WTA Iasi",
+    "WTA Prague",
+    "WTA Hamburg"
   ],
   "categories_couvertes_info": [
-    "Note : cette section n'est PAS un filtre (elle guidait Gemini, et 'ATP Challenger' était ambigu — certains Challengers sont sur Winamax, pas tous). Seule 'tournois_actifs' fait foi.",
+    "Note : cette section n'est PAS un filtre (elle guide Gemini). Seule 'tournois_actifs' fait foi.",
     "Grand Chelem",
     "ATP 250", "ATP 500", "ATP Masters 1000", "ATP Finals",
     "WTA 250", "WTA 500", "WTA 1000", "WTA Finals"
