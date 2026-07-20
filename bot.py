@@ -1466,13 +1466,16 @@ FORMAT JSON STRICT :
     "hold_pct_j1": "XX% SUR LA SURFACE DU MATCH ou non trouvé",
     "hold_pct_j2": "XX% SUR LA SURFACE DU MATCH ou non trouvé",
     "stats_surface_j1": {{
-      "serve_pts_won": "XX% ou non trouvé", "return_pts_won": "XX% ou non trouvé",
-      "break_pct": "XX% ou non trouvé", "echantillon": "N matchs sur cette surface/52sem"
+      "serve_pts_won": "58.2%", "return_pts_won": "41.0%",
+      "break_pct": "24%", "echantillon": "N matchs sur cette surface/52sem"
     }},
     "stats_surface_j2": {{
-      "serve_pts_won": "XX% ou non trouvé", "return_pts_won": "XX% ou non trouvé",
-      "break_pct": "XX% ou non trouvé", "echantillon": "N matchs sur cette surface/52sem"
+      "serve_pts_won": "non trouvé", "return_pts_won": "non trouvé",
+      "break_pct": "non trouvé", "echantillon": "0 matchs sur cette surface/52sem"
     }},
+    ⚠️ Chaque champ stat contient SOIT le pourcentage (ex: "58.2%") SOIT exactement
+    "non trouvé" — JAMAIS les deux à la fois ("60% ou non trouvé" est INTERDIT et
+    casse le modèle). Les exemples j1/j2 ci-dessus montrent les deux cas.
     "h2h_recents": "résumé",
     "fatigue_j1": {{
       "minutes_7j": 0, "nb_matchs_7j": 0, "heures_depuis_dernier_match": 0,
@@ -2199,18 +2202,23 @@ def bc_indice_fatigue(m):
 
 
 def _bc_parse_pct(valeur):
-    """Extrait un pourcentage ('64.2%', '64,2', 64.2) → 0.642. None si illisible."""
+    """Extrait un pourcentage ('64.2%', '64,2', 64.2) → 0.642. None si illisible.
+    v7.7.5 : le NOMBRE prime. Constat du 20/07 : Gemini recopie le gabarit du
+    schéma et produit "60.3% ou non trouvé" — l'ancien test `"non trouv" in txt`
+    jetait la valeur AVANT de chercher le chiffre → modèle silencieux à tort sur
+    un match aux stats complètes (Kopriva/Buse, éch. 43 et 38 matchs).
+    Règle : s'il y a un nombre, on le prend ; "non trouvé" ne vaut que seul."""
     if valeur is None:
         return None
     if isinstance(valeur, (int, float)):
         v = float(valeur)
         return v / 100.0 if v > 1.5 else v
     txt = str(valeur).strip().lower()
-    if not txt or "non trouv" in txt or "?" == txt:
+    if not txt:
         return None
     m = re.search(r"(\d+(?:[.,]\d+)?)", txt)
     if not m:
-        return None
+        return None  # aucun chiffre ("non trouvé", "?", vide) → donnée absente
     v = float(m.group(1).replace(",", "."))
     return v / 100.0 if v > 1.5 else v
 
@@ -2431,7 +2439,11 @@ def filtrer_json_sans_cote(donnees_json):
         # Bunschoten Challenger, tournoi ABSENT de Winamax (cote trouvée chez un
         # autre bookmaker) → pari injouable pour les abonnés. Le prompt
         # autorisait ce repli ("autre cote bookmaker EU") : plus maintenant.
-        return "winamax" in str(m.get("source_cote", "")).lower()
+        s = str(m.get("source_cote", "")).lower()
+        # v7.8 : les cotes de RÉFÉRENCE (TennisAPI/Pinnacle) sont acceptées à la
+        # condition — garantie par le marqueur — que le tournoi soit dans la
+        # liste Winamax hebdomadaire (jouabilité assurée par le filtre TOURNOIS).
+        return "winamax" in s or "tournoi liste winamax" in s
 
     gardes, sans_cote, hors_winamax = [], 0, []
     for m in matchs:
@@ -2664,6 +2676,7 @@ def _oddspapi_fixtures_direct():
     for f in brut:
         convertis.append({
             "id": f.get("fixtureId"),
+            "fixtureId": f.get("fixtureId"),  # v7.7.5 : le consommateur lit ce nom
             "participants": {
                 "participant1Name": f.get("participant1Name", ""),
                 "participant2Name": f.get("participant2Name", ""),
@@ -2926,6 +2939,146 @@ def corriger_heures_avec_oddspapi(donnees_json, fixtures):
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+PINNACLE_FALLBACK_MAX_PAR_RUN = 3   # protège le pool OddsPapi direct (250 req/mois)
+
+
+def _oddspapi_odds_brutes(fixture_id):
+    """Réponse odds brute pour un fixture : RapidAPI d'abord, API directe en repli.
+    None si indisponible. (Séparé de l'extraction pour être testable.)"""
+    try:
+        _quota_inc("oddspapi")
+        r = requests.get(f"https://{ODDSPAPI_HOST}/fixtures/odds",
+                         headers=_oddspapi_headers(),
+                         params={"fixtureId": fixture_id, "bookmakers": ODDSPAPI_BOOKMAKER},
+                         timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logging.info(f"Odds Pinnacle {fixture_id} (RapidAPI) : {e} — essai API directe.")
+        try:
+            return _oddspapi_direct_get("/v4/odds", {
+                "fixtureId": fixture_id, "bookmaker": ODDSPAPI_BOOKMAKER,
+            })
+        except Exception as e2:
+            logging.info(f"Odds Pinnacle {fixture_id} (directe) : {e2}")
+            return None
+
+
+def _pinnacle_moneyline(data):
+    """
+    Extrait (cote_j1, cote_j2) du Moneyline Pinnacle d'une réponse odds.
+    Tolérant sur les identifiants d'outcome (home/away, 1/2, ...) car le format
+    exact varie entre RapidAPI et l'API directe. Garde-fous :
+      - la paire doit avoir une marge de bookmaker plausible (1/a + 1/b entre
+        1.00 et 1.18) — écarte les paires aberrantes (mauvais marché apparié) ;
+      - None si rien de reconnu, avec LOG des identifiants vus (pour apprendre
+        le format réel au premier run — même méthode que le 19/07).
+    """
+    if not data:
+        return None
+    outs = _oddspapi_extraire_outcomes(data)
+    if not outs:
+        return None
+    prix = {}
+    for o in outs:
+        oid = str(o.get("bookmakerOutcomeId", "")).lower().strip()
+        p = o.get("price")
+        if isinstance(p, (int, float)) and 1.0 < p < 51.0:
+            prix.setdefault(oid, float(p))
+    for a, b in (("home", "away"), ("1", "2"), ("player1", "player2"),
+                 ("participant1", "participant2"), ("p1", "p2")):
+        if a in prix and b in prix:
+            marge = 1.0 / prix[a] + 1.0 / prix[b]
+            if 1.00 <= marge <= 1.18:
+                return prix[a], prix[b]
+            logging.info(f"Pinnacle moneyline : paire ({a},{b}) écartée — marge {marge:.3f} implausible.")
+    logging.info(f"Pinnacle moneyline : identifiants non reconnus — vus : {sorted(prix)[:12]}")
+    return None
+
+
+def completer_cotes_pinnacle(donnees_json, fixtures, rapid_matchs):
+    """
+    v7.8 — COMPLÉMENT DE COTES pour les matchs SANS cote Winamax vérifiée.
+    Constat du 20/07 : la couverture était bornée à 2-3 matchs/run parce que
+    Gemini n'inclut que les matchs dont il a pu confirmer la cote Winamax —
+    monter son budget de recherches (10→14→24) n'y a rien changé (24 = timeout).
+    Idée de Joël : puisque le filtre TOURNOIS (liste hebdo relevée sur l'app)
+    garantit désormais la jouabilité, une cote de RÉFÉRENCE suffit pour évaluer
+    la value. Sources, de la moins chère à la plus chère :
+      1. TennisAPI (odd1/odd2 du calendrier RapidAPI) — 0 requête
+      2. Pinnacle via OddsPapi — ≤ {PINNACLE_FALLBACK_MAX_PAR_RUN}/run (pool direct 250/mois)
+    ⚠️ Cette cote est INDICATIVE : la cote Winamax réelle peut différer de
+    quelques centièmes. La source est marquée dans source_cote — le filtre
+    l'accepte via le marqueur 'tournoi liste Winamax'.
+    S'exécute APRÈS le filtre TOURNOIS (tous les matchs restants sont dans la
+    liste) et AVANT le filtre COTES (qui jetait ces matchs).
+    """
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    def _cote_valide(c):
+        try:
+            return c is not None and float(c) > 1.0
+        except (TypeError, ValueError):
+            return False
+
+    def _jetons_nom(nom):
+        return {t for t in re.sub(r"[^a-zà-ÿ ]", " ", str(nom).lower()).split() if len(t) >= 3}
+
+    def _meme_paire(a1, a2, b1, b2):
+        ja1, ja2, jb1, jb2 = (_jetons_nom(x) for x in (a1, a2, b1, b2))
+        return (bool(ja1 & jb1) and bool(ja2 & jb2)) or (bool(ja1 & jb2) and bool(ja2 & jb1))
+
+    appels_pinnacle = 0
+    completes = 0
+    for m in matchs:
+        if _cote_valide(m.get("cote_j1")) and _cote_valide(m.get("cote_j2"))                 and "winamax" in str(m.get("source_cote", "")).lower():
+            continue  # déjà une cote Winamax vérifiée → rien à faire
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+
+        # Source 1 : TennisAPI (gratuit — déjà dans le calendrier RapidAPI)
+        rm = next((r for r in (rapid_matchs or [])
+                   if _meme_paire(j1, j2, r.get("joueur1", ""), r.get("joueur2", ""))), None)
+        if rm and _cote_valide(rm.get("odd1")) and _cote_valide(rm.get("odd2")):
+            # ordre : aligner sur l'ordre joueur1/joueur2 du match Gemini
+            inverse = bool(_jetons_nom(j1) & _jetons_nom(rm.get("joueur2", ""))) and                       not bool(_jetons_nom(j1) & _jetons_nom(rm.get("joueur1", "")))
+            c1, c2 = (rm["odd2"], rm["odd1"]) if inverse else (rm["odd1"], rm["odd2"])
+            m["cote_j1"], m["cote_j2"] = float(c1), float(c2)
+            m["source_cote"] = "TennisAPI (référence — tournoi liste Winamax)"
+            completes += 1
+            logging.info(f"Cotes complétées (TennisAPI, 0 req) : {j1} vs {j2} → {c1} / {c2}")
+            continue
+
+        # Source 2 : Pinnacle via OddsPapi (plafonné)
+        if appels_pinnacle >= PINNACLE_FALLBACK_MAX_PAR_RUN or not fixtures:
+            continue
+        fx = oddspapi_trouver_fixture(j1, j2, fixtures)
+        if not fx:
+            continue
+        appels_pinnacle += 1
+        paire = _pinnacle_moneyline(_oddspapi_odds_brutes(fx.get("id")))
+        if not paire:
+            continue
+        p = fx.get("participants", {})
+        inverse = bool(_jetons_nom(j1) & _jetons_nom(p.get("participant2Name", ""))) and                   not bool(_jetons_nom(j1) & _jetons_nom(p.get("participant1Name", "")))
+        c1, c2 = (paire[1], paire[0]) if inverse else paire
+        m["cote_j1"], m["cote_j2"] = round(c1, 2), round(c2, 2)
+        m["source_cote"] = "Pinnacle/OddsPapi (référence — tournoi liste Winamax)"
+        completes += 1
+        logging.info(f"Cotes complétées (Pinnacle) : {j1} vs {j2} → {c1:.2f} / {c2:.2f}")
+
+    if completes:
+        logging.info(f"Complément de cotes : {completes} match(s) sauvé(s) du filtre COTES "
+                     f"({appels_pinnacle} appel(s) Pinnacle).")
+    data["matchs"] = matchs
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
     """
     Pour chaque match serré, récupère les cotes sets/jeux Pinnacle et (si mode actif)
@@ -2944,6 +3097,8 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
         logging.info("Marchés alt : aucun fixture OddsPapi disponible.")
         return []
 
+    logging.info(f"Marchés alt : entrée examen — {len(matchs_serres)} match(s), "
+                 f"{len(fixtures)} fixtures, mode {MARCHES_ALT_MODE}.")
     tickets_alt = []
     appels_cotes = 0
     for m in matchs_serres:
@@ -2980,9 +3135,15 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
         if fx.get("hasOdds") is False:
             logging.info(f"Marchés alt : '{j1} vs {j2}' sans cotes annoncées (hasOdds=false) — appel cotes évité.")
             continue
-        fid = fx.get("fixtureId")
+        # v7.7.5 : lire les deux noms de champ (RapidAPI: fixtureId · adaptateur
+        # direct v7.7: id). Constat du 20/07 : match apparié puis JETÉ EN SILENCE
+        # car fid=None sur les fixtures directs → l'appel cotes n'avait jamais
+        # lieu sur la voie directe, sans aucune trace dans les logs.
+        fid = fx.get("fixtureId") or fx.get("id")
         if not fid:
+            logging.info(f"Marchés alt : '{j1} vs {j2}' apparié mais fixture sans id — cotes impossibles.")
             continue
+        logging.info(f"Marchés alt : '{j1} vs {j2}' apparié (fid={fid}) → appel cotes Pinnacle…")
         appels_cotes += 1
         cotes = oddspapi_cotes(fid)
         if not cotes:
@@ -3017,6 +3178,7 @@ def analyser_marches_alternatifs(matchs_serres, date, fixtures=None):
                 "cotes": cotes
             })
 
+    logging.info(f"Marchés alt : sortie examen — {len(tickets_alt)} ticket(s) alt préparé(s).")
     return tickets_alt
 
 
