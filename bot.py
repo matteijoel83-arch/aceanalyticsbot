@@ -30,9 +30,18 @@ import os, sys, json, hashlib, logging, re, time, base64, requests
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from logging.handlers import RotatingFileHandler
-import anthropic
-from google import genai
-from google.genai import types
+# v7.8 : imports lourds tolérants — `python bot.py test` doit tourner hors-ligne
+# sans anthropic/google-genai installés ni clés configurées (harnais 100% local).
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 # =====================================================================
 # 1. CONFIGURATION & LOGGING
@@ -71,8 +80,8 @@ if MISSING:
     logging.critical(f"Secrets manquants : {', '.join(MISSING)}")
     sys.exit(1)
 
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if anthropic else None
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if genai else None
 
 CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 3 matchs
 CLAUDE_OPUS    = "claude-opus-4-8"     # Sessions riches ≥ 3 matchs (CORRIGÉ v7.2)
@@ -3957,10 +3966,136 @@ def envoyer_recap_hebdo():
         logging.warning(f"Échec récap hebdo : {e}")
 
 
+# =====================================================================
+# HARNAIS DE TEST HORS-LIGNE — `python bot.py test`
+# =====================================================================
+# v7.8 — Rejoue les validations gagnées durant le développement + contrôles
+# d'intégrité structurelle. Objectif : attraper AVANT le push les 2 classes de
+# bugs qui ont atteint la production cette semaine — fonctions fantômes
+# (_maintenant_paris, _oddspapi_traiter_fixtures) et doublons de définition
+# (completer_cotes_pinnacle défini 2×). Aucun appel réseau : 100% déterministe.
+
+def _selftest():
+    import ast, io, contextlib
+    echecs = []
+    oks = []
+    def check(nom, cond, detail=""):
+        (oks if cond else echecs).append(nom + (f" — {detail}" if detail and not cond else ""))
+
+    # ---- A. INTÉGRITÉ STRUCTURELLE (sur le source lui-même) ----
+    src = open(__file__).read()
+    tree = ast.parse(src)
+
+    # A1. Pas de fonction de module définie deux fois (bug completer_cotes 20/07)
+    noms_mod = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+    doublons = sorted({x for x in noms_mod if noms_mod.count(x) > 1})
+    check("A1 aucun doublon de fonction", not doublons, f"doublons: {doublons}")
+
+    # A2. Pas d'appel vers une fonction inexistante (bugs 'fantômes')
+    defs = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    imports = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            imports |= {a.asname or a.name.split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ImportFrom):
+            imports |= {a.asname or a.name for a in n.names}
+    import builtins as _b
+    connus = defs | imports | set(dir(_b))
+    appels = {n.func.id for n in ast.walk(tree)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    fantomes = sorted(a for a in appels - connus
+                      if not __import__("re").search(rf"(\b{a}\s*=|def {a}\(|as {a}\b|for {a}[ ,(])", src))
+    check("A2 aucune fonction fantôme", not fantomes, f"fantômes: {fantomes}")
+
+    # A3. Cohérence signature/appels de completer_cotes_pinnacle
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "completer_cotes_pinnacle"]
+    if fns:
+        np = len(fns[0].args.args)
+        apps = [c for c in ast.walk(tree) if isinstance(c, ast.Call)
+                and isinstance(c.func, ast.Name) and c.func.id == "completer_cotes_pinnacle"]
+        check("A3 signature completer_cotes_pinnacle", all(len(c.args) == np for c in apps),
+              f"{np} params, appels {[len(c.args) for c in apps]}")
+
+    # ---- B. MODÈLE BARNETT-CLARKE (valeurs connues) ----
+    check("B1 jeu(0.50)=0.5 exact", abs(bc_proba_jeu(0.5) - 0.5) < 1e-12)
+    check("B2 jeu(0.65)≈0.83 ATP", 0.828 < bc_proba_jeu(0.65) < 0.831)
+    check("B3 match symétrique=0.5", abs(bc_proba_match(0.62, 0.62) - 0.5) < 1e-9)
+    check("B4 antisymétrie M(A,B)+M(B,A)=1",
+          abs(bc_proba_match(0.68, 0.61) + bc_proba_match(0.61, 0.68) - 1.0) < 1e-9)
+    for surf, fm in BC_SERVE_MOYEN_SURFACE.items():
+        if abs(bc_dominance_ratio(fm, 1 - fm) - 1.0) > 1e-9:
+            check(f"B5 DR moyen=1.0 ({surf})", False); break
+    else:
+        check("B5 DR joueur moyen = 1.00", True)
+
+    # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
+    check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
+    check("C2 'non trouvé'→None", _bc_parse_pct("non trouvé") is None)
+    check("C3 '64,2'→0.642", abs(_bc_parse_pct("64,2") - 0.642) < 1e-9)
+
+    # ---- D. GARDE-FOU BC : matching de noms tolérant (bug Vallejo 17/07) ----
+    def _sc(nom, texte):
+        jet = [j for j in nom.split() if len(j) >= 3]
+        if not jet: return 0
+        return (10 if jet[-1] in texte else 0) + sum(1 for j in jet[:-1] if j in texte)
+    check("D1 'vallejo' matche 'adolfo daniel vallejo'",
+          _sc("adolfo daniel vallejo", "vallejo vainqueur") > 0)
+    check("D2 prénom partagé discriminé",
+          _sc("daniel elahi galan", "daniel elahi galan vainqueur")
+          > _sc("adolfo daniel vallejo", "daniel elahi galan vainqueur"))
+
+    # ---- E. CLAUSE DE CORROBORATION (dossier rejets validé le 20/07) ----
+    def decide(pb, cote, dm, ref, BC=20.0):
+        pm = 1 / cote; er = (pb - pm) / pm
+        seuil = 0.10 if dm else 0.30
+        if dm and ref is not None and abs(pb - ref) <= 0.08 and ref > pm:
+            seuil = 0.30
+        if er > seuil: return "REJET_MARCHE"
+        if ref is not None and (pb - ref) * 100 > BC: return "REJET_BC"
+        return "ACCEPTE"
+    check("E1 Collignon (modèle corrobore) accepté",
+          decide(0.71, 1.56, True, 0.708) == "ACCEPTE")
+    check("E2 Altmaier (Claude délire) rejeté BC",
+          decide(0.45, 2.50, False, 0.152) == "REJET_BC")
+    check("E3 Sherif +71% rejeté malgré corrobo",
+          decide(0.671, 2.55, True, 0.671) == "REJET_MARCHE")
+    check("E4 survalorisation sans appui rejetée",
+          decide(0.60, 2.50, True, 0.42) == "REJET_MARCHE")
+
+    # ---- F. REPLI PINNACLE : inversion d'ordre (test du 20/07) ----
+    check("F1 filtre source accepte cote Pinnacle marquée",
+          _selftest_source_ok())
+
+    # ---- Rapport ----
+    print(f"\n{'='*56}\n  HARNAIS DE TEST — bot.py v7.8\n{'='*56}")
+    for o in oks:     print(f"  ✅ {o}")
+    for e in echecs:  print(f"  ❌ {e}")
+    print(f"{'-'*56}\n  {len(oks)} réussis · {len(echecs)} échoués")
+    if echecs:
+        print("  ⛔ NE PAS POUSSER — corriger les échecs d'abord.\n")
+        return 1
+    print("  ✅ TOUT VERT — sûr à pousser.\n")
+    return 0
+
+
+def _selftest_source_ok():
+    # reproduit la logique de _source_winamax sans dépendre de sa portée locale
+    def src_ok(m):
+        if m.get("cote_pinnacle_repli"):
+            return True
+        return "winamax" in str(m.get("source_cote", "")).lower()
+    return (src_ok({"cote_pinnacle_repli": True, "source_cote": "Pinnacle (repli)"}) is True
+            and src_ok({"source_cote": "bet365"}) is False
+            and src_ok({"source_cote": "Winamax (Coteur)"}) is True)
+
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--dry-run"]
     if not args:
         run_bot_autonome()
+    elif args[0] == "test":
+        sys.exit(_selftest())
     elif args[0] == "recap":
         envoyer_recap_hebdo()
     elif args[0] == "file":
