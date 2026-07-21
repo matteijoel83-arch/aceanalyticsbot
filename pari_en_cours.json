@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Botic Van De Zandschulp vs Jaime Faria\n🏆 <b>COMPÉTITION :</b> Millennium Estoril Open\n⏰ <b>HEURE :</b> 22:15\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Botic Van De Zandschulp vainqueur\n📈 <b>COTE :</b> 2.10\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 55.2% → juste 1.81 → réelle 2.10 → delta +0.29 ✅ → Kelly 12% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Botic à 55.2% (DR 1.09 vs 1.06, hold 73.2% vs 71.0%) sur terre. Le marché sous-cote Botic, probablement par effet public local de Faria — facteur narratif non chiffré. Cote 2.10 offre un delta solide mais première confrontation → confiance basse.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes pour les deux)",
+    "date": "21/07/2026",
+    "marche": "moneyline",
+    "niveau": "basse",
+    "modele": "opus",
+    "cote": 2.1,
+    "mise_pct": 1.0,
+    "surface": "terre"
+  }
+]
