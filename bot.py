@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.9                        ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.9.3                       ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)         ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet       ║
 ║                                                                      ║
