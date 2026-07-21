@@ -2150,13 +2150,16 @@ FATIGUE_RECUP_COMPLETE_H   = 72   # > 72h : considérée complète
 
 
 def _bc_parse_nombre(valeur):
-    """Extrait un nombre ('240 min', '3', 240) → 240.0. None si illisible."""
+    """Extrait un nombre ('240 min', '3', 240) → 240.0. None si illisible.
+    v7.9.2 : chiffre PRIORITAIRE (même correctif que _bc_parse_pct du 20/07) —
+    Gemini recopie parfois le gabarit ("240 min ou non trouvé") ; l'ancien test
+    jetait la valeur avant de chercher le chiffre. "non trouvé" ne vaut que seul."""
     if valeur is None:
         return None
     if isinstance(valeur, (int, float)):
         return float(valeur)
     txt = str(valeur).strip().lower()
-    if not txt or "non trouv" in txt or txt in ("?", "-"):
+    if not txt:
         return None
     m = re.search(r"(\d+(?:[.,]\d+)?)", txt)
     return float(m.group(1).replace(",", ".")) if m else None
@@ -3654,15 +3657,47 @@ def run_bot_autonome():
                     break
                 prono_txt = mprono.group(1)
                 s1, s2 = _score_nom(rj1, prono_txt), _score_nom(rj2, prono_txt)
+                # v7.9.1 : bug du 21/07 (Rus/Avanesyan). Si le PRONO ne tranche pas
+                # (s1==s2, ex. les deux noms présents, ou libellé bruité), on ne
+                # DÉSACTIVE PAS le garde-fou — on essaie de trancher autrement avant
+                # d'abandonner. Un garde-fou qui se tait laisse passer un pari à
+                # contre-modèle (Avanesyan pariée à 34% par le modèle, envoyée quand
+                # même). Fallback : chercher le joueur parié par sa position dans le
+                # prono (le nom du parié apparaît AVANT tout adversaire éventuel).
+                if s1 == s2:
+                    pos1 = prono_txt.find(rj1.split()[-1])  # position du nom de famille
+                    pos2 = prono_txt.find(rj2.split()[-1])
+                    # Un seul des deux est présent → c'est lui le parié
+                    if pos1 >= 0 and pos2 < 0:
+                        s1 = 1  # force J1
+                    elif pos2 >= 0 and pos1 < 0:
+                        s2 = 1  # force J2
+                    elif pos1 >= 0 and pos2 >= 0:
+                        # Les deux présents (prono bruité) → le premier cité est le parié
+                        if pos1 < pos2:
+                            s1 = 1
+                        else:
+                            s2 = 1
                 if s1 > s2:
                     ref_pari = proba_ref
                 elif s2 > s1:
                     ref_pari = 1.0 - proba_ref
                 else:
-                    # Aucun joueur identifiable dans le PRONO (marché alternatif
-                    # type "Over 2.5 sets", ou libellé inattendu) → hors périmètre.
-                    logging.info("[BC] garde-fou non applicable : aucun joueur "
-                                 f"identifié dans le prono ({prono_txt[:60]!r}).")
+                    # Vraiment aucun joueur identifiable (marché alternatif type
+                    # "Over 2.5 sets") → hors périmètre du garde-fou Moneyline.
+                    # v7.9.1 : par SÉCURITÉ, on ne fait plus un simple break silencieux
+                    # sur un ticket Moneyline — si le marché est moneyline mais qu'on
+                    # n'a pas pu identifier le joueur, on REJETTE (le garde-fou ne peut
+                    # pas faire son travail → on ne prend pas le risque).
+                    est_alternatif = any(x in t_lower for x in
+                                         ["over", "under", "o/u", "sets", "jeux", "games"])
+                    if not est_alternatif:
+                        logging.warning("[BC] REJET sécurité : ticket Moneyline mais joueur "
+                                        f"parié non identifiable dans le prono ({prono_txt[:60]!r}) "
+                                        "→ garde-fou aveugle, on ne prend pas le risque.")
+                        return False, "garde-fou BC aveugle (joueur non identifié) — rejet sécurité"
+                    logging.info("[BC] garde-fou non applicable : marché alternatif "
+                                 f"({prono_txt[:40]!r}).")
                     break
                 if mp:  # proba annoncée par Claude, déjà extraite plus haut
                     ecart_pts = (proba_bot - ref_pari) * 100
@@ -4064,6 +4099,11 @@ def _selftest():
     check("D2 prénom partagé discriminé",
           _sc("daniel elahi galan", "daniel elahi galan vainqueur")
           > _sc("adolfo daniel vallejo", "daniel elahi galan vainqueur"))
+    # D3 : bug Avanesyan (21/07) — le joueur parié doit être identifié même quand
+    # son nom de famille est le seul discriminant, sinon garde-fou aveugle.
+    check("D3 joueur parié identifié (Avanesyan)",
+          _sc("elina avanesyan", "elina avanesyan (vainqueur)")
+          > _sc("arantxa rus", "elina avanesyan (vainqueur)"))
 
     # ---- E. CLAUSE DE CORROBORATION (dossier rejets validé le 20/07) ----
     def decide(pb, cote, dm, ref, BC=20.0):
