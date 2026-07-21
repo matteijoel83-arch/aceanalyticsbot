@@ -1,28 +1,27 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.3                      ║
-║  Architecture hybride : Gemini (recherche) + Claude (analyse)        ║
-║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet      ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.9                        ║
+║  Architecture hybride : Gemini (recherche) + Claude (analyse)         ║
+║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet       ║
 ║                                                                      ║
-║  v7.3 — corrections (inclut v7.2) :                                  ║
-║   • Filtre COTES : matchs sans cote retirés AVANT Claude             ║
-║     (moins de tokens, Opus déclenché sur les seuls matchs jouables)  ║
-║   • CLAUDE_OPUS → claude-opus-4-8 (l'ancien string plantait)         ║
-║   • Historique dédup : ordre chronologique garanti                   ║
-║   • Stats segmentées enfin alimentées (resultat v/d [n°] + file)     ║
-║   • Quota RapidAPI compté sur les appels marchés alternatifs         ║
-║   • PATCH B : Total Games = lignes de MATCH (18.5-26.5), plus 10.5   ║
-║   • Prompt : 🔴 → 🎾 harmonisé, seuil delta adaptatif partout        ║
-║   • Fusion calendrier : correspondance sur LES DEUX joueurs          ║
-║     + inversion des cotes si l'ordre des joueurs diffère             ║
-║   • Garde Gemini rep.text vide · code mort SportAPI7/OddsPapi retiré ║
+║  PRINCIPALES CAPACITÉS (état 21/07/2026) :                            ║
+║   • Modèle probabiliste Barnett-Clarke (proba calculée par surface)  ║
+║   • Repli OddsPapi DIRECT (api.oddspapi.io) sur 429 RapidAPI —        ║
+║     fixtures + cotes Pinnacle, pool de requêtes séparé                ║
+║   • Repli cote Pinnacle : complète un match jouable sans cote Winamax ║
+║   • Marchés alternatifs (Sets O/U, Games O/U) via cotes Pinnacle      ║
+║   • Pré-filtre TOURNOIS AVANT Gemini (v7.9) : ne documenter que les   ║
+║     matchs jouables → couverture concentrée sur les bons matchs       ║
+║   • 8 garde-fous _ticket_valide + clause de corroboration BC/Claude   ║
+║   • Harnais hors-ligne : `python bot.py test` (18 contrôles)          ║
 ║                                                                      ║
 ║  Secrets GitHub requis :                                             ║
-║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID    ║
-║    GITHUB_TOKEN       · GITHUB_REPO · GEMINI_API_KEY                ║
+║    ANTHROPIC_API_KEY  · TELEGRAM_BOT_TOKEN · TELEGRAM_CHANNEL_ID     ║
+║    GITHUB_TOKEN       · GITHUB_REPO · GEMINI_API_KEY                 ║
 ║  Secrets optionnels :                                                ║
-║    ODDS_API_KEY   (https://the-odds-api.com — 500 req/mois gratuit) ║
+║    ODDS_API_KEY   (https://the-odds-api.com — 500 req/mois gratuit)  ║
 ║    RAPIDAPI_KEY   (https://rapidapi.com — calendrier complet)        ║
+║    ODDSPAPI_KEY   (https://oddspapi.io — pool direct, repli 429)      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -2568,6 +2567,53 @@ def completer_cotes_pinnacle(donnees_json, fixtures):
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def _tournoi_dans_liste(nom_tournoi, tournois_actifs):
+    """v7.9 : cœur du matching tournoi, factorisé (utilisé par le pré-filtre
+    AMONT sur rapid_matchs ET le filtre AVAL sur le JSON Gemini). Matching
+    tolérant : accents, noms commerciaux, anglais (ratio ≥ 0.85). nom absent
+    → True (fail-open, un filtre en aval tranchera)."""
+    import unicodedata
+    from difflib import SequenceMatcher
+    if not nom_tournoi:
+        return True
+    def _norm(txt):
+        txt = unicodedata.normalize("NFD", str(txt))
+        txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
+        return re.sub(r"[^a-z0-9 ]", " ", txt.lower())
+    MOTS_GENERIQUES = {"atp", "wta", "open", "masters", "cup", "tour", "tennis", "challenger"}
+    def _jetons(entree):
+        return [t for t in _norm(entree).split() if t and t not in MOTS_GENERIQUES]
+    n = _norm(nom_tournoi)
+    mots = n.split()
+    for t in tournois_actifs:
+        for j in (_jetons(t) or [_norm(t).strip()]):
+            if j in n:
+                return True
+            if any(SequenceMatcher(None, j, m).ratio() >= 0.85 for m in mots):
+                return True
+    return False
+
+
+def prefiltrer_rapid_matchs_par_tournoi(rapid_matchs, tournois_actifs):
+    """
+    v7.9 — Pré-filtre les matchs par tournoi AVANT enrichissement et Gemini.
+    Constat du 21/07 : 92 matchs en fenêtre → Gemini n'en documente que 9, pris
+    "au hasard" dans la masse (majoritairement des Challengers) → les matchs des
+    tournois actifs étaient NOYÉS et perdus avant même d'être analysés. En ne
+    passant à Gemini QUE les matchs des tournois jouables, il concentre son
+    budget de recherche sur les bons matchs → couverture bien meilleure.
+    FAIL-OPEN : liste vide → aucun filtrage (rétrocompatible).
+    """
+    if not tournois_actifs or not rapid_matchs:
+        return rapid_matchs
+    gardes = [m for m in rapid_matchs if _tournoi_dans_liste(m.get("tournoi", ""), tournois_actifs)]
+    retires = len(rapid_matchs) - len(gardes)
+    if retires:
+        logging.info(f"Pré-filtre TOURNOIS (amont Gemini) : {retires} match(s) hors tournois "
+                     f"actifs écarté(s), {len(gardes)} envoyé(s) à l'enrichissement.")
+    return gardes
+
+
 def filtrer_json_hors_tournois(donnees_json, tournois_actifs):
     """
     Filtre TOURNOIS (v7.6.1) : ne garde que les matchs des tournois listés dans
@@ -2593,37 +2639,9 @@ def filtrer_json_hors_tournois(donnees_json, tournois_actifs):
     if not matchs:
         return donnees_json
 
-    import unicodedata
-    from difflib import SequenceMatcher
-
-    def _norm(txt):
-        txt = unicodedata.normalize("NFD", str(txt))
-        txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
-        return re.sub(r"[^a-z0-9 ]", " ", txt.lower())
-
-    MOTS_GENERIQUES = {"atp", "wta", "open", "masters", "cup", "tour", "tennis", "challenger"}
-
-    def _jetons(entree):
-        return [t for t in _norm(entree).split() if t and t not in MOTS_GENERIQUES]
-
-    jetons_actifs = [(_jetons(t) or [_norm(t).strip()]) for t in tournois_actifs]
-
-    def _tournoi_ok(nom_tournoi):
-        if not nom_tournoi:
-            return True  # nom absent → fail-open, le filtre source_cote tranchera
-        n = _norm(nom_tournoi)
-        mots = n.split()
-        for jets in jetons_actifs:
-            for j in jets:
-                if j in n:
-                    return True
-                if any(SequenceMatcher(None, j, m).ratio() >= 0.85 for m in mots):
-                    return True
-        return False
-
     gardes, retires = [], []
     for m in matchs:
-        if _tournoi_ok(m.get("tournoi", "")):
+        if _tournoi_dans_liste(m.get("tournoi", ""), tournois_actifs):
             gardes.append(m)
         else:
             retires.append(f"{m.get('joueur1','?')} vs {m.get('joueur2','?')} ({m.get('tournoi','?')})")
@@ -3242,9 +3260,12 @@ def run_bot_autonome():
     rapid_matchs       = precollecte_rapidapi_tennis(date)
     # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
     rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
+    # v7.9 : pré-filtre TOURNOIS AVANT enrichissement/Gemini — ne traiter que les
+    # matchs jouables, pour que Gemini concentre sa recherche dessus (cf. 21/07).
+    tournois_winamax   = charger_tournois_winamax()
+    rapid_matchs       = prefiltrer_rapid_matchs_par_tournoi(rapid_matchs, tournois_winamax)
     rapid_matchs       = enrichir_matchs_rapidapi(rapid_matchs, budget_requetes=4)
     calendrier_injecte = fusionner_calendrier(odds_matchs, rapid_matchs)
-    tournois_winamax   = charger_tournois_winamax()  # Liste éditable sur GitHub
     if not calendrier_injecte:
         logging.info(f"Calendrier API vide → Gemini cherchera lui-même ({len(tournois_winamax)} tournois Winamax).")
     donnees_json       = collecter_donnees_tennis(date, heure, calendrier_injecte, rapid_matchs, heure_fin, tournois_winamax)
@@ -4066,8 +4087,20 @@ def _selftest():
     check("F1 filtre source accepte cote Pinnacle marquée",
           _selftest_source_ok())
 
+    # ---- G. PRÉ-FILTRE TOURNOIS AMONT (v7.9, constat couverture 21/07) ----
+    _actifs = ["ATP Kitzbuhel", "WTA Prague"]
+    check("G1 tournoi actif reconnu (nom commercial)",
+          _tournoi_dans_liste("Generali Open - Kitzbuhel", _actifs) is True)
+    check("G2 Challenger hors liste écarté",
+          _tournoi_dans_liste("Tampere Challenger", _actifs) is False)
+    _pf = prefiltrer_rapid_matchs_par_tournoi(
+        [{"tournoi": "Generali Open - Kitzbuhel"}, {"tournoi": "Zug Challenger"}], _actifs)
+    check("G3 pré-filtre ne garde que les jouables", len(_pf) == 1)
+    check("G4 pré-filtre fail-open sur liste vide",
+          len(prefiltrer_rapid_matchs_par_tournoi([{"tournoi": "X"}], [])) == 1)
+
     # ---- Rapport ----
-    print(f"\n{'='*56}\n  HARNAIS DE TEST — bot.py v7.8\n{'='*56}")
+    print(f"\n{'='*56}\n  HARNAIS DE TEST — bot.py v7.9\n{'='*56}")
     for o in oks:     print(f"  ✅ {o}")
     for e in echecs:  print(f"  ❌ {e}")
     print(f"{'-'*56}\n  {len(oks)} réussis · {len(echecs)} échoués")
