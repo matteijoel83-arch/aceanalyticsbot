@@ -3260,9 +3260,14 @@ def run_bot_autonome():
 
     heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
     odds_matchs        = precollecte_odds_api(heure_utc_min)
-    rapid_matchs       = precollecte_rapidapi_tennis(date)
-    # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre
-    rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs, heure, heure_fin)
+    rapid_matchs_tous  = precollecte_rapidapi_tennis(date)
+    # Pré-filtrage horaire AVANT enrichissement — concentre les requêtes sur la fenêtre.
+    # v7.9.3 : on GARDE la liste complète (rapid_matchs_tous) pour la correction
+    # d'heures. Bug du 21/07 (Van De Zandschulp) : match démarré à 19:20, 10 min
+    # AVANT la fenêtre → exclu du calendrier filtré → la correction d'heures
+    # n'avait aucune référence → l'heure inventée par Gemini (22:15) a tenu, et
+    # un ticket est parti sur un match déjà commencé.
+    rapid_matchs       = filtrer_matchs_par_fenetre(rapid_matchs_tous, heure, heure_fin)
     # v7.9 : pré-filtre TOURNOIS AVANT enrichissement/Gemini — ne traiter que les
     # matchs jouables, pour que Gemini concentre sa recherche dessus (cf. 21/07).
     tournois_winamax   = charger_tournois_winamax()
@@ -3275,9 +3280,20 @@ def run_bot_autonome():
 
     # ----- FIXTURES ODDSPAPI (v7.8 : fetch AVANCÉ ici — 1 seul appel, réutilisé
     # par le repli Pinnacle, les heures autoritaires et les marchés alternatifs)
+    # v7.9.3 : on récupère TOUT (live/terminés inclus) — la correction d'heures
+    # a besoin des matchs commencés (leur heure réelle sert à les écarter).
+    # La liste "jouable" (sans live/terminés) est dérivée ensuite pour les
+    # autres usages (repli Pinnacle, marchés alternatifs).
+    fixtures_completes = []
     fixtures_oddspapi = []
     if RAPIDAPI_KEY:
-        fixtures_oddspapi = oddspapi_fixtures_jour()
+        fixtures_completes = oddspapi_fixtures_jour(exclure_termines=False)
+        _exclus_st = ("Finished", "Live", "In-Play", "Cancelled", "Postponed", "Retired")
+        fixtures_oddspapi = [f for f in fixtures_completes
+                             if str((f.get("status") or {}).get("statusName") or "") not in _exclus_st]
+        if fixtures_completes:
+            logging.info(f"OddsPapi : {len(fixtures_completes) - len(fixtures_oddspapi)} match(s) "
+                         f"terminé(s)/en cours exclu(s), {len(fixtures_oddspapi)} jouable(s).")
 
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
@@ -3326,13 +3342,15 @@ def run_bot_autonome():
         pass
 
     # ----- FIXTURES : déjà récupérés en amont (v7.8) — réutilisation directe
-    if fixtures_oddspapi:
-        # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini
-        donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_oddspapi)
-    else:
-        # v7.6.4 : OddsPapi muet (429) → l'heure du calendrier RapidAPI fait foi,
-        # sinon on publie l'heure inventée par Gemini (bug Tabilo/Tirante 17/07).
-        donnees_json = corriger_heures_avec_calendrier(donnees_json, rapid_matchs)
+    if fixtures_completes:
+        # v7.4 : heures autoritaires — l'epoch OddsPapi écrase l'heure Gemini.
+        # v7.9.3 : on passe les fixtures COMPLETS (live/terminés inclus) — un
+        # match déjà commencé doit récupérer son heure RÉELLE pour être écarté
+        # par le re-filtrage fenêtre, pas rester sur l'heure inventée par Gemini.
+        donnees_json = corriger_heures_avec_oddspapi(donnees_json, fixtures_completes)
+    # v7.9.3 : le calendrier RapidAPI COMPLET corrige ce qu'OddsPapi n'a pas
+    # apparié (plus un simple else — les deux corrections s'enchaînent).
+    donnees_json = corriger_heures_avec_calendrier(donnees_json, rapid_matchs_tous)
     # Re-filtrer par fenêtre : une heure corrigée peut sortir de la session
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
 
