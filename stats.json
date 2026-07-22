@@ -3,13 +3,13 @@
   "mesure_depuis": "2026-07-21",
   "_note": "Compteurs remis à zéro le 21/07/2026 au démarrage de la phase de mesure sous bot.py v7.8 stable. L'historique de construction (37 paris pris sous ~10 versions successives) est archivé dans stats_archive_v7_pre-mesure.json. À partir d'ici, tous les paris sont pris avec la MÊME logique — le yield redevient interprétable. Premier regard sérieux : ~50 paris. Verdict segments : ~100 paris.",
   "victoires": 0,
-  "defaites": 1,
+  "defaites": 3,
   "par_marche": {
     "moneyline": {
       "v": 0,
-      "d": 1,
-      "mise": 1.0,
-      "profit": -1.0
+      "d": 3,
+      "mise": 4.0,
+      "profit": -4.0
     },
     "score_exact": {
       "v": 0,
@@ -43,21 +43,23 @@
     },
     "moderee": {
       "v": 0,
-      "d": 0
+      "d": 1,
+      "mise": 2.0,
+      "profit": -2.0
     },
     "basse": {
       "v": 0,
-      "d": 1,
-      "mise": 1.0,
-      "profit": -1.0
+      "d": 2,
+      "mise": 2.0,
+      "profit": -2.0
     }
   },
   "par_modele": {
     "opus": {
       "v": 0,
-      "d": 1,
-      "mise": 1.0,
-      "profit": -1.0
+      "d": 3,
+      "mise": 4.0,
+      "profit": -4.0
     },
     "sonnet": {
       "v": 0,
@@ -69,9 +71,9 @@
   "par_surface": {
     "terre": {
       "v": 0,
-      "d": 1,
-      "mise": 1.0,
-      "profit": -1.0
+      "d": 3,
+      "mise": 4.0,
+      "profit": -4.0
     },
     "dur": {
       "v": 0,
@@ -93,7 +95,7 @@
     }
   },
   "roi": {
-    "mise_totale": 1.0,
-    "profit": -1.0
+    "mise_totale": 4.0,
+    "profit": -4.0
   }
 }
