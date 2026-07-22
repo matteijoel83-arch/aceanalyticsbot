@@ -1,33 +1,5 @@
 [
   {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Sebastian Baez vs Arthur Rinderknech\n🏆 <b>COMPÉTITION :</b> Generali Open - Kitzbuhel\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Arthur Rinderknech vainqueur (Moneyline)\n📈 <b>COTE :</b> 1.94\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 62.4% → juste 1.60 → réelle 1.94 → delta +0.34 ✅ → Kelly 20% plafonné 2%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Rinderknech à 62.4% (hold 81.4% vs 76.8%, meilleur serveur en altitude qui favorise le service). Cote réelle 1.94 très supérieure à la cote juste 1.60. Seule prudence : 284 min sur 7j, d'où confiance modérée.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
-    "date": "22/07/2026",
-    "marche": "moneyline",
-    "niveau": "moderee",
-    "modele": "opus",
-    "cote": 1.94,
-    "mise_pct": 2.0,
-    "surface": "terre",
-    "pinnacle_ml_ouverture": {
-      "away": 1.97,
-      "home": 1.917
-    }
-  },
-  {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Quentin Halys vs Valentin Vacherot\n🏆 <b>COMPÉTITION :</b> Generali Open - Kitzbuhel\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Valentin Vacherot vainqueur (Moneyline)\n📈 <b>COTE :</b> 1.56\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.56 → delta +0.23 ✅ → Kelly 44% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle donne Vacherot à 75.4% (retour 41.6%, break 29.4%, DR 1.15 nettement supérieur). Cote 1.56 offre value nette. Confiance basse : Vacherot revient de blessure (1,5 mois) et altitude favorise le service puissant de Halys.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (alerte retour blessure)",
-    "date": "22/07/2026",
-    "marche": "moneyline",
-    "niveau": "basse",
-    "modele": "opus",
-    "cote": 1.56,
-    "mise_pct": 1.0,
-    "surface": "terre",
-    "pinnacle_ml_ouverture": {
-      "home": 2.31,
-      "away": 1.666
-    }
-  },
-  {
     "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alex Molcan vs Daniel Altmaier\n🏆 <b>COMPÉTITION :</b> Generali Open - Kitzbuhel\n⏰ <b>HEURE :</b> 18:15\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alex Molcan vainqueur\n📈 <b>COTE :</b> 1.70\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 74% → juste 1.35 → réelle 1.70 → delta +0.35 ✅ → Kelly 25%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Molcan à 82.8% (cote juste 1.21). Meilleur break% surface (38.8% vs 24.8%), return supérieur (45% vs 38.7%), Hold% 78.8% et forme 4V/5. H2H 2-0 dont sur terre. Je plafonne à 74% (calibration 1.50-1.80). Value énorme vs marché.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
     "date": "22/07/2026",
     "marche": "moneyline",
