@@ -12,5 +12,19 @@
       "away": 1.97,
       "home": 1.917
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Quentin Halys vs Valentin Vacherot\n🏆 <b>COMPÉTITION :</b> Generali Open - Kitzbuhel\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Valentin Vacherot vainqueur (Moneyline)\n📈 <b>COTE :</b> 1.56\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.56 → delta +0.23 ✅ → Kelly 44% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle donne Vacherot à 75.4% (retour 41.6%, break 29.4%, DR 1.15 nettement supérieur). Cote 1.56 offre value nette. Confiance basse : Vacherot revient de blessure (1,5 mois) et altitude favorise le service puissant de Halys.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (alerte retour blessure)",
+    "date": "22/07/2026",
+    "marche": "moneyline",
+    "niveau": "basse",
+    "modele": "opus",
+    "cote": 1.56,
+    "mise_pct": 1.0,
+    "surface": "terre",
+    "pinnacle_ml_ouverture": {
+      "home": 2.31,
+      "away": 1.666
+    }
   }
 ]
