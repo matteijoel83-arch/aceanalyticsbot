@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.9.3                       ║
+║          BOT TENNIS ACEANALYTICS — bot.py v7.9                        ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)         ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet       ║
 ║                                                                      ║
@@ -3041,13 +3041,26 @@ def corriger_heures_avec_oddspapi(donnees_json, fixtures):
         fx = oddspapi_trouver_fixture(m.get("joueur1", ""), m.get("joueur2", ""), fixtures)
         if not fx:
             continue
-        start = fx.get("startTime")
+        # v7.9.4 : accepter les DEUX formats de startTime. RapidAPI = epoch
+        # (secondes) · API directe = ISO ("2026-07-22T09:00:00Z"). Bug du 22/07 :
+        # int() plantait sur l'ISO → except → saut SILENCIEUX de chaque fixture
+        # → la correction d'heures était morte depuis le passage au repli direct
+        # (19/07), d'où les tickets à 14:00 pour des matchs de 11:00.
+        start = fx.get("trueStartTime") or fx.get("startTime")
         if not start:
             continue
         try:
-            h_fr = datetime.fromtimestamp(int(start), timezone.utc) \
-                .astimezone(ZoneInfo("Europe/Paris")).strftime("%H:%M")
-        except Exception:
+            s = str(start).strip()
+            if s.replace(".", "", 1).isdigit():          # epoch (RapidAPI)
+                dt_utc = datetime.fromtimestamp(int(float(s)), timezone.utc)
+            else:                                          # ISO (API directe)
+                dt_utc = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+            h_fr = dt_utc.astimezone(ZoneInfo("Europe/Paris")).strftime("%H:%M")
+        except Exception as e:
+            logging.info(f"Heure OddsPapi illisible pour {m.get('joueur1')} vs "
+                         f"{m.get('joueur2')} (startTime={start!r}) : {e}")
             continue
         if m.get("heure_match") != h_fr:
             logging.info(
