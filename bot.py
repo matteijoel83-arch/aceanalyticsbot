@@ -3003,6 +3003,10 @@ def corriger_heures_avec_calendrier(donnees_json, rapid_matchs):
 
     corriges = 0
     for m in data.get("matchs", []):
+        # v7.9.5 : ne JAMAIS écraser une heure fixée par OddsPapi (source epoch,
+        # plus fiable que l'heure de programmation du calendrier RapidAPI).
+        if m.get("heure_verrouillee"):
+            continue
         j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
         rm = next((r for r in rapid_matchs
                    if _meme_match(j1, j2, r.get("joueur1", ""), r.get("joueur2", ""))), None)
@@ -3018,8 +3022,8 @@ def corriger_heures_avec_calendrier(donnees_json, rapid_matchs):
             m["heure_match"] = h_propre
             corriges += 1
     if corriges:
-        logging.info(f"Heures — repli calendrier RapidAPI : {corriges} match(s) corrigé(s) "
-                     f"(OddsPapi indisponible).")
+        logging.info(f"Heures — calendrier RapidAPI : {corriges} match(s) corrigé(s) "
+                     f"(non couverts par OddsPapi).")
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -3062,6 +3066,12 @@ def corriger_heures_avec_oddspapi(donnees_json, fixtures):
             logging.info(f"Heure OddsPapi illisible pour {m.get('joueur1')} vs "
                          f"{m.get('joueur2')} (startTime={start!r}) : {e}")
             continue
+        # v7.9.5 : l'heure OddsPapi est VERROUILLÉE — hiérarchie OddsPapi >
+        # RapidAPI > Gemini. Bug du 23/07 : OddsPapi corrigeait 14:00 → 11:00
+        # (juste), puis le calendrier RapidAPI écrasait 11:00 → 14:00 (faux,
+        # heure de programmation erronée côté RapidAPI). La source la plus
+        # fiable doit avoir le dernier mot.
+        m["heure_verrouillee"] = True
         if m.get("heure_match") != h_fr:
             logging.info(
                 f"Heure corrigée (OddsPapi) : {m.get('joueur1')} vs {m.get('joueur2')} "
