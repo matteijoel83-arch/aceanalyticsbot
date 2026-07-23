@@ -1,0 +1,12 @@
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Mariano Navone vs Quentin Halys\n🏆 <b>COMPÉTITION :</b> Generali Open - Kitzbuhel\n⏰ <b>HEURE :</b> 14:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Mariano Navone vainqueur\n📈 <b>COTE :</b> 1.44\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.44 → delta +0.11 ✅ → Kelly 15% plafonné 3%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Navone à 79% (plafonné 75% par calibration cote <1.50). DR supérieur (1.15 vs 0.99), retour bien plus solide (46% vs 32%), spécialiste terre. Halys a joué 238 min de plus sur 7j. H2H 1-0 Navone sur terre. Value nette.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH complémentaire — Bartunkova (1.60) et Sherif (1.37) : stats service/retour par surface introuvables pour les 4 joueuses → règle anti-surestimation impose l'alignement marché, pas de delta exploitable malgré la fatigue de Tararudee/Sherif. Marchés Sets/Jeux Prague : edge insuffisant (<0.06) sans Hold% fiable.",
+    "date": "23/07/2026",
+    "marche": "moneyline",
+    "niveau": "elevee",
+    "modele": "opus",
+    "cote": 1.44,
+    "mise_pct": 3.0,
+    "surface": "terre"
+  }
+]
