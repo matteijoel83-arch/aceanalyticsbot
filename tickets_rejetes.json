@@ -12,5 +12,12 @@
     "raison_rejet": "écart modèle-marché +64% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Andrey Rublev vs Luca Van Assche\n🏆 <b>COMPÉTITION :</b> Millennium Estoril Open - Estoril\n⏰ <b>HEURE :</b> 14:40\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Andrey Rublev vainqueur\n📈 <b>COTE :</b> 1.25\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 72% → juste 1.39 → réelle 1.25 → delta -0.14 ❌\n📌 <b>POURQUOI ?</b> Le modèle donne Rublev à 60.9% (juste 1.64), la cote 1.25 est bien trop basse. AUCUNE value. Ticket non retenu.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH — Rublev favori écrasant (1.25) mais le modèle Barnett-Clarke le donne à 60.9% (juste 1.64) : cote très surévaluée, delta négatif. Bublik (1.72) proche du modèle (63.1%, juste 1.59), delta +0.13 mais plafonné à 68% → juste 1.47 → pas de value réelle. Marché alternatif Bublik : edge insuffisant contre Pinnacle. Salkova/Oliynykova/Tagger : stats surface manquantes → alignement marché obligatoire. Rien de jouable aujourd'hui.",
+    "date": "24/07/2026",
+    "raison_rejet": "delta -0.14 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "elevee"
   }
 ]
