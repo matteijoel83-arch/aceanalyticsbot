@@ -560,6 +560,11 @@ def envoyer_sur_telegram(message, stats=None, retries=3):
 
 
 def _envoyer_notification_sans_ticket(raison, session=""):
+    # v7.9.6 : le texte libre de Claude peut contenir <, > ou & ("cote <1.90")
+    # qui cassent le mode HTML de Telegram → on échappe, en préservant les
+    # balises autorisées si Claude en a mis (il n'en met pas dans AUCUN_MATCH).
+    raison = (str(raison).replace("&", "&amp;")
+              .replace("<", "&lt;").replace(">", "&gt;"))
     stats  = charger_stats()
     emoji  = "🌅" if session == "MATIN" else "🌆" if session == "APRÈS-MIDI" else "🌃"
     label  = f"Session {session}" if session else "Analyse"
@@ -575,15 +580,15 @@ def _envoyer_notification_sans_ticket(raison, session=""):
     if DRY_RUN:
         logging.info(f"[DRY-RUN] Notification sans ticket — {label}")
         return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHANNEL_ID, "text": msg, "parse_mode": "HTML"},
-            timeout=10,
-        )
+    # v7.9.6 : passer par la fonction ROBUSTE (vérif du statut + repli texte brut).
+    # Bug du 24/07 : l'ancien requests.post ne vérifiait PAS la réponse — Telegram
+    # renvoyait 400 (le "<1.90" du texte de Claude cassait le HTML) et le log
+    # affichait quand même "envoyée". Échec silencieux, notification jamais reçue.
+    ok = envoyer_sur_telegram(msg)
+    if ok:
         logging.info(f"Notification sans ticket envoyée — {label}.")
-    except Exception as e:
-        logging.warning(f"Échec notification : {e}")
+    else:
+        logging.error(f"❌ Notification sans ticket NON délivrée — {label}.")
 
 
 def _alerter_telegram_erreur(msg):
