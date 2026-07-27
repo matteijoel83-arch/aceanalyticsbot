@@ -19,5 +19,12 @@
     "raison_rejet": "delta -0.14 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alejandro Tabilo vs Tallon Griekspoor\n🏆 <b>COMPÉTITION :</b> Mubadala Citi DC Open (Washington)\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Vainqueur Alejandro Tabilo\n📈 <b>COTE :</b> 2.35\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 66% → juste 1.51 → réelle 2.35 → delta +0.84 ✅ → Kelly 22% plafonné 2%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Tabilo à 73% (retour 34.9% vs 30.0%, break 18.3% vs 10.7%, hold supérieur). Le marché l'a mis outsider à cause d'une forme récente moyenne, mais les chiffres de surface le favorisent nettement. Je plafonne à 66% par prudence (calibration cote >2.20).\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes pour les deux)",
+    "date": "27/07/2026",
+    "raison_rejet": "écart modèle-marché +55% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
