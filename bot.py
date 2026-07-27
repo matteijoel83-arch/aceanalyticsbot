@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║          BOT TENNIS ACEANALYTICS — bot.py v7.9                        ║
+║          BOT TENNIS ACEANALYTICS — bot.py v8.0                        ║
 ║  Architecture hybride : Gemini (recherche) + Claude (analyse)         ║
 ║  Pré-collecte : Odds API + RapidAPI Tennis → calendrier complet       ║
 ║                                                                      ║
@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "7.9.6"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.0"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -1392,6 +1392,37 @@ PRIORITÉ 1 — Pour CHAQUE match, recherche dédiée par donnée, SUR LA SURFAC
    → mêmes sources, filtre surface obligatoire
    → Hold% + Break% = Indice Combiné (>105% = niveau élite, <95% = vulnérable)
 
+2-BIS. STATS PRIORITAIRES SELON LA SURFACE (v8.0 — décisives pour l'analyse) :
+   Le revêtement change ce qui décide un match. Cherche EN PRIORITÉ, pour les
+   deux joueurs, les stats de la ligne correspondant à la surface du match :
+
+   • TERRE BATTUE (lente, rebond haut, échanges longs) :
+     → % points gagnés sur 2E SERVICE (élite >54%, exposé <46%)
+     → % jeux de retour gagnés / Break% (excellent >28%, faible <18%)
+     → % conversion des balles de break
+     Le service est peu neutralisant : c'est la 2e balle et le retour qui décident.
+
+   • GAZON (ultra-rapide, rebond bas, points courts) :
+     → % points gagnés sur 1ER SERVICE (inviolable >78%, vulnérable <68%)
+     → Hold% (standard des tops serveurs >88%, vulnérable <78%)
+     → ratio aces/doubles fautes · % tie-breaks gagnés
+     Les breaks sont rares : tout se joue sur la 1re balle et les tie-breaks.
+
+   • DUR EXTÉRIEUR (neutre, rebond régulier) :
+     → Dominance Ratio (DR) sur la surface (dominant >1.15, dominé <0.90)
+     → % balles de break SAUVÉES (excellente résistance >65%)
+     → équilibre Hold% / Break% · % points 1er ET 2e service
+     Surface de polyvalence : chercher le déséquilibre global, pas un seul coup.
+
+   • DUR INDOOR (très rapide, aucune météo) :
+     → Hold% (norme du circuit en salle : 83-88%)
+     → % 1er service RENTRÉ (>66% = étouffe l'adversaire)
+     → % points gagnés sur le 2e service ADVERSE
+     Un seul break décide souvent la manche.
+
+   ⚠️ Si la stat prioritaire de la surface est introuvable, dis-le explicitement
+   dans "avertissements" — c'est une information importante pour l'analyse.
+
 3. Forme récente des DEUX joueurs (5 derniers matchs) :
    → flashscore.fr OU sofascore.com OU matchstat.com
    → Si déjà fourni dans le calendrier → NE PAS re-chercher
@@ -1724,6 +1755,60 @@ CALIBRATION PROBABILITÉS :
 • 1.80-2.20    → MAX 58%
 • > 2.20       → MAX 52%
 
+🎾 GRILLE D'ANALYSE PAR SURFACE (v8.0 — CŒUR DE LA STRATÉGIE) :
+Le revêtement change ce qui décide un match. Une stat clé sur gazon devient
+secondaire sur terre. AVANT toute estimation, identifie la surface et applique
+la grille correspondante. Les seuils ci-dessous sont les normes du circuit.
+
+┌─ TERRE BATTUE — épreuve de force et d'endurance (lente, rebond haut)
+│  Normes : Hold 78-82% · Break 22-28% · 1er service 68-73% · 2e service 52-57%
+│  DÉCIDENT : % 2e service (élite >54%, exposé <46%) · Break% (fort >28%, faible <18%)
+│             conversion des balles de break · ratio fautes directes/winners
+│  Dynamique : échanges longs (65%+ des points >5 coups), service peu neutralisant,
+│              primauté de l'endurance, du lift et du contre.
+│  ⛔ PIÈGE : surévaluer un gros serveur — il perd 15-20% d'efficacité d'ace sur
+│     terre. Un serveur dominant sur dur n'est PAS le même joueur sur ocre.
+│     Privilégier le lift et une endurance supérieure à 2h30.
+└─
+┌─ GAZON — prime à la première balle (ultra-rapide, rebond bas)
+│  Normes : Hold 85-90%+ · Break 12-18% · 1er service 76-82% · 2e service 48-53%
+│  DÉCIDENT : % 1er service (inviolable >78%, incapable <68%) · Hold% (>88% top,
+│             <78% vulnérable) · aces/doubles fautes · % tie-breaks gagnés
+│  Dynamique : 70%+ des points en 1 à 4 coups. L'écart entre valeur du service et
+│              du retour est à son MAXIMUM.
+│  ⛔ PIÈGE : les breaks sont rares — un avantage au retour pèse beaucoup moins
+│     qu'ailleurs. 25-30% des sets vont au tie-break : le sang-froid décide.
+└─
+┌─ DUR EXTÉRIEUR — équilibre polyvalent (neutre/rapide, rebond régulier)
+│  Normes : Hold 80-85% · Break 18-24% · 1er service 72-77% · 2e service 50-54%
+│  DÉCIDENT : Dominance Ratio (dominant >1.15, dominé <0.90) · équilibre
+│             Hold%/Break% · % balles de break sauvées (excellent >65%)
+│  Dynamique : test de polyvalence globale, équilibre service/fond de court.
+│  ⛔ PIÈGE : la vitesse réelle varie fortement d'un tournoi à l'autre. Vent et
+│     chaleur extrême usent physiquement — croiser avec la charge des 7 jours.
+└─
+┌─ DUR INDOOR — vitesse pure (très rapide, aucune météo)
+│  Normes : Hold 83-88% · Break 15-20% · 1er service 74-80% · 2e service 50-55%
+│  DÉCIDENT : Hold% · % 1er service rentré (>66% étouffe l'adversaire) ·
+│             % points sur 2e service adverse · efficacité en 1re frappe
+│  Dynamique : conditions parfaites, les frappeurs à plat s'expriment sans déchet.
+│  ⛔ PIÈGE : un SEUL break décide souvent la manche — la marge de l'outsider au
+│     retour est minimale. Ne pas parier un retourneur contre un gros serveur ici.
+└─
+
+RÈGLES D'USAGE DE LA GRILLE :
+• Le Dominance Ratio = % points gagnés en retour / % points perdus au service.
+  >1.20 ultra-dominant · ~1.00 neutre (match indécis) · <0.85 en difficulté.
+• Compare TOUJOURS les stats sur la surface du match, jamais toutes surfaces
+  confondues — c'est la première cause de fausse estimation.
+• Situe chaque joueur par rapport aux normes ci-dessus : un Hold de 80% est
+  médiocre sur gazon mais correct sur terre. Un chiffre ne vaut que comparé
+  à la norme de SA surface.
+• Si un joueur est "élite" sur les stats prioritaires de la surface et son
+  adversaire "vulnérable", c'est un signal fort — mentionne-le explicitement.
+• À l'inverse, si l'avantage d'un joueur porte sur une stat SECONDAIRE pour
+  cette surface, ne la survalorise pas.
+
 🚫 RÈGLE ANTI-SURESTIMATION — DONNÉES MANQUANTES (CRITIQUE) :
 Constat vérifié sur résultats réels : quand il manque des données importantes
 (stats sur la surface du match, Hold% sur la surface, forme récente, H2H), le
@@ -1983,12 +2068,73 @@ def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
 # source fiable par surface sera disponible.
 # Note : une erreur sur ces moyennes décale p_A ET p_B dans le même sens, donc
 # s'annule en grande partie sur la probabilité de match (c'est l'ÉCART qui pèse).
+# v8.0 — CALIBRÉ sur les normes réelles du circuit (matrice d'analyse par surface).
+# Méthode : le tableau donne les Hold% moyens observés ; on INVERSE le modèle
+# Barnett-Clarke (bc_proba_jeu) pour trouver le p_service qui les produit.
+# Aucune valeur inventée : Hold% empirique → p_service par le modèle lui-même.
+#   terre      hold 80.0% (78-82) → 0.6329
+#   dur        hold 82.5% (80-85) → 0.6472   (dur EXTÉRIEUR)
+#   dur_indoor hold 85.5% (83-88) → 0.6660   (nettement plus rapide qu'en extérieur)
+#   gazon      hold 87.5% (85-90) → 0.6799
 BC_SERVE_MOYEN_SURFACE = {
-    "terre": 0.635,
-    "dur":   0.655,
-    "gazon": 0.675,
-    "autre": 0.650,
+    "terre":      0.6329,
+    "dur":        0.6472,
+    "dur_indoor": 0.6660,
+    "gazon":      0.6799,
+    "autre":      0.6472,   # défaut = dur extérieur (surface la plus représentée)
 }
+
+# v8.0 — NORMES DU CIRCUIT par surface (matrice d'analyse statistique).
+# Servent : (1) aux contrôles de cohérence du modèle, (2) à qualifier le profil
+# d'un joueur (élite / vulnérable) et (3) à guider la collecte et l'analyse.
+# 'prioritaires' = les stats qui décident réellement du match sur cette surface.
+BC_NORMES_SURFACE = {
+    "terre": {
+        "libelle": "Terre battue (lente, rebond haut)",
+        "hold": (0.78, 0.82), "break": (0.22, 0.28),
+        "serve1": (0.68, 0.73), "serve2": (0.52, 0.57),
+        "prioritaires": ["% gagné 2e service", "% points gagnés en retour",
+                         "% conversion balles de break", "ratio fautes/winners"],
+        "elite":     {"serve2": 0.54, "break": 0.28},
+        "vulnerable": {"serve2": 0.46, "break": 0.18},
+        "piege": "Surévaluer un gros serveur : il perd 15-20% d'efficacité d'ace "
+                 "sur terre. Privilégier lift et endurance (>2h30).",
+    },
+    "gazon": {
+        "libelle": "Gazon (ultra-rapide, rebond bas)",
+        "hold": (0.85, 0.90), "break": (0.12, 0.18),
+        "serve1": (0.76, 0.82), "serve2": (0.48, 0.53),
+        "prioritaires": ["% gagné 1er service", "ratio aces/doubles fautes",
+                         "% points au filet", "% tie-breaks gagnés"],
+        "elite":     {"serve1": 0.78, "hold": 0.88},
+        "vulnerable": {"serve1": 0.68, "hold": 0.78},
+        "piege": "Les breaks sont rares (Hold >88%) : un écart de retour pèse peu, "
+                 "tout se joue sur le 1er service et les tie-breaks.",
+    },
+    "dur": {
+        "libelle": "Dur extérieur (neutre/rapide, rebond régulier)",
+        "hold": (0.80, 0.85), "break": (0.18, 0.24),
+        "serve1": (0.72, 0.77), "serve2": (0.50, 0.54),
+        "prioritaires": ["Dominance Ratio (DR)", "équilibre Hold%/Break%",
+                         "% balles de break sauvées", "% points 1er et 2e service"],
+        "elite":     {"dr": 1.15, "bp_sauvees": 0.65},
+        "vulnerable": {"dr": 0.90},
+        "piege": "Vitesse réelle variable d'un tournoi à l'autre (Indian Wells lent "
+                 "vs Shanghai rapide). Météo : vent et chaleur usent physiquement.",
+    },
+    "dur_indoor": {
+        "libelle": "Dur indoor (très rapide, conditions parfaites)",
+        "hold": (0.83, 0.88), "break": (0.15, 0.20),
+        "serve1": (0.74, 0.80), "serve2": (0.50, 0.55),
+        "prioritaires": ["Hold %", "% 1er service rentré",
+                         "% points sur 2e service adverse", "efficacité 1re frappe"],
+        "elite":     {"serve1_rentre": 0.66, "hold": 0.88},
+        "vulnerable": {"hold": 0.80},
+        "piege": "Un seul break décide souvent la manche : la marge de l'outsider "
+                 "au retour est minimale. Avantage aux frappeurs à plat.",
+    },
+}
+BC_NORMES_SURFACE["autre"] = BC_NORMES_SURFACE["dur"]
 
 
 def bc_proba_point_service(serve_pts_won, return_pts_won_adversaire, surface="autre"):
@@ -2248,6 +2394,27 @@ def _bc_parse_pct(valeur):
     return v / 100.0 if v > 1.5 else v
 
 
+def _bc_cle_surface(m):
+    """
+    v8.0 — Clé de surface pour le MODÈLE (distingue le dur INDOOR du dur extérieur).
+    Le tableau des normes montre un écart réel : hold 83-88% en salle contre 80-85%
+    dehors — un serveur y est nettement moins breakable. Le champ 'indoor' du schéma
+    Gemini existait mais n'était pas exploité.
+    ⚠️ Ne remplace PAS _normaliser_surface(), qui reste en terre/dur/gazon/autre
+    pour la segmentation des statistiques (stats.json).
+    """
+    base = _normaliser_surface(m.get("surface"))
+    if base == "dur":
+        ind = m.get("indoor")
+        if ind is True or str(ind).strip().lower() in ("true", "oui", "yes", "1"):
+            return "dur_indoor"
+        # Certains tournois indoor ne sont signalés que dans le nom
+        nom = f"{m.get('tournoi','')} {m.get('surface','')}".lower()
+        if "indoor" in nom or "en salle" in nom or "hallenstadion" in nom:
+            return "dur_indoor"
+    return base
+
+
 def bc_reference_match(m):
     """
     Calcule la probabilité de référence de J1 à partir des stats de surface d'un
@@ -2288,7 +2455,7 @@ def bc_reference_match(m):
         if n is not None and n < 5:
             return None, f"échantillon trop faible ({nom} : {n:.0f} matchs sur la surface)"
 
-    surface = _normaliser_surface(m.get("surface"))
+    surface = _bc_cle_surface(m)   # v8.0 : distingue dur indoor / extérieur
     pa = bc_proba_point_service(f1, g2, surface)   # J1 sert contre J2
     pb = bc_proba_point_service(f2, g1, surface)   # J2 sert contre J1
     proba_j1 = bc_proba_match(pa, pb, best_of=3)
@@ -4131,6 +4298,29 @@ def _selftest():
             check(f"B5 DR moyen=1.0 ({surf})", False); break
     else:
         check("B5 DR joueur moyen = 1.00", True)
+
+    # ---- B-BIS. GRILLE PAR SURFACE (v8.0) ----
+    # Chaque constante calibrée doit reproduire la norme Hold% du circuit
+    for surf, hold_cible in (("terre", 0.80), ("dur", 0.825),
+                             ("dur_indoor", 0.855), ("gazon", 0.875)):
+        p = BC_SERVE_MOYEN_SURFACE[surf]
+        check(f"B6 calibration {surf} → hold {hold_cible:.1%}",
+              abs(bc_proba_jeu(p) - hold_cible) < 0.005,
+              f"hold obtenu {bc_proba_jeu(p):.3f}")
+    # Hiérarchie des surfaces : terre < dur < dur_indoor < gazon
+    check("B7 hiérarchie des surfaces",
+          BC_SERVE_MOYEN_SURFACE["terre"] < BC_SERVE_MOYEN_SURFACE["dur"]
+          < BC_SERVE_MOYEN_SURFACE["dur_indoor"] < BC_SERVE_MOYEN_SURFACE["gazon"])
+    # Normes complètes pour chaque surface
+    for surf in ("terre", "gazon", "dur", "dur_indoor"):
+        n = BC_NORMES_SURFACE.get(surf, {})
+        check(f"B8 normes {surf} complètes",
+              all(k in n for k in ("hold", "break", "serve1", "serve2",
+                                   "prioritaires", "piege")))
+    # Détection du dur indoor
+    check("B9 dur indoor détecté (flag)", _bc_cle_surface({"surface": "Hard", "indoor": True}) == "dur_indoor")
+    check("B10 dur extérieur par défaut",  _bc_cle_surface({"surface": "Hard"}) == "dur")
+    check("B11 terre insensible à indoor", _bc_cle_surface({"surface": "Clay", "indoor": True}) == "terre")
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
