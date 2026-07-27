@@ -95,6 +95,8 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
+VERSION = "7.9.6"   # affichée au démarrage de chaque run — fin des doutes de version
+
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
 ODDSPAPI_HOST = "odds-api1.p.rapidapi.com"   # host OddsPapi sur RapidAPI (confirmé 09/07/2026)
@@ -3284,7 +3286,7 @@ def run_bot_autonome():
     else:
         session   = "SOIR"
         heure_fin = "05:00"
-    logging.info(f"Session {session} — fenêtre {heure} → {heure_fin}")
+    logging.info(f"AceAnalytics bot.py v{VERSION} — Session {session} — fenêtre {heure} → {heure_fin}")
 
     heure_utc_min      = (maintenant.astimezone(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
     odds_matchs        = precollecte_odds_api(heure_utc_min)
