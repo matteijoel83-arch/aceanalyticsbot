@@ -1,12 +1,11 @@
 {
-  "_commentaire": "⚠️ FILTRE DUR depuis v7.6.1 (17/07/2026) : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. Tout le reste est écarté avant analyse. Relève cette liste sur l'app Winamax à chaque début de semaine — si un Challenger est proposé par Winamax et que tu veux le jouer, AJOUTE-LE ici explicitement. Le matching est tolérant : accents et noms commerciaux gérés ('ATP Kitzbuhel' reconnaît 'Generali Open - Kitzbuhel'). Aussi utilisé par Gemini comme guide de recherche du calendrier.",
-  "_maj": "2026-07-20 — Nouvelle semaine relevée sur l'app Winamax : Estoril et Kitzbühel (ATP 250, terre), Prague et Hambourg (WTA, terre), Iaşi conservé (finale Sherif/Badosa ce jour). Retirés : Båstad, Gstaad, Umag, Athènes (terminés). Fin août : réajouter 'US Open' + éventuellement 'US Open Q'.",
+  "_commentaire": "⚠️ FILTRE DUR depuis v7.6.1 (17/07/2026) : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. Tout le reste est écarté avant analyse. Relève cette liste sur l'app Winamax à chaque début de semaine. Le matching est tolérant (accents, noms commerciaux). Aussi utilisé par Gemini comme guide de recherche du calendrier.",
+  "_maj": "2026-07-27 — Bascule tournée américaine sur DUR : Washington (ATP + WTA), Los Cabos (ATP), Memphis (WTA). Retirés : Estoril, Kitzbühel, Prague, Hambourg, Iaşi (terre européenne terminée). ⚠️ SURFACE : on passe de la terre au dur — surveiller que le modèle Barnett-Clarke reçoive bien des stats 'Dur' (BC_SERVE_MOYEN_SURFACE dur=0.655). Fin août : réajouter 'US Open' + 'US Open Q'.",
   "tournois_actifs": [
-    "ATP Estoril",
-    "ATP Kitzbuhel",
-    "WTA Iasi",
-    "WTA Prague",
-    "WTA Hamburg"
+    "ATP Washington",
+    "ATP Los Cabos",
+    "WTA Washington",
+    "WTA Memphis"
   ],
   "categories_couvertes_info": [
     "Note : cette section n'est PAS un filtre (elle guide Gemini). Seule 'tournois_actifs' fait foi.",
