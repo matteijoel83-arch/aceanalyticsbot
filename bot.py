@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.0"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.1"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -1505,7 +1505,7 @@ FORMAT JSON STRICT :
     "date_match": "JJ/MM/AAAA (date réelle du match — DOIT être {date}, sinon ne pas inclure)",
     "heure_match": "HH:MM (HEURE FRANÇAISE Europe/Paris — jamais UTC)",
     "joueur1": "Nom", "joueur2": "Nom",
-    "tournoi": "Nom", "surface": "Terre/Dur/Gazon", "indoor": false,
+    "tournoi": "Nom", "circuit": "ATP ou WTA", "surface": "Terre/Dur/Gazon", "indoor": false,
     "cote_j1": 1.XX, "cote_j2": 1.XX, "source_cote": "Winamax/non trouvée",
     "forme_j1": ["V","D"], "forme_j2": ["V","D"],
     "details_forme_j1": "résumé", "details_forme_j2": "résumé",
@@ -2068,23 +2068,27 @@ def filtrer_matchs_par_fenetre(rapid_matchs, heure_debut, heure_fin):
 # source fiable par surface sera disponible.
 # Note : une erreur sur ces moyennes décale p_A ET p_B dans le même sens, donc
 # s'annule en grande partie sur la probabilité de match (c'est l'ÉCART qui pèse).
-# v8.0 — CALIBRÉ sur les normes réelles du circuit (matrice d'analyse par surface).
-# Méthode : le tableau donne les Hold% moyens observés ; on INVERSE le modèle
-# Barnett-Clarke (bc_proba_jeu) pour trouver le p_service qui les produit.
-# Aucune valeur inventée : Hold% empirique → p_service par le modèle lui-même.
-#   terre      hold 80.0% (78-82) → 0.6329
-#   dur        hold 82.5% (80-85) → 0.6472   (dur EXTÉRIEUR)
-#   dur_indoor hold 85.5% (83-88) → 0.6660   (nettement plus rapide qu'en extérieur)
-#   gazon      hold 87.5% (85-90) → 0.6799
-BC_SERVE_MOYEN_SURFACE = {
-    "terre":      0.6329,
-    "dur":        0.6472,
-    "dur_indoor": 0.6660,
-    "gazon":      0.6799,
-    "autre":      0.6472,   # défaut = dur extérieur (surface la plus représentée)
+# v8.1 — MOYENNES DU CIRCUIT : % de points gagnés au SERVICE, par circuit ET
+# surface. Source : relevé fourni par l'exploitant (moyennes de tour, 52 sem.).
+# Validation croisée : les Hold% que ces valeurs impliquent via le modèle
+# (ATP 78.5/82.1/84.3/86.4%) tombent exactement dans les fourchettes de la
+# matrice d'analyse (78-82 / 80-85 / 83-88 / 85-90%) → cohérence confirmée.
+# L'écart ATP/WTA est d'environ 8 points : c'est LUI qui écrasait les joueuses
+# quand une moyenne ATP leur était appliquée (bug du 28/07 : hold calculé 30%).
+BC_SERVE_MOYEN_CIRCUIT = {
+    "atp": {"terre": 0.625, "dur": 0.645, "dur_indoor": 0.658, "gazon": 0.672},
+    "wta": {"terre": 0.545, "dur": 0.565, "dur_indoor": 0.575, "gazon": 0.590},
 }
+BC_SERVE_MOYEN_CIRCUIT["atp"]["autre"] = BC_SERVE_MOYEN_CIRCUIT["atp"]["dur"]
+BC_SERVE_MOYEN_CIRCUIT["wta"]["autre"] = BC_SERVE_MOYEN_CIRCUIT["wta"]["dur"]
 
-# v8.0 — NORMES DU CIRCUIT par surface (matrice d'analyse statistique).
+# Rétrocompatibilité : l'ancien nom pointe sur l'ATP (défaut historique).
+BC_SERVE_MOYEN_SURFACE = BC_SERVE_MOYEN_CIRCUIT["atp"]
+
+# NORMES DU CIRCUIT par surface. Les seuils serve1/serve2/elite/vulnerable et
+# les pièges sont issus de la matrice d'analyse (données ATP). Les hold/break
+# sont déclinés PAR CIRCUIT : en WTA les breaks sont bien plus fréquents, un
+# hold de 66% y est normal alors qu'il serait catastrophique en ATP.
 # Servent : (1) aux contrôles de cohérence du modèle, (2) à qualifier le profil
 # d'un joueur (élite / vulnérable) et (3) à guider la collecte et l'analyse.
 # 'prioritaires' = les stats qui décident réellement du match sur cette surface.
@@ -2136,16 +2140,43 @@ BC_NORMES_SURFACE = {
 }
 BC_NORMES_SURFACE["autre"] = BC_NORMES_SURFACE["dur"]
 
+# v8.1 — NORMES HOLD/BREAK PAR CIRCUIT. Dérivées des moyennes de service
+# ci-dessus via le modèle lui-même (bc_proba_jeu) : aucune valeur inventée.
+# Écart majeur : en WTA on tient son service ~16 points de moins qu'en ATP,
+# et on breake environ deux fois plus. Juger une joueuse à l'aune des normes
+# masculines produit des probabilités absurdes (constat du 28/07).
+BC_NORMES_CIRCUIT = {
+    "atp": {
+        "terre":      {"hold": (0.755, 0.815), "break": (0.185, 0.245)},
+        "dur":        {"hold": (0.790, 0.850), "break": (0.150, 0.210)},
+        "dur_indoor": {"hold": (0.815, 0.875), "break": (0.125, 0.185)},
+        "gazon":      {"hold": (0.835, 0.895), "break": (0.105, 0.165)},
+    },
+    "wta": {
+        "terre":      {"hold": (0.580, 0.640), "break": (0.360, 0.420)},
+        "dur":        {"hold": (0.630, 0.690), "break": (0.310, 0.370)},
+        "dur_indoor": {"hold": (0.650, 0.710), "break": (0.290, 0.350)},
+        "gazon":      {"hold": (0.685, 0.745), "break": (0.255, 0.315)},
+    },
+}
+for _c in ("atp", "wta"):
+    BC_NORMES_CIRCUIT[_c]["autre"] = BC_NORMES_CIRCUIT[_c]["dur"]
 
-def bc_proba_point_service(serve_pts_won, return_pts_won_adversaire, surface="autre"):
+
+def bc_proba_point_service(serve_pts_won, return_pts_won_adversaire, surface="autre",
+                           circuit="atp"):
     """
     Probabilité que le serveur gagne un point, ajustée par la qualité du retourneur.
     Formule de combinaison (Barnett & Clarke) :
         p = f_serveur - g_retourneur + g_moyen
-    où g_moyen = 1 - f_moyen (par surface).
+    où g_moyen = 1 - f_moyen (par CIRCUIT et par surface).
     Vérification : deux joueurs moyens → p = f_moyen (le modèle ne dérive pas).
+    v8.1 : le circuit compte autant que la surface — la moyenne de service WTA
+    est ~8 points sous l'ATP. Utiliser la moyenne masculine pour une joueuse
+    écrasait sa probabilité (hold calculé à 30%, constat du 28/07).
     """
-    f_moyen = BC_SERVE_MOYEN_SURFACE.get(surface, BC_SERVE_MOYEN_SURFACE["autre"])
+    table = BC_SERVE_MOYEN_CIRCUIT.get(str(circuit).lower(), BC_SERVE_MOYEN_CIRCUIT["atp"])
+    f_moyen = table.get(surface, table["autre"])
     g_moyen = 1.0 - f_moyen
     p = serve_pts_won - return_pts_won_adversaire + g_moyen
     return min(max(p, 0.01), 0.99)  # borne de sécurité numérique
@@ -2415,6 +2446,23 @@ def _bc_cle_surface(m):
     return base
 
 
+def _bc_circuit(m):
+    """
+    v8.1 — Détermine le circuit (atp/wta) d'un match. Décisif : les moyennes de
+    service diffèrent de ~8 points entre les deux circuits.
+    Ordre : champ explicite du JSON Gemini → nom du tournoi → défaut ATP.
+    """
+    c = str(m.get("circuit") or m.get("tour") or "").strip().lower()
+    if c in ("wta", "féminin", "feminin", "women", "w"):
+        return "wta"
+    if c in ("atp", "masculin", "men", "m"):
+        return "atp"
+    nom = f"{m.get('tournoi', '')}".lower()
+    if "wta" in nom or "ladies" in nom or "women" in nom or "féminin" in nom:
+        return "wta"
+    return "atp"   # défaut historique
+
+
 def bc_reference_match(m):
     """
     Calcule la probabilité de référence de J1 à partir des stats de surface d'un
@@ -2449,15 +2497,44 @@ def bc_reference_match(m):
                           f"~{attendu:.0%}, mais {hold:.0%} annoncé — stats de surfaces "
                           f"différentes ? Modèle désactivé sur ce match.")
 
-    # PORTIER 3 — échantillon. Moins de 5 matchs sur la surface = du bruit.
+    # PORTIER 3 — échantillon. v8.0.1 : seuil relevé de 5 à 10 matchs.
+    # Constat du 28/07 : Andres Martin (qualifié, 6 matchs sur dur) ressortait
+    # avec de MEILLEURES stats qu'Ugo Humbert (top 30, 18 matchs) → le modèle
+    # donnait Humbert perdant à 38,9% contre un marché à 82%. Six matchs contre
+    # une opposition faible gonflent les pourcentages : c'est du bruit, pas un
+    # signal. La matrice d'analyse par surface prend elle-même 10 matchs comme
+    # cadre de référence minimal.
     for s, nom in ((s1, m.get("joueur1", "J1")), (s2, m.get("joueur2", "J2"))):
         n = _bc_parse_nombre(s.get("echantillon"))
-        if n is not None and n < 5:
+        if n is not None and n < 10:
             return None, f"échantillon trop faible ({nom} : {n:.0f} matchs sur la surface)"
 
     surface = _bc_cle_surface(m)   # v8.0 : distingue dur indoor / extérieur
-    pa = bc_proba_point_service(f1, g2, surface)   # J1 sert contre J2
-    pb = bc_proba_point_service(f2, g1, surface)   # J2 sert contre J1
+    circuit = _bc_circuit(m)       # v8.1 : ATP et WTA n'ont pas les mêmes normes
+    pa = bc_proba_point_service(f1, g2, surface, circuit)   # J1 sert contre J2
+    pb = bc_proba_point_service(f2, g1, surface, circuit)   # J2 sert contre J1
+
+    # PORTIER 4 (v8.0.1) — PLAUSIBILITÉ DE LA SORTIE, pas seulement de l'entrée.
+    # Constat du 28/07 : des stats valides à l'entrée (Bucsa 54% service, dans les
+    # bornes du portier 1) produisaient un hold calculé de 30% et une proba de
+    # match de 4,6% — physiquement impossible chez un professionnel, la norme du
+    # circuit sur dur étant 80-85%. Cause : les moyennes de référence sont
+    # calibrées sur des normes ATP ; appliquées à des stats WTA (service
+    # structurellement plus bas), le modèle écrase la joueuse.
+    # Règle : si le hold calculé tombe plus de 20 points sous la norme basse de
+    # la surface, les données ne sont pas compatibles avec le modèle → il SE TAIT
+    # (fidèle au principe : ne rien inventer plutôt que produire une absurdité).
+    _nc = BC_NORMES_CIRCUIT.get(circuit, BC_NORMES_CIRCUIT["atp"])
+    norme_hold = _nc.get(surface, _nc["dur"])["hold"]
+    seuil_bas = norme_hold[0] - 0.20
+    for p_srv, nom in ((pa, m.get("joueur1", "J1")), (pb, m.get("joueur2", "J2"))):
+        hold_calc = bc_proba_jeu(p_srv)
+        if hold_calc < seuil_bas:
+            return None, (f"hold calculé implausible ({nom} : {hold_calc:.0%} contre une "
+                          f"norme {circuit.upper()}/{surface} de "
+                          f"{norme_hold[0]:.0%}-{norme_hold[1]:.0%}) — stats erronées ou "
+                          f"incompatibles. Modèle désactivé sur ce match.")
+
     proba_j1 = bc_proba_match(pa, pb, best_of=3)
 
     dr1 = bc_dominance_ratio(f1, g1)
@@ -2470,7 +2547,7 @@ def bc_reference_match(m):
                             _bc_parse_pct(s2.get("break_pct")))
     j1, j2 = m.get("joueur1", "J1"), m.get("joueur2", "J2")
     details = (
-        f"Modèle Barnett-Clarke ({surface}) — "
+        f"Modèle Barnett-Clarke ({circuit.upper()}/{surface}) — "
         f"{j1} : {f1:.1%} service / {g1:.1%} retour"
         f"{f' / DR {dr1:.2f}' if dr1 else ''}"
         f"{f' / indice {ic1:.0%}' if ic1 else ''} · "
@@ -4300,13 +4377,14 @@ def _selftest():
         check("B5 DR joueur moyen = 1.00", True)
 
     # ---- B-BIS. GRILLE PAR SURFACE (v8.0) ----
-    # Chaque constante calibrée doit reproduire la norme Hold% du circuit
-    for surf, hold_cible in (("terre", 0.80), ("dur", 0.825),
-                             ("dur_indoor", 0.855), ("gazon", 0.875)):
-        p = BC_SERVE_MOYEN_SURFACE[surf]
-        check(f"B6 calibration {surf} → hold {hold_cible:.1%}",
-              abs(bc_proba_jeu(p) - hold_cible) < 0.005,
-              f"hold obtenu {bc_proba_jeu(p):.3f}")
+    # Validation croisée : le hold ATP impliqué par la moyenne de service réelle
+    # doit tomber dans la fourchette annoncée par la matrice d'analyse.
+    for surf in ("terre", "dur", "dur_indoor", "gazon"):
+        p = BC_SERVE_MOYEN_CIRCUIT["atp"][surf]
+        h = bc_proba_jeu(p)
+        lo, hi = BC_NORMES_SURFACE[surf]["hold"]
+        check(f"B6 hold ATP {surf} dans la norme {lo:.0%}-{hi:.0%}",
+              lo <= h <= hi, f"hold obtenu {h:.1%}")
     # Hiérarchie des surfaces : terre < dur < dur_indoor < gazon
     check("B7 hiérarchie des surfaces",
           BC_SERVE_MOYEN_SURFACE["terre"] < BC_SERVE_MOYEN_SURFACE["dur"]
@@ -4321,6 +4399,31 @@ def _selftest():
     check("B9 dur indoor détecté (flag)", _bc_cle_surface({"surface": "Hard", "indoor": True}) == "dur_indoor")
     check("B10 dur extérieur par défaut",  _bc_cle_surface({"surface": "Hard"}) == "dur")
     check("B11 terre insensible à indoor", _bc_cle_surface({"surface": "Clay", "indoor": True}) == "terre")
+
+    # ---- B-TER. PORTIER 4 : plausibilité de la SORTIE (v8.0.1) ----
+    def _hold_calc(f, g_adv, surf="dur"):
+        return bc_proba_jeu(bc_proba_point_service(f, g_adv, surf))
+    _seuil = BC_NORMES_SURFACE["dur"]["hold"][0] - 0.20
+    check("B12 hold absurde détecté (Bucsa 54%→30%)", _hold_calc(0.540, 0.476) < _seuil)
+    check("B13 hold sain conservé (Fils 65%→83%)",    _hold_calc(0.650, 0.350) > _seuil)
+    check("B14 seuil dur = 60%", abs(_seuil - 0.60) < 1e-9)
+
+    # ---- B-QUATER. CIRCUIT ATP/WTA (v8.1) ----
+    check("B15 écart ATP/WTA entre 6 et 10 pts",
+          all(0.06 < BC_SERVE_MOYEN_CIRCUIT["atp"][s] - BC_SERVE_MOYEN_CIRCUIT["wta"][s] < 0.10
+              for s in ("terre", "dur", "dur_indoor", "gazon")))
+    check("B16 hiérarchie des surfaces en WTA",
+          BC_SERVE_MOYEN_CIRCUIT["wta"]["terre"] < BC_SERVE_MOYEN_CIRCUIT["wta"]["dur"]
+          < BC_SERVE_MOYEN_CIRCUIT["wta"]["dur_indoor"] < BC_SERVE_MOYEN_CIRCUIT["wta"]["gazon"])
+    check("B17 circuit via champ explicite", _bc_circuit({"circuit": "WTA"}) == "wta")
+    check("B18 circuit via nom de tournoi",  _bc_circuit({"tournoi": "WTA Washington"}) == "wta")
+    check("B19 défaut ATP",                  _bc_circuit({"tournoi": "Citi DC Open"}) == "atp")
+    _h_atp = bc_proba_jeu(bc_proba_point_service(0.540, 0.476, "dur", "atp"))
+    _h_wta = bc_proba_jeu(bc_proba_point_service(0.540, 0.476, "dur", "wta"))
+    check("B20 normes WTA relèvent le hold (bug 28/07)", _h_wta - _h_atp > 0.15,
+          f"atp {_h_atp:.1%} · wta {_h_wta:.1%}")
+    check("B21 hold WTA plausible dans son circuit",
+          _h_wta > BC_NORMES_CIRCUIT["wta"]["dur"]["hold"][0] - 0.20)
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
