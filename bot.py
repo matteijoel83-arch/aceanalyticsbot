@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.2"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.4"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -2676,6 +2676,60 @@ def filtrer_json_itf(donnees_json):
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def filtrer_json_matchs_non_confirmes(donnees_json, fixtures, rapid_matchs):
+    """
+    v8.4 — Un match doit être CONFIRMÉ par au moins une source officielle
+    (fixtures OddsPapi ou calendrier RapidAPI). Gemini seul ne suffit pas.
+    Constat du 28/07 : « Aleksandar Vukic vs Zachary Svajda à 03:00 » analysé
+    alors que Vukic jouait en réalité le lendemain contre Musetti — match déjà
+    disputé, ressorti par Gemini avec une heure inventée. Quatre des six matchs
+    inexistants de ce run étaient justement introuvables dans les 269 fixtures
+    OddsPapi : l'absence des sources officielles est un signal fiable.
+    FAIL-OPEN si les deux sources sont vides (mode relais : Gemini est alors la
+    seule source disponible, on ne peut pas tout écarter).
+    """
+    if not fixtures and not rapid_matchs:
+        return donnees_json
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if not matchs:
+        return donnees_json
+
+    # Index des paires de joueurs connues des sources officielles
+    paires = []
+    for f in fixtures or []:
+        p = f.get("participants", {})
+        paires.append((str(p.get("participant1Name", "")), str(p.get("participant2Name", ""))))
+    for r in rapid_matchs or []:
+        paires.append((str(r.get("joueur1", "")), str(r.get("joueur2", ""))))
+
+    gardes, retires = [], []
+    for m in matchs:
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        confirme = False
+        for n1, n2 in paires:
+            direct = (_sim_noms(j1, n1) + _sim_noms(j2, n2)) / 2
+            croise = (_sim_noms(j1, n2) + _sim_noms(j2, n1)) / 2
+            if max(direct, croise) >= 0.70:
+                confirme = True
+                break
+        (gardes if confirme else retires).append(m)
+        if not confirme:
+            logging.warning(f"Match NON CONFIRMÉ par les sources officielles : "
+                            f"'{j1} vs {j2}' ({m.get('tournoi', 'tournoi ?')}, "
+                            f"{m.get('heure_match', '?')}) — probablement inexistant "
+                            f"dans cette fenêtre, écarté.")
+    if retires:
+        logging.info(f"Filtre CONFIRMATION : {len(retires)} match(s) non confirmé(s) "
+                     f"écarté(s), {len(gardes)} gardé(s).")
+        data["matchs"] = gardes
+        return json.dumps(data, ensure_ascii=False, indent=2)
+    return donnees_json
+
+
 def dedupliquer_matchs_json(donnees_json):
     """
     v8.2 — Retire les matchs remontés DEUX FOIS par Gemini sous des orthographes
@@ -2876,7 +2930,7 @@ def completer_cotes_pinnacle(donnees_json, fixtures):
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def _tournoi_dans_liste(nom_tournoi, tournois_actifs):
+def _tournoi_dans_liste(nom_tournoi, tournois_actifs, defaut_si_absent=True):
     """v7.9 : cœur du matching tournoi, factorisé (utilisé par le pré-filtre
     AMONT sur rapid_matchs ET le filtre AVAL sur le JSON Gemini). Matching
     tolérant : accents, noms commerciaux, anglais (ratio ≥ 0.85). nom absent
@@ -2884,7 +2938,13 @@ def _tournoi_dans_liste(nom_tournoi, tournois_actifs):
     import unicodedata
     from difflib import SequenceMatcher
     if not nom_tournoi:
-        return True
+        # v8.3 : le comportement dépend de l'appelant. En AMONT (calendrier
+        # RapidAPI) le nom est toujours présent. En AVAL (JSON Gemini) un nom
+        # absent signifie qu'on ne PEUT PAS vérifier la jouabilité → on exclut.
+        # Constat du 28/07 : 6 matchs inexistants sur Winamax analysés parce que
+        # Gemini n'avait pas renseigné le tournoi et que le filtre laissait
+        # passer par défaut. C'est le retour du bug Galan/Coppejans du 17/07.
+        return defaut_si_absent
     def _norm(txt):
         txt = unicodedata.normalize("NFD", str(txt))
         txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
@@ -2950,7 +3010,14 @@ def filtrer_json_hors_tournois(donnees_json, tournois_actifs):
 
     gardes, retires = [], []
     for m in matchs:
-        if _tournoi_dans_liste(m.get("tournoi", ""), tournois_actifs):
+        _nom_trn = str(m.get("tournoi", "") or "").strip()
+        if not _nom_trn:
+            logging.warning(f"Filtre TOURNOIS : tournoi NON RENSEIGNÉ pour "
+                            f"'{m.get('joueur1')} vs {m.get('joueur2')}' — "
+                            f"jouabilité invérifiable, match écarté (v8.3).")
+            retires.append(m)
+            continue
+        if _tournoi_dans_liste(_nom_trn, tournois_actifs, defaut_si_absent=False):
             gardes.append(m)
         else:
             retires.append(f"{m.get('joueur1','?')} vs {m.get('joueur2','?')} ({m.get('tournoi','?')})")
@@ -3627,6 +3694,8 @@ def run_bot_autonome():
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+    # v8.4 : aucun match analysé sur la seule parole de Gemini
+    donnees_json = filtrer_json_matchs_non_confirmes(donnees_json, fixtures_completes, rapid_matchs_tous)
     # v8.2 : retirer les matchs remontés deux fois (orthographes différentes)
     donnees_json = dedupliquer_matchs_json(donnees_json)
     # Filtre TOURNOIS (v7.6.1) : hors liste Winamax = injouable → retiré avant Claude
@@ -3709,6 +3778,7 @@ def run_bot_autonome():
             s2 = m.get("stats_surface_j2") or {}
             logging.info(
                 f"  [{i}] {m.get('joueur1','?')} vs {m.get('joueur2','?')} "
+                f"| {m.get('tournoi','TOURNOI ABSENT')} "
                 f"| {m.get('heure_match','?')} | {m.get('surface','?')} "
                 f"| Cotes {m.get('cote_j1','?')} / {m.get('cote_j2','?')} "
                 f"| Hold J1: {m.get('hold_pct_j1','?')} / J2: {m.get('hold_pct_j2','?')}"
@@ -4503,6 +4573,21 @@ def _selftest():
                        "stats_surface_j1": {}, "stats_surface_j2": {}}]}
     check("B24 matchs distincts non fusionnés",
           len(json.loads(dedupliquer_matchs_json(json.dumps(_d2)))["matchs"]) == 2)
+
+    # ---- B-SEXIES. CONFIRMATION PAR SOURCE OFFICIELLE (v8.4) ----
+    _fx = [{"participants": {"participant1Name": "Humbert, Ugo", "participant2Name": "Martin, Andres"}}]
+    _rp = [{"joueur1": "Kamil Majchrzak", "joueur2": "Tommy Paul"}]
+    _dc = {"matchs": [
+        {"joueur1": "Ugo Humbert", "joueur2": "Andres Martin"},
+        {"joueur1": "Kamil Majchrzak", "joueur2": "Tommy Paul"},
+        {"joueur1": "Aleksandar Vukic", "joueur2": "Zachary Svajda"},
+    ]}
+    _rc = json.loads(filtrer_json_matchs_non_confirmes(json.dumps(_dc), _fx, _rp))["matchs"]
+    check("B25 match fantôme écarté (Vukic 28/07)", len(_rc) == 2, f"{len(_rc)} gardés")
+    check("B26 confirmé par OddsPapi gardé", any(m["joueur1"] == "Ugo Humbert" for m in _rc))
+    check("B27 confirmé par calendrier gardé", any(m["joueur1"] == "Kamil Majchrzak" for m in _rc))
+    check("B28 mode relais : filtre désactivé si sources vides",
+          len(json.loads(filtrer_json_matchs_non_confirmes(json.dumps(_dc), [], []))["matchs"]) == 3)
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
