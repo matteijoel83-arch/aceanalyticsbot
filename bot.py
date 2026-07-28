@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.1"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.2"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -2676,6 +2676,61 @@ def filtrer_json_itf(donnees_json):
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def dedupliquer_matchs_json(donnees_json):
+    """
+    v8.2 — Retire les matchs remontés DEUX FOIS par Gemini sous des orthographes
+    différentes. Constat du 28/07 : « Martin Damm vs Ben Shelton » et « Martin
+    Damm Jr. vs Ben Shelton » analysés comme deux matchs distincts (stats et
+    probabilité identiques). Risque réel : deux tickets sur le même match, donc
+    une mise doublée à l'insu du parieur — la déduplication existante travaille
+    sur le hash du TICKET, elle ne peut pas voir que ce sont les mêmes joueurs.
+    On garde l'occurrence la plus complète (celle qui a le plus de stats).
+    """
+    try:
+        data = json.loads(donnees_json)
+    except Exception:
+        return donnees_json
+    matchs = data.get("matchs", [])
+    if len(matchs) < 2:
+        return donnees_json
+
+    def _richesse(m):
+        """Nombre de champs de stats réellement renseignés."""
+        n = 0
+        for cle in ("stats_surface_j1", "stats_surface_j2"):
+            for v in (m.get(cle) or {}).values():
+                if v is not None and "non trouv" not in str(v).lower():
+                    n += 1
+        return n
+
+    gardes = []
+    for m in matchs:
+        j1, j2 = m.get("joueur1", ""), m.get("joueur2", "")
+        doublon_de = None
+        for k, g in enumerate(gardes):
+            g1, g2 = g.get("joueur1", ""), g.get("joueur2", "")
+            direct = (_sim_noms(j1, g1) + _sim_noms(j2, g2)) / 2
+            croise = (_sim_noms(j1, g2) + _sim_noms(j2, g1)) / 2
+            if max(direct, croise) >= 0.75:
+                doublon_de = k
+                break
+        if doublon_de is None:
+            gardes.append(m)
+            continue
+        g = gardes[doublon_de]
+        logging.warning(f"Doublon de match retiré : '{j1} vs {j2}' ≡ "
+                        f"'{g.get('joueur1')} vs {g.get('joueur2')}'")
+        if _richesse(m) > _richesse(g):
+            gardes[doublon_de] = m   # on garde la version la mieux documentée
+
+    if len(gardes) != len(matchs):
+        logging.info(f"Déduplication : {len(matchs) - len(gardes)} match(s) en double retiré(s), "
+                     f"{len(gardes)} gardé(s).")
+        data["matchs"] = gardes
+        return json.dumps(data, ensure_ascii=False, indent=2)
+    return donnees_json
+
+
 def filtrer_json_sans_cote(donnees_json):
     """
     Filtre COTES (v7.3) : retire les matchs SANS cote réelle exploitable.
@@ -3572,6 +3627,8 @@ def run_bot_autonome():
     # Filtre DUR déterministe : retirer les matchs hors fenêtre horaire AVANT Claude.
     # Évite que Claude propose un match déjà joué (ex: 09:00 en session SOIR 22:50→05:00).
     donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+    # v8.2 : retirer les matchs remontés deux fois (orthographes différentes)
+    donnees_json = dedupliquer_matchs_json(donnees_json)
     # Filtre TOURNOIS (v7.6.1) : hors liste Winamax = injouable → retiré avant Claude
     donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
     # REPLI PINNACLE (v7.8) : compléter la cote des matchs jouables sans cote Winamax
@@ -3598,6 +3655,7 @@ def run_bot_autonome():
         # Appel SANS calendrier injecté → déclenche la mission spéciale (recherche web)
         donnees_json = collecter_donnees_tennis(date, heure, "", rapid_matchs, heure_fin, tournois_winamax)
         donnees_json = filtrer_json_par_fenetre(donnees_json, heure, heure_fin, date)
+        donnees_json = dedupliquer_matchs_json(donnees_json)   # v8.2
         donnees_json = filtrer_json_hors_tournois(donnees_json, tournois_winamax)
         donnees_json = completer_cotes_pinnacle(donnees_json, fixtures_oddspapi)
         donnees_json = filtrer_json_sans_cote(donnees_json)
@@ -4424,6 +4482,27 @@ def _selftest():
           f"atp {_h_atp:.1%} · wta {_h_wta:.1%}")
     check("B21 hold WTA plausible dans son circuit",
           _h_wta > BC_NORMES_CIRCUIT["wta"]["dur"]["hold"][0] - 0.20)
+
+    # ---- B-QUINQUIES. DÉDUPLICATION DES MATCHS (v8.2) ----
+    _d = {"matchs": [
+        {"joueur1": "Martin Damm", "joueur2": "Ben Shelton",
+         "stats_surface_j1": {"serve_pts_won": "70.4%"}, "stats_surface_j2": {}},
+        {"joueur1": "Trevor Svajda", "joueur2": "Jakub Mensik",
+         "stats_surface_j1": {}, "stats_surface_j2": {}},
+        {"joueur1": "Martin Damm Jr.", "joueur2": "Ben Shelton",
+         "stats_surface_j1": {"serve_pts_won": "70.4%", "return_pts_won": "33.6%"},
+         "stats_surface_j2": {}},
+    ]}
+    _r = json.loads(dedupliquer_matchs_json(json.dumps(_d)))["matchs"]
+    check("B22 doublon 'Damm' / 'Damm Jr.' retiré", len(_r) == 2, f"{len(_r)} matchs")
+    check("B23 version la mieux documentée conservée",
+          any("return_pts_won" in (m.get("stats_surface_j1") or {}) for m in _r))
+    _d2 = {"matchs": [{"joueur1": "A Un", "joueur2": "B Deux",
+                       "stats_surface_j1": {}, "stats_surface_j2": {}},
+                      {"joueur1": "C Trois", "joueur2": "D Quatre",
+                       "stats_surface_j1": {}, "stats_surface_j2": {}}]}
+    check("B24 matchs distincts non fusionnés",
+          len(json.loads(dedupliquer_matchs_json(json.dumps(_d2)))["matchs"]) == 2)
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
