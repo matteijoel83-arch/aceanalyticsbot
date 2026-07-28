@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Ugo Humbert vs Andres Martin\n🏆 <b>COMPÉTITION :</b> Mubadala Citi DC Open (Washington)\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Andres Martin vainqueur (Moneyline)\n📈 <b>COTE :</b> 4.20\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 38.9% → juste 1.64 → réelle 4.20 → delta +2.56 ✅ → Kelly 20% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Martin à 61% (retour 40% vs 36%, break 25% vs 19% sur dur). Le marché surévalue Humbert sur réputation malgré 2 défaites récentes contre Bergs. Value énorme mais cote élevée et 1re confrontation → mise minimale, variance forte.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "28/07/2026",
+    "raison_rejet": "écart modèle-marché +63% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "elevee"
+  }
+]
