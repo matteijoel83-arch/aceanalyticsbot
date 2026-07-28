@@ -12,5 +12,12 @@
     "raison_rejet": "écart modèle-marché +82% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alex Michelsen vs Mackenzie McDonald\n🏆 <b>COMPÉTITION :</b> Mubadala Citi DC Open (Washington)\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Mackenzie McDonald vainqueur (Moneyline)\n📈 <b>COTE :</b> 4.20\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 38% → juste 2.63 → réelle 4.20 → delta +1.57 ✅ → Kelly 11% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle donne McDonald à 38%, marché à 24%. Stats surface très proches (service 63.5% vs 66.1%, break 41.9% vs 41.7%). Michelsen a joué 450min/5 matchs en 7j — charge lourde vs McDonald plus frais. Value réelle mais H2H 0-2 défavorable → mise minimale.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "28/07/2026",
+    "raison_rejet": "écart modèle-marché +60% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
