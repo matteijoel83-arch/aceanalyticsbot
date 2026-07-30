@@ -1,19 +1,5 @@
 [
   {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Brandon Nakashima vs Jakub Mensik\n🏆 <b>COMPÉTITION :</b> Mubadala DC Open (Washington)\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Brandon Nakashima vainqueur\n📈 <b>COTE :</b> 2.2\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 58% → juste 1.72 → réelle 2.20 → delta +0.48 ✅ → Kelly 15% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Nakashima à 58,3% (service 65,5%, hold 83,8% vs 80,9%). Le marché le sous-cote fortement à 2,20. DR et hold supérieurs sur dur. H2H défavorable (0-2) et cote élevée → confiance basse, mise réduite.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
-    "date": "30/07/2026",
-    "marche": "moneyline",
-    "niveau": "elevee",
-    "modele": "opus",
-    "cote": 2.2,
-    "mise_pct": 1.0,
-    "surface": "dur",
-    "pinnacle_ml_ouverture": {
-      "away": 1.763,
-      "home": 2.16
-    }
-  },
-  {
     "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Brandon Nakashima vs Jakub Mensik\n🏆 <b>COMPÉTITION :</b> Mubadala DC Open (Washington)\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Over 2.5 sets (nombre de sets)\n📈 <b>COTE :</b> 2.09\n💰 <b>MISE :</b> 0.5%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 57% estimé → implicite Pinnacle 47,8% → edge +0.09 ✅ → mise fixe 0.5%\n📌 <b>POURQUOI ?</b> Match très serré (modèle 58/42), deux holds solides sur dur (83,8% vs 80,9%), break% faibles (18%/16%). Peu de breaks attendus → forte probabilité d'aller au 3e set. Pinnacle sous-estime l'accroché.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n⚠️ <b>Cote de référence Pinnacle 2.09 — vérifier la cote Winamax avant de jouer</b>",
     "date": "30/07/2026",
     "marche": "over_under",
