@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.4"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.5"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -2980,6 +2980,19 @@ def prefiltrer_rapid_matchs_par_tournoi(rapid_matchs, tournois_actifs):
     if retires:
         logging.info(f"Pré-filtre TOURNOIS (amont Gemini) : {retires} match(s) hors tournois "
                      f"actifs écarté(s), {len(gardes)} envoyé(s) à l'enrichissement.")
+        # v8.5 : nommer les tournois écartés quand RIEN ne passe. Constat du 30/07 :
+        # 108 matchs sur 108 rejetés parce que le nom RapidAPI ("Mubadala DC Open")
+        # ne partage aucun jeton avec la liste ("ATP Washington") → perte de
+        # couverture totale et invisible. Sans ce log, impossible de diagnostiquer.
+        if not gardes and rapid_matchs:
+            _noms = sorted({str(r.get("tournoi", "?")).split(" — ")[0] for r in rapid_matchs})
+            logging.warning(
+                f"Pré-filtre TOURNOIS : AUCUN match retenu sur {len(rapid_matchs)}. "
+                f"Tournois vus : {' · '.join(_noms[:12])}{' …' if len(_noms) > 12 else ''}. "
+                f"Liste active : {' · '.join(tournois_actifs)}. → si l'un de ces tournois "
+                f"est jouable sur Winamax, ajoute un mot distinctif de son nom à "
+                f"tournois_winamax.json."
+            )
     return gardes
 
 
