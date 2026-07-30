@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.5"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.6"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -1547,7 +1547,21 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
     # beaucoup de matchs Wimbledon) déclenche un nouvel essai AVANT de tomber
     # sur le relais limité — ça évite de perdre les 3/4 des matchs.
     derniere_erreur = None
+    # v8.6 — BUDGET TEMPS. Constat du 30/07 : Gemini a renvoyé trois réponses
+    # VIDES d'affilée (77s, puis 252s, puis jamais) et le job GitHub Actions a
+    # été tué au timeout de 30 min — aucune notification, aucun ticket, rien.
+    # Une reprise qui consomme tout le budget est pire qu'un abandon propre :
+    # on préfère rendre la main pour que le run se termine et notifie.
+    _budget_gemini_s = 420          # 7 min maximum pour l'ensemble des tentatives
+    _debut_gemini = time.time()
+
     for tentative in range(1, 4):
+        if time.time() - _debut_gemini > _budget_gemini_s:
+            logging.error(f"Gemini : budget de {_budget_gemini_s // 60} min épuisé après "
+                          f"{tentative - 1} tentative(s) — abandon propre pour laisser le "
+                          f"run se terminer (le relais calendrier prendra la suite).")
+            return '{"matchs": [], "avertissements": "Gemini indisponible (budget temps epuise)."}'
+
         try:
             rep = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
@@ -1585,6 +1599,13 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
         texte = (rep.text or "").strip()
         if not texte:
             derniere_erreur = "réponse Gemini vide (rep.text=None)"
+            # v8.6 : une réponse vide se répète presque toujours (même prompt,
+            # même modèle) et chaque tentative coûte de plus en plus cher.
+            # On s'arrête à 2 essais au lieu de 3.
+            if tentative >= 2:
+                logging.error("Gemini : 2 réponses vides consécutives — abandon "
+                              "(la 3e tentative a fait sauter le timeout le 30/07).")
+                return '{"matchs": [], "avertissements": "Gemini a renvoyé des réponses vides."}'
             logging.warning(f"Gemini réponse vide tentative {tentative}/3 — retry…")
             time.sleep(5)
             continue
