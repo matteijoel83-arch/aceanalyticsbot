@@ -2,14 +2,14 @@
   "version": 2,
   "mesure_depuis": "2026-07-27",
   "_note": "Reset au démarrage de la stratégie v8.0 — analyse par surface intégrée sur 3 couches (collecte Gemini, modèle Barnett-Clarke calibré, grille d'analyse Claude). Les 6 paris antérieurs (1V/5D) sont archivés dans stats_archive_v7_9.json : ils ont été pris SANS la grille de surface, donc non comparables. Jalons : ~50 paris pour le premier yield, ~100 pour le verdict par segment.",
-  "victoires": 2,
+  "victoires": 3,
   "defaites": 1,
   "par_marche": {
     "moneyline": {
-      "v": 1,
+      "v": 2,
       "d": 1,
-      "mise": 3.0,
-      "profit": -0.8
+      "mise": 6.0,
+      "profit": 0.64
     },
     "score_exact": {
       "v": 0,
@@ -40,10 +40,10 @@
   },
   "par_niveau": {
     "elevee": {
-      "v": 1,
+      "v": 2,
       "d": 0,
-      "mise": 1.0,
-      "profit": 1.2
+      "mise": 4.0,
+      "profit": 2.64
     },
     "moderee": {
       "v": 1,
@@ -58,10 +58,10 @@
   },
   "par_modele": {
     "opus": {
-      "v": 2,
+      "v": 3,
       "d": 1,
-      "mise": 3.5,
-      "profit": -0.255
+      "mise": 6.5,
+      "profit": 1.185
     },
     "sonnet": {
       "v": 0,
@@ -78,10 +78,10 @@
       "profit": 0.0
     },
     "dur": {
-      "v": 2,
+      "v": 3,
       "d": 1,
-      "mise": 3.5,
-      "profit": -0.255
+      "mise": 6.5,
+      "profit": 1.185
     },
     "gazon": {
       "v": 0,
@@ -97,7 +97,7 @@
     }
   },
   "roi": {
-    "mise_totale": 3.5,
-    "profit": -0.255
+    "mise_totale": 6.5,
+    "profit": 1.185
   }
 }
