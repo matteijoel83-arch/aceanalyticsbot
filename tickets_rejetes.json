@@ -26,5 +26,12 @@
     "raison_rejet": "delta -0.11 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Benjamin Bonzi vs Yannick Hanfmann\n🏆 <b>COMPÉTITION :</b> National Bank Open - Montreal\n⏰ <b>HEURE :</b> 20:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Yannick Hanfmann vainqueur\n📈 <b>COTE :</b> 1.80\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 78.5% → juste 1.27 → réelle 1.80 → delta +0.53 ✅ → Kelly plafonné\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Hanfmann à 78.5% (hold 90% vs 80.2%, DR 1.19 vs 0.98). Meilleur serveur ET retourneur sur dur. Le marché le sous-cote lourdement à 1.80. Value massive et chiffrée, alignée sur la surface. Prudence : proba plafonnée, confiance MODÉRÉE.\n⚠️ <b>DONNÉES MANQUANTES :</b> Forme récente et H2H (1ère confrontation)",
+    "date": "03/08/2026",
+    "raison_rejet": "écart modèle-marché +41% (données manquantes + survalorisation)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
