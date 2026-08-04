@@ -1,29 +1,5 @@
 [
   {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> James Duckworth vs Christopher O'Connell\n🏆 <b>COMPÉTITION :</b> National Bank Open (Montreal)\n⏰ <b>HEURE :</b> 18:41\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> James Duckworth vainqueur\n📈 <b>COTE :</b> 2.15\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 58% → juste 1.72 → réelle 2.15 → delta +0.43 ✅ → Kelly 15% plafonné\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Duckworth à 62.7% (DR 1.01 vs 0.95, Hold surface 80% vs 78%). Marché l'a en outsider à 2.15 alors qu'il est favori chiffré. H2H 2-0 sur dur et repos complet (112h vs 44h) confirment. Cote plafonnée à 58% par calibration.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
-    "date": "03/08/2026",
-    "marche": "moneyline",
-    "niveau": "moderee",
-    "modele": "opus",
-    "cote": 2.15,
-    "mise_pct": 2.0,
-    "surface": "dur",
-    "pinnacle_ml_ouverture": {
-      "away": 1.724,
-      "home": 2.2
-    }
-  },
-  {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Aleksandar Vukic vs Daniel Altmaier\n🏆 <b>COMPÉTITION :</b> National Bank Open - Montreal\n⏰ <b>HEURE :</b> 20:20\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Aleksandar Vukic vainqueur\n📈 <b>COTE :</b> 1.64\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70.3% → juste 1.42 → réelle 1.64 → delta +0.22 ✅ → Kelly 12%→plafonné 2%\n📌 <b>POURQUOI ?</b> Modèle donne Vukic à 70.3% (hold 88.8% vs 82.3%). Spécialiste dur, mène le H2H 1-0. Altmaier n'a plus joué sur dur depuis mars 2026 et affiche des stats faibles sur cette surface (DR 0.85). Value nette confirmée par les chiffres de surface.\n⚠️ <b>DONNÉES MANQUANTES :</b> Forme récente 5 matchs",
-    "date": "03/08/2026",
-    "marche": "moneyline",
-    "niveau": "moderee",
-    "modele": "opus",
-    "cote": 1.64,
-    "mise_pct": 2.0,
-    "surface": "dur"
-  },
-  {
     "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Sho Shimabukuro vs Marin Cilic\n🏆 <b>COMPÉTITION :</b> National Bank Open - Montreal\n⏰ <b>HEURE :</b> 20:15\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Sho Shimabukuro vainqueur\n📈 <b>COTE :</b> 2.05\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 61% → juste 1.64 → réelle 2.05 → delta +0.41 ✅ → Kelly plafonné\n📌 <b>POURQUOI ?</b> Modèle donne Shimabukuro à 61% (hold 86.7% vs 83.1%, DR 1.11). Meilleur retourneur, échantillon large (63 matchs dur). Cilic manque de rythme après longue absence sélective. Alerte physique sur Cilic → mise réduite et confiance BASSE.\n⚠️ <b>DONNÉES MANQUANTES :</b> Forme récente. Alerte physique Cilic (rythme)",
     "date": "03/08/2026",
     "marche": "moneyline",
