@@ -40,5 +40,12 @@
     "raison_rejet": "écart modèle-marché +69% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alexei Popyrin vs Roman Andres Burruchaga\n🏆 <b>COMPÉTITION :</b> National Bank Open (Montreal)\n⏰ <b>HEURE :</b> 18:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Roman Burruchaga vainqueur\n📈 <b>COTE :</b> 2.4\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 66.7% → juste 1.50 → réelle 2.40 → delta +0.90 ✅ → Kelly 24% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle donne Burruchaga à 76.7% (cote juste 1.30), marché le cote 2.40. DR de 1.06 vs 0.90 pour Popyrin, meilleur hold (81% vs 70%) et retour bien supérieur sur dur. Échantillon Burruchaga limité (10 matchs) → prudence, mise basse.\n⚠️ <b>DONNÉES MANQUANTES :</b> Échantillon dur Burruchaga faible (10 matchs)",
+    "date": "04/08/2026",
+    "raison_rejet": "écart modèle-marché +60% (données manquantes + survalorisation)",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
