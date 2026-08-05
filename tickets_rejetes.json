@@ -47,5 +47,12 @@
     "raison_rejet": "écart modèle-marché +60% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Hubert Hurkacz vs Alejandro Tabilo\n🏆 <b>COMPÉTITION :</b> ATP Montréal (dur)\n⏰ <b>HEURE :</b> 20:15\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alejandro Tabilo (Vainqueur)\n📈 <b>COTE :</b> 2.20\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 65.7% → juste 1.52 → réelle 2.20 → delta +0.68 ✅ → Kelly 30% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Tabilo à 65.7% (DR 1.06 vs 0.95, break% 18.3 vs 7.9). Hurkacz revient d'opération du genou, absent tout juillet, en pleine reprise. Le marché sous-estime Tabilo en confiance sur dur. Mise réduite car alerte physique adverse = variance.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes)",
+    "date": "05/08/2026",
+    "raison_rejet": "écart modèle-marché +45% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
