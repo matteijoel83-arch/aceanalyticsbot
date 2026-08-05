@@ -12,19 +12,5 @@
       "home": 1.621,
       "away": 2.37
     }
-  },
-  {
-    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Flavio Cobolli vs Yannick Hanfmann\n🏆 <b>COMPÉTITION :</b> ATP Montreal\n⏰ <b>HEURE :</b> 01:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Yannick Hanfmann (Vainqueur)\n📈 <b>COTE :</b> 2.15\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 58% → juste 1.72 → réelle 2.15 → delta +0.43 ✅ → Kelly plafonné\n📌 <b>POURQUOI ?</b> Modèle donne Hanfmann 84.9% mais on plafonne à 58% (calibration cote 1.90-2.20). Hanfmann écrase sur dur : serve 68.8% vs 62.6%, hold 89.3% vs 75.6%, DR 1.19 vs 0.93. Cobolli favori sur réputation seule, exposé au service. Value flagrante.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
-    "date": "04/08/2026",
-    "marche": "moneyline",
-    "niveau": "moderee",
-    "modele": "opus",
-    "cote": 2.15,
-    "mise_pct": 2.0,
-    "surface": "dur",
-    "pinnacle_ml_ouverture": {
-      "away": 2.0,
-      "home": 1.854
-    }
   }
 ]
