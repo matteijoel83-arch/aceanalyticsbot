@@ -1,0 +1,16 @@
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Stefanos Tsitsipas vs Joao Fonseca\n🏆 <b>COMPÉTITION :</b> ATP Montreal\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Stefanos Tsitsipas vainqueur\n📈 <b>COTE :</b> 2.20\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 53.4% → juste 1.87 → réelle 2.20 → delta +0.33 ✅ → Kelly 15% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Tsitsipas à 53.4% (serve 67.7%, DR 1.09) alors que le marché le sous-cote à 2.20. Fonseca frais mais Tsitsipas titré récemment et 2 matchs dans les jambes. Cote > 2.20 et H2H défavorable → confiance basse, mise réduite.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes)",
+    "date": "05/08/2026",
+    "marche": "moneyline",
+    "niveau": "basse",
+    "modele": "opus",
+    "cote": 2.2,
+    "mise_pct": 1.0,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 2.13,
+      "away": 1.757
+    }
+  }
+]
