@@ -54,5 +54,12 @@
     "raison_rejet": "écart modèle-marché +45% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Rafael Jodar vs Corentin Moutet\n🏆 <b>COMPÉTITION :</b> ATP Montréal (dur)\n⏰ <b>HEURE :</b> 20:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Rafael Jodar (Vainqueur)\n📈 <b>COTE :</b> 1.32\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.32 → delta -0.01... plafond appliqué\n📌 <b>POURQUOI ?</b> Modèle donne Jodar 83.3% mais calibration cote<1.50 plafonne à 75% (juste 1.33). Delta quasi nul, pas de value réelle.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH — Correction : le ticket Jodar est abandonné (delta négatif après plafond calibration 75%, cote 1.32 trop basse). Seul Tabilo présente une value nette contre le modèle Barnett-Clarke (2.20 vs juste 1.52), retenu en mise BASSE 1% vu l'alerte genou Hurkacz. Collignon (juste 1.30/réelle 1.56) et Zverev (juste 1.22/réelle 1.14) sans edge exploitable.",
+    "date": "05/08/2026",
+    "raison_rejet": "delta -0.01 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
