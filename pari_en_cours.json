@@ -12,5 +12,18 @@
       "away": 1.909,
       "home": 1.98
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Luciano Darderi vs Juncheng Shang\n🏆 <b>COMPÉTITION :</b> ATP Montréal\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Over 22.5 jeux (nombre de jeux)\n📈 <b>COTE :</b> Référence Pinnacle 1.917 — vérifier la cote Winamax avant de jouer\n💰 <b>MISE :</b> 0.5%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 58% → implicite Pinnacle 52.2% → edge +0.058 ✅\n📌 <b>POURQUOI ?</b> Deux gros serveurs sur dur : hold 74.8% Darderi et 82.8% Shang. Peu de breaks attendus (break% 18.7% et 16.7%), match accroché probable au-delà de 22.5 jeux. Shang revient de blessure → prudence mais son service tient.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune majeure\n\nNote : le match Darderi/Shang comporte une alerte physique (retour de blessure Shang, absence >2 mois). L'absence récente de Shang (fév-juillet 2026) dépasse 2 mois → filtre skip s'applique normalement. Je retire ce ticket par cohérence avec le filtre absence >2 mois.\n\n🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE (CORRECTION)</b> 🎾\nSeul le ticket Gibson est retenu. Darderi/Shang écarté (absence Shang >2 mois → skip).",
+    "date": "06/08/2026",
+    "marche": "over_under",
+    "niveau": "basse",
+    "modele": "opus",
+    "mise_pct": 0.5,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "away": 1.854,
+      "home": 2.04
+    }
   }
 ]
