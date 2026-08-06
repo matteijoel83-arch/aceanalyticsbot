@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.6"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.7"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -3972,6 +3972,29 @@ def run_bot_autonome():
             if any(sig in t_lower for sig in ["abandon de ce ticket", "ticket abandonné",
                                                "kelly 0%", "mise : 0%", "mise 0%"]):
                 return False, "abandon explicite dans le texte"
+
+            # v8.7 — AUTO-RÉTRACTATION. Constat du 06/08 : Claude a rédigé le
+            # ticket Darderi/Shang PUIS s'est corrigé dans la même réponse
+            # (« l'absence de Shang dépasse 2 mois → filtre skip s'applique.
+            # Je retire ce ticket. […] Seul le ticket Gibson est retenu »).
+            # Le code a découpé la réponse et envoyé les DEUX tickets, dont
+            # celui que Claude venait d'annuler — pari invalide publié et
+            # inscrit dans pari_en_cours.json. Quand l'analyste se dédit, sa
+            # rétractation prime sur le ticket qu'elle annule.
+            _retractations = [
+                "je retire ce ticket", "je retire donc ce ticket",
+                "ce ticket est retiré", "ticket retiré", "ticket écarté",
+                "j'écarte ce ticket", "je l'écarte", "n'est pas retenu",
+                "ne doit pas être envoyé", "j'annule ce ticket",
+                "ticket annulé", "(correction)", "→ skip", "-> skip",
+                "filtre skip s'applique", "par cohérence avec le filtre",
+            ]
+            _trouve = next((r for r in _retractations if r in t_lower), None)
+            if _trouve:
+                logging.warning(f"Ticket rejeté — AUTO-RÉTRACTATION de l'analyste "
+                                f"détectée (« {_trouve} »). Le ticket est annulé "
+                                f"par son propre auteur.")
+                return False, f"auto-rétractation de l'analyste (« {_trouve} »)"
             # Rejeter les cotes inventées/estimées — SAUF référence Pinnacle assumée
             # (marchés alternatifs : "cote de référence pinnacle" est légitime)
             est_ref_pinnacle = "référence pinnacle" in t_lower or "reference pinnacle" in t_lower
@@ -4622,6 +4645,24 @@ def _selftest():
     check("B27 confirmé par calendrier gardé", any(m["joueur1"] == "Kamil Majchrzak" for m in _rc))
     check("B28 mode relais : filtre désactivé si sources vides",
           len(json.loads(filtrer_json_matchs_non_confirmes(json.dumps(_dc), [], []))["matchs"]) == 3)
+
+    # ---- B-SEPTIES. AUTO-RÉTRACTATION (v8.7) ----
+    def _est_retracte(txt):
+        tl = txt.lower()
+        return any(r in tl for r in [
+            "je retire ce ticket", "je retire donc ce ticket", "ce ticket est retiré",
+            "ticket retiré", "ticket écarté", "j'écarte ce ticket", "je l'écarte",
+            "n'est pas retenu", "ne doit pas être envoyé", "j'annule ce ticket",
+            "ticket annulé", "(correction)", "→ skip", "-> skip",
+            "filtre skip s'applique", "par cohérence avec le filtre"])
+    _cas_reel = ("PRONO : Over 22.5 jeux\nCOTE : Référence Pinnacle 1.917\n"
+                 "Note : l'absence de Shang dépasse 2 mois → filtre skip s'applique "
+                 "normalement. Je retire ce ticket par cohérence avec le filtre absence.")
+    check("B29 auto-rétractation détectée (cas Darderi 06/08)", _est_retracte(_cas_reel))
+    check("B30 ticket normal non impacté",
+          not _est_retracte("PRONO : Talia Gibson (Vainqueur)\nCOTE : 2.0\nMISE : 1%\n"
+                            "POURQUOI ? Hold supérieur sur dur, value nette."))
+    check("B31 mention 'correction' captée", _est_retracte("PRONOSTIC SIMPLE (CORRECTION)"))
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
