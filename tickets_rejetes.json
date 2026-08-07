@@ -61,5 +61,12 @@
     "raison_rejet": "delta -0.01 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Daniel Merida Aguilar vs Alex Michelsen\n🏆 <b>COMPÉTITION :</b> National Bank Open (Montreal)\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alex Michelsen vainqueur\n📈 <b>COTE :</b> 1.35\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 62.1% → juste 1.61 → réelle 1.35 → delta -0.26 ❌\n📌 <b>POURQUOI ?</b> Modèle donne Michelsen 62.1% (cote juste 1.61), mais cote réelle 1.35 largement en-dessous. Aucune value.\n\nAUCUN_MATCH — Michelsen favori solide sur dur (hold 82.3% vs 68.1%, DR supérieur) mais cote 1.35 très en-deçà de sa juste valeur modèle (1.61), delta négatif. Griekspoor 61.3% au modèle pour cote 1.56 = delta insuffisant (+0.07 requis, juste atteint mais Arnaldi guerrier + variance limite la confiance). Jović et Rybakina : stats surface incomplètes → règle anti-surestimation, alignement marché. Cotes trop basses ou données manquantes aujourd'hui.",
+    "date": "07/08/2026",
+    "raison_rejet": "delta -0.26 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
