@@ -75,5 +75,12 @@
     "raison_rejet": "écart modèle-marché +40% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Zizou Bergs vs Ben Shelton\n🏆 <b>COMPÉTITION :</b> National Bank Open - Montreal\n⏰ <b>HEURE :</b> 19:40\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Ben Shelton vainqueur\n📈 <b>COTE :</b> 1.32\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 73% → juste 1.37 → réelle 1.32 → delta -0.05 ❌\n📌 <b>POURQUOI ?</b> ABANDON — pas de value.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nCorrection : ce second ticket ne respecte pas le delta requis, il est retiré.\n\nSeul le pari validé ci-dessus (Botic Van De Zandschulp) est conservé.",
+    "date": "07/08/2026",
+    "raison_rejet": "delta -0.05 < seuil 0.07",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
