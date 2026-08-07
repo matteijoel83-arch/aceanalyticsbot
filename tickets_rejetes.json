@@ -68,5 +68,12 @@
     "raison_rejet": "delta -0.26 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Botic Van De Zandschulp vs Hubert Hurkacz\n🏆 <b>COMPÉTITION :</b> National Bank Open - Montreal\n⏰ <b>HEURE :</b> 19:40\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Botic Van De Zandschulp vainqueur\n📈 <b>COTE :</b> 2.7\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 52% → juste 1.92 → réelle 2.70 → delta +0.78 ✅ → Kelly 15% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Botic à 65.5% (cote juste 1.53) grâce à un DR 1.05 supérieur et un meilleur retour (36.1% vs 30.1%). Hurkacz revient de blessure au genou avec seulement 13 matchs d'échantillon sur dur. Plafond calibration cote>2.20 = 52% appliqué. Grosse value marché.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes pour les deux)",
+    "date": "07/08/2026",
+    "raison_rejet": "écart modèle-marché +40% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
