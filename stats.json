@@ -2,14 +2,14 @@
   "version": 2,
   "mesure_depuis": "2026-07-27",
   "_note": "Reset au démarrage de la stratégie v8.0 — analyse par surface intégrée sur 3 couches (collecte Gemini, modèle Barnett-Clarke calibré, grille d'analyse Claude). Les 6 paris antérieurs (1V/5D) sont archivés dans stats_archive_v7_9.json. Correction du 07/08 : retrait du ticket Darderi/Shang (Over 22.5 jeux, 06/08) — Claude l'avait rétracté dans sa propre réponse mais le code l'avait envoyé quand même (corrigé en v8.7). Il avait été compté en victoire, sans mise ni profit (cote au format texte non parsée). Jalons : ~50 paris pour le premier yield, ~100 pour le verdict par segment.",
-  "victoires": 5,
+  "victoires": 6,
   "defaites": 7,
   "par_marche": {
     "moneyline": {
-      "v": 4,
+      "v": 5,
       "d": 7,
-      "mise": 17.0,
-      "profit": -1.76
+      "mise": 19.0,
+      "profit": -0.6
     },
     "score_exact": {
       "v": 0,
@@ -46,10 +46,10 @@
       "profit": 2.64
     },
     "moderee": {
-      "v": 3,
+      "v": 4,
       "d": 2,
-      "mise": 8.5,
-      "profit": 1.145
+      "mise": 10.5,
+      "profit": 2.305
     },
     "basse": {
       "v": 0,
@@ -66,10 +66,10 @@
       "profit": -1.215
     },
     "sonnet": {
-      "v": 0,
+      "v": 1,
       "d": 0,
-      "mise": 0.0,
-      "profit": 0.0
+      "mise": 2.0,
+      "profit": 1.16
     }
   },
   "par_surface": {
@@ -80,10 +80,10 @@
       "profit": 0.0
     },
     "dur": {
-      "v": 5,
+      "v": 6,
       "d": 7,
-      "mise": 17.5,
-      "profit": -1.215
+      "mise": 19.5,
+      "profit": -0.055
     },
     "gazon": {
       "v": 0,
@@ -99,7 +99,7 @@
     }
   },
   "roi": {
-    "mise_totale": 17.5,
-    "profit": -1.215
+    "mise_totale": 19.5,
+    "profit": -0.055
   }
 }
