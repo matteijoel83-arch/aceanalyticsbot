@@ -12,5 +12,19 @@
       "home": 1.74,
       "away": 2.2
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCH :</b> Nuno Borges vs Luciano Darderi\n🏆 <b>COMPÉTITION :</b> National Bank Open — Montreal (ATP, Dur extérieur)\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Under 2.5 sets — Victoire en 2 sets secs (référence Pinnacle)\n📈 <b>COTE :</b> 1.689 Pinnacle — <b>vérifier la cote Winamax avant de jouer</b>\n💰 <b>MISE :</b> 0.5% (phase test segment)\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> Proba Under estimée : 65% → Proba implicite Pinnacle : 59.2% (1/1.689) → edge +5.8%... ⚠️ edge < 0.06 → abandon\n📌 <b>POURQUOI ?</b> Edge insuffisant contre un book sharp (5.8% < 6% requis). Malgré la nette supériorité de Borges sur dur (Hold 86% vs 72.8%), l'écart de Hold% suggère des breaks probables mais Pinnacle est déjà sharp sur ce marché. Abandon du ticket alternatif — le Moneyline couvre l'analyse.\n⚠️ <b>DONNÉES MANQUANTES :</b> Stats service/retour Borges sur dur\n\n**TICKET ALTERNATIF ABANDONNÉ — SEUL LE MONEYLINE EST VALIDÉ**",
+    "date": "08/08/2026",
+    "marche": "over_under",
+    "niveau": "moderee",
+    "modele": "sonnet",
+    "cote": 1.689,
+    "mise_pct": 0.5,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.74,
+      "away": 2.2
+    }
   }
 ]
