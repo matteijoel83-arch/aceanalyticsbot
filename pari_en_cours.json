@@ -12,5 +12,15 @@
       "home": 1.74,
       "away": 2.2
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Jessica Pegula vs Diana Shnaider\n🏆 <b>COMPÉTITION :</b> National Bank Open - Toronto\n⏰ <b>HEURE :</b> 19:45\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Jessica Pegula (Vainqueur)\n📈 <b>COTE :</b> 1.38\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 62.6% → juste 1.60 → réelle 1.38... delta insuffisant\n📌 <b>POURQUOI ?</b> Le modèle donne 62.6% (cote juste 1.60), la cote réelle 1.38 est en-dessous → aucun edge. Annulé.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "08/08/2026",
+    "marche": "moneyline",
+    "niveau": "elevee",
+    "modele": "opus",
+    "cote": 1.38,
+    "mise_pct": 3.0,
+    "surface": "dur"
   }
 ]
