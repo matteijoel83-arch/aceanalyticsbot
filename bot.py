@@ -95,7 +95,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.7"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.8"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -3988,6 +3988,12 @@ def run_bot_autonome():
                 "ne doit pas être envoyé", "j'annule ce ticket",
                 "ticket annulé", "(correction)", "→ skip", "-> skip",
                 "filtre skip s'applique", "par cohérence avec le filtre",
+                # v8.8 — cas du 08/08 (Pegula) : Claude a rédigé le ticket, calculé
+                # l'absence de value et conclu « delta insuffisant … aucun edge.
+                # Annulé. » — sans employer aucune des formules ci-dessus.
+                "delta insuffisant", "aucun edge", "pas d'edge", "edge insuffisant",
+                "aucune value", "pas de value", "value insuffisante",
+                "annulé.", "annulé\n", "abandonné.", "→ abandon", "-> abandon",
             ]
             _trouve = next((r for r in _retractations if r in t_lower), None)
             if _trouve:
@@ -4016,6 +4022,18 @@ def run_bot_autonome():
                     return False, f"hors fenêtre horaire ({hm})"
             # Extraire le delta de la ligne VALUE : "delta +0.07" ou "delta -0.05"
             m = re.search(r"delta\s*([+-]?\d+[.,]\d+)", t_lower)
+            if not m and "pinnacle" not in t_lower:
+                # v8.8 — FAIL-CLOSED. Constat du 08/08 : Claude a écrit « delta
+                # insuffisant » au lieu d'un nombre ; la regex n'a rien trouvé et
+                # le garde-fou le PLUS IMPORTANT a été purement sauté — un ticket
+                # sans aucune value est parti (Pegula à 1.38 pour une cote juste
+                # de 1.60). Un delta illisible n'est pas un delta valide.
+                # (Exception : marchés alternatifs Pinnacle, qui raisonnent en
+                # edge et non en delta de cote.)
+                logging.warning("Ticket rejeté — DELTA ILLISIBLE : aucune valeur "
+                                "chiffrée trouvée dans la ligne VALUE. Le contrôle "
+                                "de value ne peut pas s'appliquer → refus par sécurité.")
+                return False, "delta illisible (aucune valeur chiffrée)"
             if m:
                 delta = float(m.group(1).replace(",", "."))
                 # SEUIL ADAPTATIF selon la cote (cohérent avec le prompt Claude) :
@@ -4663,6 +4681,20 @@ def _selftest():
           not _est_retracte("PRONO : Talia Gibson (Vainqueur)\nCOTE : 2.0\nMISE : 1%\n"
                             "POURQUOI ? Hold supérieur sur dur, value nette."))
     check("B31 mention 'correction' captée", _est_retracte("PRONOSTIC SIMPLE (CORRECTION)"))
+
+    # ---- B-OCTIES. TICKET SANS VALUE (v8.8, cas Pegula 08/08) ----
+    _pegula = ("PRONO : Jessica Pegula (Vainqueur)\nCOTE : 1.38\nMISE : 3%\n"
+               "VALUE : 62.6% → juste 1.60 → réelle 1.38... delta insuffisant\n"
+               "POURQUOI ? Le modèle donne 62.6% (cote juste 1.60), la cote réelle "
+               "1.38 est en-dessous → aucun edge. Annulé.")
+    _tl = _pegula.lower()
+    check("B32 rétractation 'delta insuffisant' captée", "delta insuffisant" in _tl)
+    check("B33 rétractation 'aucun edge' captée", "aucun edge" in _tl)
+    check("B34 delta non chiffré → illisible",
+          re.search(r"delta\s*([+-]?\d+[.,]\d+)", _tl) is None)
+    _ok_delta = "value : 62.6% → juste 1.60 → réelle 2.10 → delta +0.50"
+    check("B35 delta chiffré toujours lu",
+          re.search(r"delta\s*([+-]?\d+[.,]\d+)", _ok_delta).group(1) == "+0.50")
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
