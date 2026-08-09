@@ -80,7 +80,24 @@ if MISSING:
     sys.exit(1)
 
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if anthropic else None
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if genai else None
+# v8.9 — DÉLAI MAXIMAL PAR APPEL (300 s). Constat du 09/08 : le budget temps
+# de la v8.6 ne se vérifie qu'ENTRE deux tentatives — il ne peut pas interrompre
+# un appel en cours. Ce jour-là le 2e appel Gemini est resté suspendu 25 minutes
+# ("Server disconnected without sending a response") et le job a été tué au
+# timeout de 30 min. Sans délai côté client, aucune logique de reprise ne peut
+# reprendre la main. 300 s couvre largement les appels normaux (77 à 150 s
+# observés) tout en coupant les blocages.
+GEMINI_TIMEOUT_MS = 300_000
+gemini_client = None
+if genai:
+    try:
+        gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
+        )
+    except Exception:
+        # SDK plus ancien sans HttpOptions → client standard (comportement d'avant)
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 CLAUDE_SONNET  = "claude-sonnet-4-6"   # Sessions légères < 3 matchs
 CLAUDE_OPUS    = "claude-opus-4-8"     # Sessions riches ≥ 3 matchs (CORRIGÉ v7.2)
@@ -95,7 +112,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.8"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "8.9"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -1552,11 +1569,14 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
     # été tué au timeout de 30 min — aucune notification, aucun ticket, rien.
     # Une reprise qui consomme tout le budget est pire qu'un abandon propre :
     # on préfère rendre la main pour que le run se termine et notifie.
-    _budget_gemini_s = 420          # 7 min maximum pour l'ensemble des tentatives
+    _budget_gemini_s = 660          # 11 min : deux appels de 5 min max + marges
     _debut_gemini = time.time()
 
     for tentative in range(1, 4):
-        if time.time() - _debut_gemini > _budget_gemini_s:
+        # v8.9 : on n'entame une tentative que s'il reste de quoi la mener à son
+        # terme (durée max d'un appel = GEMINI_TIMEOUT_MS). Sinon on s'arrête net.
+        _ecoule = time.time() - _debut_gemini
+        if _ecoule + (GEMINI_TIMEOUT_MS / 1000) > _budget_gemini_s:
             logging.error(f"Gemini : budget de {_budget_gemini_s // 60} min épuisé après "
                           f"{tentative - 1} tentative(s) — abandon propre pour laisser le "
                           f"run se terminer (le relais calendrier prendra la suite).")
