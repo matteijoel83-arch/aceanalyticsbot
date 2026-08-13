@@ -61,6 +61,10 @@ ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY")
 GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
+# v9.0 — alertes techniques en PRIVÉ. Si le secret TELEGRAM_ADMIN_ID est défini,
+# les alertes de crédits/quotas y sont envoyées (message privé) au lieu du canal
+# public. Sinon repli sur le canal — le bot reste fonctionnel sans ce secret.
+TELEGRAM_ADMIN_ID = os.environ.get("TELEGRAM_ADMIN_ID") or TELEGRAM_CHANNEL_ID
 GITHUB_TOKEN        = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO         = os.environ.get("GITHUB_REPO")
 ODDS_API_KEY        = os.environ.get("ODDS_API_KEY")    # Optionnel
@@ -112,7 +116,7 @@ SEUIL_OPUS     = 3                     # Nb matchs minimum pour basculer sur Opu
 #   "observation" : récupère et LOGUE les cotes OddsPapi mais NE PARIE PAS
 #                   (pour valider le format réel de la réponse via les logs)
 #   "actif"       : génère de vrais tickets sur les marchés alternatifs
-VERSION = "8.9"   # affichée au démarrage de chaque run — fin des doutes de version
+VERSION = "9.0"   # affichée au démarrage de chaque run — fin des doutes de version
 
 MARCHES_ALT_MODE = "actif"   # ← "actif" depuis le 10/07/2026 (observation validée : format Pinnacle confirmé, Patch B OK)
 
@@ -608,6 +612,69 @@ def _envoyer_notification_sans_ticket(raison, session=""):
         logging.info(f"Notification sans ticket envoyée — {label}.")
     else:
         logging.error(f"❌ Notification sans ticket NON délivrée — {label}.")
+
+
+def _alerter_credits_epuises(service, detail=""):
+    """
+    v9.0 — Alerte PRIVÉE quand une API tombe à court de crédits ou de quota.
+    Constat du 13/08 : Gemini à court de crédits ('prepayment credits are
+    depleted') → le run se termine par une notification banale « sans ticket »,
+    et rien ne signale que la cause est un problème de facturation. Le bot est
+    aveugle pendant des jours sans qu'on le sache.
+    Anti-spam : une seule alerte par service et par jour (marqueur sur GitHub),
+    sinon 3 sessions quotidiennes = 3 alertes identiques.
+    """
+    jour = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+    try:
+        etat, sha = _gh_get("alertes_envoyees.json")
+    except Exception:
+        etat, sha = None, None
+    if not isinstance(etat, dict):
+        etat, sha = {}, sha
+    if etat.get(service) == jour:
+        logging.info(f"Alerte crédits {service} : déjà envoyée aujourd'hui, pas de doublon.")
+        return
+
+    liens = {
+        "Gemini":    "https://ai.studio/projects (Billing)",
+        "Claude":    "https://console.anthropic.com (Plans & Billing)",
+        "RapidAPI":  "https://rapidapi.com/developer/billing",
+        "OddsPapi":  "https://oddspapi.io (compte direct)",
+        "Odds API":  "https://the-odds-api.com (compte)",
+    }
+    texte = (
+        f"🔴 <b>ACEANALYTICS — CRÉDITS ÉPUISÉS</b>\n\n"
+        f"Service concerné : <b>{service}</b>\n"
+        f"{('Détail : ' + detail[:200] + chr(10)) if detail else ''}"
+        f"\n⚠️ Le bot tourne en mode dégradé — il ne pourra pas produire de "
+        f"pronostic tant que ce service n'est pas rechargé.\n\n"
+        f"👉 Recharger ici : {liens.get(service, 'compte du service')}\n\n"
+        f"<i>Alerte envoyée une seule fois par jour et par service.</i>"
+    )
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_ADMIN_ID, "text": texte, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        logging.warning(f"🔴 Alerte crédits {service} envoyée en privé.")
+        etat[service] = jour
+        _gh_put("alertes_envoyees.json", etat, f"🔴 Alerte crédits {service}", sha=sha)
+    except Exception as e:
+        logging.error(f"Alerte crédits {service} NON envoyée : {e}")
+
+
+def _est_panne_credits(message):
+    """Reconnaît une panne de crédits/quota dans un message d'erreur d'API."""
+    m = str(message).lower()
+    signaux = [
+        "resource_exhausted", "credits are depleted", "prepayment credits",
+        "quota exceeded", "insufficient_quota", "insufficient credit",
+        "billing", "payment required", "credit balance is too low",
+        "exceeded your current quota", "out of credits",
+    ]
+    return any(s in m for s in signaux)
 
 
 def _alerter_telegram_erreur(msg):
@@ -1612,6 +1679,8 @@ Champ introuvable → "non trouvé". JSON valide, sans backticks.
                 continue
             else:
                 logging.error(f"Erreur Gemini non-transitoire : {e}")
+                if _est_panne_credits(e):      # v9.0 : alerte privée
+                    _alerter_credits_epuises("Gemini", str(e))
                 return '{"matchs": [], "avertissements": "Erreur Gemini."}'
 
         # Réponse reçue → parser (avec réparation si légèrement malformé)
@@ -4330,7 +4399,15 @@ def run_bot_autonome():
 
     except Exception as e:
         logging.error(f"Erreur critique : {e}", exc_info=True)
-        _alerter_telegram_erreur(f"bot.py a planté : {e}")
+        # v9.0 : distinguer une panne de crédits d'un vrai plantage — le message
+        # d'alerte n'est pas le même et l'action à mener non plus.
+        if _est_panne_credits(e):
+            _service = ("Claude" if "anthropic" in str(e).lower() else
+                        "Gemini" if "gemini" in str(e).lower() or "generativelanguage" in str(e).lower() else
+                        "RapidAPI" if "rapidapi" in str(e).lower() else "une API")
+            _alerter_credits_epuises(_service, str(e))
+        else:
+            _alerter_telegram_erreur(f"bot.py a planté : {e}")
     finally:
         _quota_persister()
         logging.info(f"Terminé en {time.time() - debut:.1f}s.")
@@ -4715,6 +4792,19 @@ def _selftest():
     _ok_delta = "value : 62.6% → juste 1.60 → réelle 2.10 → delta +0.50"
     check("B35 delta chiffré toujours lu",
           re.search(r"delta\s*([+-]?\d+[.,]\d+)", _ok_delta).group(1) == "+0.50")
+
+    # ---- B-NONIES. ALERTE CRÉDITS ÉPUISÉS (v9.0) ----
+    _msg_gemini = ("429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': "
+                   "'Your prepayment credits are depleted. Please go to AI Studio'}}")
+    check("B36 panne Gemini détectée (cas 13/08)", _est_panne_credits(_msg_gemini))
+    check("B37 panne Claude détectée",
+          _est_panne_credits("Error 400: Your credit balance is too low to access the API"))
+    check("B38 quota RapidAPI détecté",
+          _est_panne_credits("You have exceeded your current quota for this month"))
+    check("B39 erreur réseau NON confondue",
+          not _est_panne_credits("Server disconnected without sending a response"))
+    check("B40 429 de débit NON confondu",
+          not _est_panne_credits("429 Client Error: Too Many Requests for url: odds-api1"))
 
     # ---- C. PARSEUR (bug '60% ou non trouvé' du 20/07) ----
     check("C1 '60.3% ou non trouvé'→0.603", abs(_bc_parse_pct("60.3% ou non trouvé") - 0.603) < 1e-9)
