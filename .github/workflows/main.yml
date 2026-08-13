@@ -24,6 +24,11 @@ jobs:
       GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      # v9.0 : identifiant Telegram PERSONNEL — les alertes techniques (crédits
+      # API épuisés) y sont envoyées en privé au lieu du canal public.
+      # Prérequis : avoir envoyé /start au bot depuis ce compte, sinon Telegram
+      # refuse l'envoi. Sans ce secret, les alertes partent sur le canal.
+      TELEGRAM_ADMIN_ID:   ${{ secrets.TELEGRAM_ADMIN_ID }}
       GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPO:         ${{ github.repository }}
       ODDS_API_KEY:        ${{ secrets.ODDS_API_KEY }}
