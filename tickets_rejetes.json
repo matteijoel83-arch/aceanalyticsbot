@@ -82,5 +82,12 @@
     "raison_rejet": "delta -0.05 < seuil 0.07",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Taylor Fritz vs Alex Michelsen\n🏆 <b>COMPÉTITION :</b> Cincinnati Open\n⏰ <b>HEURE :</b> 19:45\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Taylor Fritz vainqueur\n📈 <b>COTE :</b> 1.56\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 61.3% → juste 1.63 → réelle 1.56 → delta -0.07 ❌\n📌 <b>POURQUOI ?</b> Modèle donne Fritz 61.3% (cote juste 1.63) mais réelle 1.56 → pas de value. Delta négatif.\n\nAprès vérification ce ticket ne passe pas. Je corrige :\n\nAUCUN_MATCH — Fritz favori solide (modèle 61.3%, hold 89% dur) mais cote 1.56 sous la juste 1.63 → delta -0.07, aucune value. Borges vs Cerundolo : modèle donne Cerundolo 56% alors que Winamax le met outsider à 2.05 — value théorique mais stats surface fragiles (Cerundolo hold 74.8% médiocre) et j'ai trop de doute contre le marché. Nakashima favori mais fatigue énorme (600min/7j) casse la confiance. Cotes trop serrées ou risquées aujourd'hui.",
+    "date": "16/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
