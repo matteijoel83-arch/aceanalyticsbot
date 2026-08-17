@@ -89,5 +89,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Thiago Agustin Tirante vs Martin Landaluce\n🏆 <b>COMPÉTITION :</b> ATP Cincinnati\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Tirante vainqueur (Moneyline)\n📈 <b>COTE :</b> 1.74\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 55.7% → juste 1.80 → réelle 1.74 → delta -0.06 ❌\n📌 <b>POURQUOI ?</b> Modèle donne 55.7% (cote juste 1.80) mais Winamax propose 1.74 → pas de value.\n\nAUCUN_MATCH — Le modèle Barnett-Clarke ne dégage aucun edge suffisant aujourd'hui. Tirante (55.7%, juste 1.80) est sous-coté à 1.74. Blockx (59.1%, juste 1.69) coté 1.82 semblait intéressant mais delta +0.13 dépasse le raisonnable vu l'échantillon faible (15 matchs) et match ultra-serré. Sur les gros favoris (Swiatek 1.13, Rybakina 1.14, Shnaider 1.24), le modèle confirme les cotes sans marge. Sets/jeux serrés (Parry, Cirstea) : edges insuffisants contre Pinnacle. Aucun pari validé.",
+    "date": "17/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucun edge »)",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
