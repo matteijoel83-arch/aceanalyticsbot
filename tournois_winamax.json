@@ -1,11 +1,7 @@
 {
-  "_commentaire": "⚠️ FILTRE DUR : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. RÈGLE (leçon du 30/07) : lister TOUJOURS le nom Winamax ET le nom officiel/commercial du tournoi — les API nomment Washington 'Mubadala DC Open' sans le mot 'Washington', ce qui avait fait écarter 108 matchs sur 108. Relève cette liste sur l'app Winamax chaque lundi.",
-  "_maj": "2026-08-10 — Cincinnati entre (ATP Masters 1000 + WTA 1000, nom officiel 'Cincinnati Open', ex-Western & Southern Open). Montréal et Toronto conservés jusqu'aux finales. ⚠️ Les QUALIFICATIONS de Cincinnati sont proposées par Winamax mais volontairement EXCLUES : joueurs hors top 100, stats de surface quasi inexistantes sur 52 semaines → modèle silencieux et profil de pari BASSE (segment à 0V/5D). Fin août : réajouter 'US Open'.",
+  "_commentaire": "⚠️ FILTRE DUR : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. RÈGLE (leçon du 30/07) : lister TOUJOURS le nom Winamax ET le nom officiel/commercial du tournoi. Relève cette liste sur l'app Winamax chaque lundi.",
+  "_maj": "2026-08-17 — Montréal et Toronto terminés, retirés. Seul Cincinnati reste actif cette semaine (ATP Masters 1000 + WTA 1000). Fin août : réajouter 'US Open' + qualifs Grand Chelem.",
   "tournois_actifs": [
-    "ATP Montreal",
-    "WTA Toronto",
-    "National Bank Open",
-    "Omnium Banque Nationale",
     "ATP Cincinnati",
     "WTA Cincinnati",
     "Cincinnati Open",
