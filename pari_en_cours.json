@@ -1,0 +1,16 @@
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Andrey Rublev vs Nuno Borges\n🏆 <b>COMPÉTITION :</b> Cincinnati Open (ATP)\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Andrey Rublev vainqueur\n📈 <b>COTE :</b> 1.62\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70.6% → juste 1.42 → réelle 1.62 → delta +0.20 ✅ → Kelly 12% plafonné à 2%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Rublev à 70.6% (DR 1.12 vs 0.98, hold 89.3% vs 82.8% sur dur). Cote juste 1.42 contre 1.62 réelle = grosse value. H2H 5-0 confirme la domination. Delta favori largement au-dessus du seuil 0.07.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "18/08/2026",
+    "marche": "moneyline",
+    "niveau": "moderee",
+    "modele": "opus",
+    "cote": 1.62,
+    "mise_pct": 2.0,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.632,
+      "away": 2.4
+    }
+  }
+]
