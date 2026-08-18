@@ -96,5 +96,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucun edge »)",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Taylor Fritz vs Daniel Merida\n🏆 <b>COMPÉTITION :</b> Cincinnati Open (ATP)\n⏰ <b>HEURE :</b> 18:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Taylor Fritz vainqueur\n📈 <b>COTE :</b> 1.22\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 68.7% (plafond cote<1.50 = 75%, retenu 75%) → juste 1.33 → réelle 1.22 → delta -0.11 ❌\n📌 <b>POURQUOI ?</b> Modèle donne Fritz 68.7% mais cote 1.22 implique 82% — surestimé par le marché. Pas de value. Ticket abandonné.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "18/08/2026",
+    "raison_rejet": "abandon explicite dans le texte",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
