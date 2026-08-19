@@ -103,5 +103,12 @@
     "raison_rejet": "abandon explicite dans le texte",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Rafael Jodar vs Flavio Cobolli\n🏆 <b>COMPÉTITION :</b> Cincinnati Open\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Rafael Jodar vainqueur (Moneyline)\n📈 <b>COTE :</b> 1.34\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 66.2% → juste 1.51 → réelle 1.34 → delta... \n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Jodar à 66.2% (cote juste 1.51) mais cote réelle 1.34. Delta négatif (-0.17). Pas de value.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH — Jodar dominant (66.2% modèle) mais cote 1.34 largement en-dessous du juste 1.51 : delta négatif, aucune value. Zverev favori solide (87.9% hold) mais modèle à 53.9% pour cote 1.37, marché trop court. Kostyuk/Andreeva et Fils/de Minaur : marchés alternatifs Pinnacle sans edge suffisant (Under 2.5 sets Andreeva favorisée mais edge <0.06). Cotes trop serrées aujourd'hui.",
+    "date": "19/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "elevee"
   }
 ]
