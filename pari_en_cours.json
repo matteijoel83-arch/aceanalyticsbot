@@ -12,5 +12,19 @@
       "home": 1.714,
       "away": 2.24
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Tommy Paul vs Flavio Cobolli\n🏆 <b>COMPÉTITION :</b> Cincinnati Open (ATP M1000)\n⏰ <b>HEURE :</b> 21:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Under 22.5 jeux (nombre de jeux)\n📈 <b>COTE :</b> 2.21\n💰 <b>MISE :</b> 0.5%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 53% → implicite Pinnacle 45.2% → edge +0.08 ✅\n📌 <b>POURQUOI ?</b> Paul nettement supérieur sur dur (hold 89.7% vs 76%, break 20.3%) : profil victoire en 2 sets probable, ce qui limite le nombre de jeux. Marché sous-estime la domination de Paul. Cote de référence Pinnacle 2.21 — vérifier la cote Winamax avant de jouer.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nNote : Swiatek-Rybakina joué 01:00 (dans fenêtre), mais RÉFÉRENCE CHIFFRÉE indisponible (stats service/retour WTA manquantes) → règle anti-surestimation → abstention. Tirante-Fils : modèle donne 50.5%, Fils à 1.27 sans value (juste 1.98). Un seul match documenté exploitable.",
+    "date": "20/08/2026",
+    "marche": "over_under",
+    "niveau": "basse",
+    "modele": "opus",
+    "cote": 2.21,
+    "mise_pct": 0.5,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.714,
+      "away": 2.24
+    }
   }
 ]
