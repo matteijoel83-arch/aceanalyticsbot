@@ -1,0 +1,16 @@
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Tommy Paul vs Flavio Cobolli\n🏆 <b>COMPÉTITION :</b> Cincinnati Open (ATP M1000)\n⏰ <b>HEURE :</b> 21:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Tommy Paul vainqueur\n📈 <b>COTE :</b> 1.60\n💰 <b>MISE :</b> 3%\n🛡 <b>CONFIANCE :</b> ÉLEVÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.60 → delta +0.27 ✅ → Kelly 15% plafonné 3%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Paul à 85% (hold 89.7% vs 76%, DR 1.16 vs 0.91). Plafond calibration 1.50-1.80 = 75%. Paul supérieur au service ET au retour sur dur, moins fatigué (280 vs 411 min). Value nette même au plafond prudent.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "20/08/2026",
+    "marche": "moneyline",
+    "niveau": "elevee",
+    "modele": "opus",
+    "cote": 1.6,
+    "mise_pct": 3.0,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.714,
+      "away": 2.24
+    }
+  }
+]
