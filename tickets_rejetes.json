@@ -110,5 +110,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Chak Lam Coleman Wong vs Lukas Neumayer\n🏆 <b>COMPÉTITION :</b> US Open Q\n⏰ <b>HEURE :</b> 18:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Chak Lam Coleman Wong vainqueur\n📈 <b>COTE :</b> 1.41\n💰 <b>MISE :</b> 0,50%\n🛡 <b>CONFIANCE :</b> QUALIF MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 60% → juste 1.67 → réelle 1.41 → delta -0.26 ❌\n📌 <b>POURQUOI ?</b> Le modèle Barnett-Clarke donne Wong à 68% mais la calibration QUALIF GC plafonne à 60% pour une cote <1.50. À 60% la cote juste est 1.67, donc AUCUNE value sur cette cote. Ticket non validé.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH — Wong domine aux chiffres (68% modèle, hold 82,5% vs 75,6%) mais cote 1.41 trop basse : plafond QUALIF 60% → delta négatif. Guerrieri/Schwaerzler et Montgomery/Vandromme manquent de stats surface complètes (return% absents, hold% \"non trouvé\") → données insuffisantes en qualif. Rincon/Lee : référence chiffrée indisponible, Lee très peu documenté. Aucune value exploitable aujourd'hui.",
+    "date": "26/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "qualif_moderee"
   }
 ]
