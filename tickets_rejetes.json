@@ -117,5 +117,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "qualif_moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Diane Parry vs Elise Mertens\n🏆 <b>COMPÉTITION :</b> Monterrey Open — Finale WTA\n⏰ <b>HEURE :</b> 01:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Diane Parry (Vainqueur)\n📈 <b>COTE :</b> 2.65\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 57.6% → juste 1.74 → réelle 2.65 → delta +0.91 ✅ → Kelly ~2.1% → plafonné 1% (cote >2.50 + fatigue)\n📌 <b>POURQUOI ?</b> Le modèle Barnett-Clarke place Parry à 57.6% sur dur grâce à un Dominance Ratio supérieur (1.07 vs 1.04) et un meilleur retour (44% vs 40%). Elle a battu Mertens à Cincinnati 2026 sur la même surface. 4 victoires consécutives à Monterrey confirment la dynamique. Fatigue légèrement supérieure (480 vs 390 min/7j) contrebalancée par le momentum. Cote 2.65 très généreuse vs juste 1.74.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune donnée critique manquante. Fatigue des deux joueuses à 15h de récupération (incomplète).",
+    "date": "29/08/2026",
+    "raison_rejet": "écart modèle-marché +53% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
