@@ -124,5 +124,12 @@
     "raison_rejet": "écart modèle-marché +53% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Dino Prizmic vs Alexander Shevchenko\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Dino Prizmic vainqueur\n📈 <b>COTE :</b> 1.38\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 63.0% → juste 1.59 → réelle 1.38 ... delta négatif ❌\n\nAUCUN_MATCH — Correction : Prizmic modèle 63% (juste 1.59) mais cote réelle 1.38 → aucune value. Majchrzak reste seul ticket valide (delta +0.14). Rinderknech modèle 30.8% contre cote 1.27 : marché trop cher, pas de value sur l'outsider Shimabukuro. Merida modèle 51% cote 1.21 sans value malgré blessure Fucsovics.",
+    "date": "30/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
