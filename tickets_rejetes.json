@@ -131,5 +131,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Daniil Medvedev vs Hugo Gaston\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 19:50\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Daniil Medvedev vainqueur\n📈 <b>COTE :</b> 1.13\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 72% → juste 1.39 → réelle 1.13 → delta -0.26 ❌\n📌 <b>POURQUOI ?</b> Test interne : modèle donne Medvedev à 65%, cote juste 1.53. À 1.13 aucune value malgré la supériorité au retour (41,1%) et le format en 5 sets favorable. Pas de pari.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nCorrection : ce ticket ne respecte pas le seuil. Je le retire.\n\nAUCUN_MATCH — Medvedev grand favori (modèle 65%) mais cote 1.13 sans value (delta négatif). Van Assche à 2.80 sous le modèle (59,6% pour lui = cote juste 1.68), mais parier l'outsider Norrie contredit les chiffres. Samuel/Machac : modèle désactivé (Hold Machac implausible). Kalieva, Tararudee, Vandewinkel : stats surface absentes → règle anti-surestimation, alignement marché. Cotes trop serrées ou données insuffisantes aujourd'hui.",
+    "date": "30/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
