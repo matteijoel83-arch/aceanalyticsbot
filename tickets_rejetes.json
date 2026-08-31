@@ -138,5 +138,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Stefanos Tsitsipas vs Arthur Fils\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Vainqueur Arthur Fils\n📈 <b>COTE :</b> 1.18\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 68% → juste 1.47 → réelle 1.18 → delta -0.29 ❌\n📌 <b>POURQUOI ?</b> Modèle donne Fils à 65,3% (DR 1.15, meilleur service/retour). H2H 5-0 et titre Cincinnati confirment. Mais cote 1.18 sous la juste 1.47 : pas de value. Non retenu.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nCorrection : ce dernier ticket ne présente pas de value (delta négatif) et ne doit pas être joué. Seul le pari sur Vacherot est validé.",
+    "date": "31/08/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« pas de value »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
