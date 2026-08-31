@@ -1,0 +1,16 @@
+[
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Valentin Vacherot vs Aleksandar Kovacevic\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Vainqueur Valentin Vacherot\n📈 <b>COTE :</b> 1.84\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70% → juste 1.43 → réelle 1.84 → delta +0.41 ✅ → Kelly 12% plafonné 2%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Vacherot à 72,1% (DR 1.09 vs 0.93, meilleur retour 34,1% vs 30,3%, break 18,4% vs 11,2%). Marché le sous-cote largement à 1.84. Forme récente médiocre et H2H défavorable justifient une confiance modérée plutôt qu'élevée.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes)",
+    "date": "31/08/2026",
+    "marche": "moneyline",
+    "niveau": "elevee",
+    "modele": "opus",
+    "cote": 1.84,
+    "mise_pct": 2.0,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.833,
+      "away": 2.05
+    }
+  }
+]
