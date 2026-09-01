@@ -145,5 +145,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« pas de value »)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Dane Sweeny vs Corentin Moutet\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 17:00\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Dane Sweeny vainqueur\n📈 <b>COTE :</b> 3.40\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 72% → juste 1.39 → réelle 3.40 → delta +2.01 ✅ → Kelly 28% plafonné 1%\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke sur dur donne Sweeny 80.8% (63.1% service/43% retour, DR 1.17 vs 0.99 Moutet). Moutet en forme catastrophique (10 défaites/11). Je plafonne prudemment à 72% (variance GC, cote outsider). Value énorme vs marché.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune (stats surface complètes pour les deux)",
+    "date": "01/09/2026",
+    "raison_rejet": "écart modèle-marché +145% (faux delta probable (cf. Wang/Ruse))",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
