@@ -152,5 +152,12 @@
     "raison_rejet": "écart modèle-marché +145% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alexander Zverev vs Alejandro Tabilo\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 02:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alexander Zverev vainqueur\n📈 <b>COTE :</b> 1.17\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 65.6% → juste 1.53 → réelle 1.17 → delta -0.36 ❌\n📌 <b>POURQUOI ?</b> Le modèle Barnett-Clarke donne Zverev à 65.6% (cote juste 1.53), très loin de la cote réelle 1.17. Aucune value, pari abandonné.\n\nCorrection : ce ticket ne doit pas être affiché. Voici la vraie réponse :\n\nAUCUN_MATCH — Zverev (65.6% modèle, cote juste 1.53) est massivement sur-coté à 1.17, aucune value. Bergs vs van de Zandschulp : le modèle donne VDZ 60.3% (juste 1.66), pile la cote réelle, delta nul. Les matchs à données incomplètes (Jovic/Eala, Osaka, Zheng, etc.) tombent sous la règle anti-surestimation : proba ≤ marché, pas de faux delta. Cotes trop efficientes aujourd'hui.",
+    "date": "05/09/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
