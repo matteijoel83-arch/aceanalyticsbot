@@ -166,5 +166,12 @@
     "raison_rejet": "écart modèle-marché +39% (données manquantes + survalorisation)",
     "marche": "moneyline",
     "niveau": "elevee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alex Michelsen vs Tomas Martin Etcheverry\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 20:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alex Michelsen vainqueur\n📈 <b>COTE :</b> 1.34\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 70% → juste 1.43 → réelle 1.34 → delta -0.09 ❌\n📌 <b>POURQUOI ?</b> Ticket retiré — delta négatif.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "06/09/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« ticket retiré »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
