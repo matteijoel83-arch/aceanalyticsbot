@@ -12,5 +12,19 @@
       "home": 1.757,
       "away": 2.18
     }
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Anna Kalinskaya vs Emma Navarro\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 02:40\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Anna Kalinskaya vainqueur\n📈 <b>COTE :</b> 1.92\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 58% → juste 1.72 → réelle 1.92 → delta +0.20 ✅ → Kelly 15% plafonné\n📌 <b>POURQUOI ?</b> Modèle donne Kalinskaya 60% (DR 1.05 vs 1.00, hold 74.6% vs 70.4%). H2H 2-0 sur dur. Match pick'em où le modèle et l'historique penchent légèrement Kalinskaya. Plafonné à 58% (calibration 1.80-2.20). Value réelle sur cote équilibrée.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune",
+    "date": "06/09/2026",
+    "marche": "moneyline",
+    "niveau": "basse",
+    "modele": "opus",
+    "cote": 1.92,
+    "mise_pct": 1.0,
+    "surface": "dur",
+    "pinnacle_ml_ouverture": {
+      "home": 1.869,
+      "away": 2.02
+    }
   }
 ]
