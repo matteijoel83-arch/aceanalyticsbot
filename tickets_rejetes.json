@@ -180,5 +180,12 @@
     "raison_rejet": "écart modèle-marché +36% (faux delta probable (cf. Wang/Ruse))",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Alexander Zverev vs Luciano Darderi\n🏆 <b>COMPÉTITION :</b> US Open\n⏰ <b>HEURE :</b> 02:10\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Alexander Zverev (Vainqueur)\n📈 <b>COTE :</b> 1.08\n💰 <b>MISE :</b> 1%\n🛡 <b>CONFIANCE :</b> BASSE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.08 → delta -0.25 ❌\n📌 <b>POURQUOI ?</b> Match retiré — cote 1.08 sous la juste (modèle 81,6% → 1.23). Aucune value malgré supériorité claire de Zverev sur dur. Non joué.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nCorrection : je retire ce dernier ticket (delta négatif).\n\nTickets validés : Gea (Moneyline) et Tien (Moneyline).",
+    "date": "07/09/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
+    "marche": "moneyline",
+    "niveau": "basse"
   }
 ]
