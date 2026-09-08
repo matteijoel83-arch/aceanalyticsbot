@@ -3,13 +3,13 @@
   "mesure_depuis": "2026-07-27",
   "_note": "Reset au démarrage de la stratégie v8.0 — analyse par surface sur 3 couches (collecte Gemini, modèle Barnett-Clarke calibré, grille d'analyse Claude). Les 6 paris antérieurs (1V/5D) sont archivés dans stats_archive_v7_9.json. Corrections : 07/08 retrait du ticket Darderi/Shang (Over 22.5 jeux) et 09/08 retrait du ticket Pegula/Shnaider (08/08, défaite 3%) — dans les deux cas Claude avait invalidé son propre ticket dans sa réponse ('je retire ce ticket', puis 'delta insuffisant, aucun edge, Annulé') mais le code l'avait envoyé quand même. Corrigé en v8.7 (détection d'auto-rétractation) et v8.8 (refus si delta illisible). Jalons : ~50 paris pour le premier yield, ~100 pour le verdict par segment.",
   "victoires": 8,
-  "defaites": 14,
+  "defaites": 15,
   "par_marche": {
     "moneyline": {
       "v": 7,
-      "d": 11,
-      "mise": 32.0,
-      "profit": -6.32
+      "d": 12,
+      "mise": 34.0,
+      "profit": -8.32
     },
     "score_exact": {
       "v": 0,
@@ -47,9 +47,9 @@
     },
     "moderee": {
       "v": 5,
-      "d": 4,
-      "mise": 15.0,
-      "profit": 1.405
+      "d": 5,
+      "mise": 17.0,
+      "profit": -0.595
     },
     "basse": {
       "v": 0,
@@ -61,9 +61,9 @@
   "par_modele": {
     "opus": {
       "v": 7,
-      "d": 13,
-      "mise": 31.0,
-      "profit": -7.435
+      "d": 14,
+      "mise": 33.0,
+      "profit": -9.435
     },
     "sonnet": {
       "v": 1,
@@ -81,9 +81,9 @@
     },
     "dur": {
       "v": 8,
-      "d": 14,
-      "mise": 33.5,
-      "profit": -6.775
+      "d": 15,
+      "mise": 35.5,
+      "profit": -8.775
     },
     "gazon": {
       "v": 0,
@@ -99,7 +99,7 @@
     }
   },
   "roi": {
-    "mise_totale": 33.5,
-    "profit": -6.775
+    "mise_totale": 35.5,
+    "profit": -8.775
   }
 }
