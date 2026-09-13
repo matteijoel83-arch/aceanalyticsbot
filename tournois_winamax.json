@@ -1,10 +1,10 @@
 {
   "_commentaire": "⚠️ FILTRE DUR : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. RÈGLE (leçon du 30/07) : lister TOUJOURS le nom Winamax ET le nom officiel/commercial du tournoi. Relève cette liste sur l'app Winamax chaque lundi.",
-  "_maj": "2026-08-24 — Cincinnati terminé, retiré. Qualifications US Open (ATP+WTA) incluses conformément à la règle 'exclure' ci-dessous (Grand Chelem = exception aux qualifs). ⚠️ À surveiller : joueurs hors top 100, risque de modèle Barnett-Clarke silencieux faute de stats de surface (même profil que Cincinnati Q, exclu la semaine dernière) — si trop de 'stats incomplètes' cette semaine, envisager de les retirer au prochain relevé malgré la règle. WTA Monterrey ajouté. Le tableau principal US Open démarre la semaine prochaine — à ajouter alors.",
+  "_maj": "2026-09-13 — Mise à jour selon les Top compétitions Winamax : ajout de WTA Guadalajara et WTA São Paulo, maintien de l'US Open.",
   "tournois_actifs": [
     "US Open",
-    "US Open Q",
-    "WTA Monterrey"
+    "WTA Guadalajara",
+    "WTA São Paulo"
   ],
   "categories_couvertes_info": [
     "Note : cette section n'est PAS un filtre (elle guide Gemini). Seule 'tournois_actifs' fait foi.",
