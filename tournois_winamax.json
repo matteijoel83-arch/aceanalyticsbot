@@ -1,10 +1,12 @@
 {
   "_commentaire": "⚠️ FILTRE DUR : seuls les matchs des tournois listés dans 'tournois_actifs' peuvent générer un ticket. RÈGLE (leçon du 30/07) : lister TOUJOURS le nom Winamax ET le nom officiel/commercial du tournoi. Relève cette liste sur l'app Winamax chaque lundi.",
-  "_maj": "2026-09-13 — Mise à jour selon les Top compétitions Winamax : ajout de WTA Guadalajara et WTA São Paulo, maintien de l'US Open.",
+  "_maj": "2026-09-24 — Mise à jour selon les Top compétitions Winamax : retrait des anciens tournois et ajout de ATP Chengdu, ATP Hangzhou, WTA Séoul, WTA Singapour et BJK Cup - Finals (les doubles restant exclus).",
   "tournois_actifs": [
-    "US Open",
-    "WTA Guadalajara",
-    "WTA São Paulo"
+    "ATP Chengdu",
+    "ATP Hangzhou",
+    "WTA Séoul",
+    "WTA Singapour",
+    "BJK Cup - Finals"
   ],
   "categories_couvertes_info": [
     "Note : cette section n'est PAS un filtre (elle guide Gemini). Seule 'tournois_actifs' fait foi.",
