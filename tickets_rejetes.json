@@ -187,5 +187,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« aucune value »)",
     "marche": "moneyline",
     "niveau": "basse"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Jaime Faria vs Hugo Gaston\n🏆 <b>COMPÉTITION :</b> Hangzhou Open\n⏰ <b>HEURE :</b> 13:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Jaime Faria vainqueur\n📈 <b>COTE :</b> 1.44\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 68% → juste 1.47 → réelle 1.44 → delta ... \n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Faria à 55.2% (juste 1.81), MAIS le marché à 1.44 implique 69% — bien au-dessus du modèle. Le marché sur-évalue Faria ; aucune value.\n⚠️ <b>DONNÉES MANQUANTES :</b> Aucune\n\nAUCUN_MATCH — Correction : Faria à 1.44 implique 69% contre 55.2% modèle → aucune value (marché trop bas). Rublev à 1.32 (modèle 81.3%) et Van De Zandschulp 1.32 sans modèle fiable : alignement marché, delta insuffisant. Andreeva 1.29 (modèle 79.4%, juste 1.26) → cote réelle en-dessous du juste, pas de value. Tararudee/Joint : modèle désactivé (incohérence stats), edge Over/Under sets insuffisant. Aucun delta requis atteint aujourd'hui.",
+    "date": "25/09/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« delta insuffisant »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
