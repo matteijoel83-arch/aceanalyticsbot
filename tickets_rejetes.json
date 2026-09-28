@@ -194,5 +194,12 @@
     "raison_rejet": "auto-rétractation de l'analyste (« delta insuffisant »)",
     "marche": "moneyline",
     "niveau": "moderee"
+  },
+  {
+    "pari": "🎾 <b>ACEANALYTICS TENNIS — PRONOSTIC SIMPLE</b> 🎾\n━━━━━━━━━━━━━━━━━━━━\n🏟 <b>MATCHS :</b> Daniil Medvedev vs Roman Safiullin\n🏆 <b>COMPÉTITION :</b> Hangzhou Open\n⏰ <b>HEURE :</b> 13:30\n━━━━━━━━━━━━━━━━━━━━\n✅ <b>PRONO :</b> Daniil Medvedev vainqueur\n📈 <b>COTE :</b> 1.42\n💰 <b>MISE :</b> 2%\n🛡 <b>CONFIANCE :</b> MODÉRÉE\n━━━━━━━━━━━━━━━━━━━━\n🧮 <b>VALUE :</b> 75% → juste 1.33 → réelle 1.42 → delta +0.09 ✅ → Kelly 22% plafonné\n📌 <b>POURQUOI ?</b> Modèle Barnett-Clarke donne Medvedev à 79,9% (cote juste 1.25). Supériorité claire au service (66% vs 64,3%) et surtout au retour (41,1% vs 36,2%, DR 1.21 vs 1.01). Écart de niveau réel important. Proba plafonnée à 75% (cote <1.50).\n⚠️ <b>DONNÉES MANQUANTES :</b> H2H inexistant (première confrontation)\n\nAUCUN_MATCH — Hurkacz (51,5% modèle, cote 1.64) et Jacquet/Rublev (Rublev 49%, cote 1.31) trop serrés, aucun delta exploitable. Basilashvili vs Davidovich Fokina : modèle donne ADF à 59,3% mais cote 1.40 (juste 1.69), delta insuffisant vu le retour de blessure et charge de Basilashvili. Marchés Sets/Jeux Pinnacle : edges sous 6%.",
+    "date": "28/09/2026",
+    "raison_rejet": "auto-rétractation de l'analyste (« delta insuffisant »)",
+    "marche": "moneyline",
+    "niveau": "moderee"
   }
 ]
